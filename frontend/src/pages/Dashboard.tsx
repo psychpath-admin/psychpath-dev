@@ -448,7 +448,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
         <div className="flex gap-2">
           <button
             onClick={() => {
-              const defaultOrder = ['overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'internship_validation', 'registrar_summary']
+              const defaultOrder = ['overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'supervision_requests', 'internship_validation', 'registrar_summary']
               setCardOrder(defaultOrder)
               localStorage.setItem('dashboard-card-order', JSON.stringify(defaultOrder))
               console.log('Dashboard: Reset layout to default order')
