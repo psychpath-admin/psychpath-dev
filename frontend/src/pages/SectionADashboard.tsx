@@ -67,6 +67,16 @@ export default function SectionADashboard() {
   const [showCRAForm, setShowCRAForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState(false)
   const [editingCRAId, setEditingCRAId] = useState<number | null>(null)
+  const [craFormData, setCraFormData] = useState({
+    client_id: '',
+    session_date: '',
+    place_of_practice: '',
+    presenting_issues: '',
+    session_activity_types: [],
+    duration_minutes: '50',
+    reflections_on_experience: '',
+    simulated: false
+  })
   
   // Filters and sorting
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'duration' | 'client'>('newest')
@@ -170,6 +180,16 @@ export default function SectionADashboard() {
 
   const handleAddCRA = (entry: DCCEntry) => {
     setSelectedEntry(entry)
+    setCraFormData({
+      client_id: entry.client_id,
+      session_date: entry.session_date,
+      place_of_practice: '',
+      presenting_issues: '',
+      session_activity_types: [],
+      duration_minutes: '50',
+      reflections_on_experience: '',
+      simulated: false
+    })
     setShowCRAForm(true)
   }
 
@@ -575,18 +595,15 @@ export default function SectionADashboard() {
                 setSelectedEntry(null)
               }}
               saving={false}
-              entryForm={{
-                client_id: selectedEntry.client_id,
-                session_date: selectedEntry.session_date,
-                place_of_practice: '',
-                presenting_issues: '',
-                session_activity_types: [],
-                duration_minutes: '50',
-                reflections_on_experience: '',
-                simulated: false
+              entryForm={craFormData}
+              setEntryForm={setCraFormData}
+              handleActivityTypeToggle={(type: string) => {
+                const currentTypes = craFormData.session_activity_types
+                const updatedTypes = currentTypes.includes(type)
+                  ? currentTypes.filter(t => t !== type)
+                  : [...currentTypes, type]
+                setCraFormData({ ...craFormData, session_activity_types: updatedTypes })
               }}
-              setEntryForm={() => {}}
-              handleActivityTypeToggle={() => {}}
               handleAddCustomActivityType={() => {}}
               newCustomActivityType=""
               setNewCustomActivityType={() => {}}
