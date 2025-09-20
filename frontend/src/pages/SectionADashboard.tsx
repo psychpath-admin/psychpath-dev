@@ -355,119 +355,136 @@ export default function SectionADashboard() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {dccEntries.map((entry) => (
-              <Card key={entry.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Calendar className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm font-medium text-gray-600">
-                          {new Date(entry.session_date).toLocaleDateString()}
-                        </span>
-                        {entry.simulated && (
-                          <Badge variant="secondary" className="text-xs">
-                            Simulated
-                          </Badge>
+          <div className="space-y-4">
+            {dccEntries.map((entry, index) => {
+              // Create subtle color variations
+              const colorVariations = [
+                'bg-white border-blue-200 hover:border-blue-300',
+                'bg-blue-50 border-blue-100 hover:border-blue-200',
+                'bg-green-50 border-green-100 hover:border-green-200',
+                'bg-purple-50 border-purple-100 hover:border-purple-200',
+                'bg-orange-50 border-orange-100 hover:border-orange-200',
+                'bg-pink-50 border-pink-100 hover:border-pink-200',
+                'bg-indigo-50 border-indigo-100 hover:border-indigo-200',
+                'bg-teal-50 border-teal-100 hover:border-teal-200',
+                'bg-rose-50 border-rose-100 hover:border-rose-200',
+                'bg-cyan-50 border-cyan-100 hover:border-cyan-200'
+              ]
+              const cardColorClass = colorVariations[index % colorVariations.length]
+              
+              return (
+                <Card key={entry.id} className={`hover:shadow-lg transition-all duration-200 ${cardColorClass}`}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      {/* Left side - Main info */}
+                      <div className="flex items-center gap-8 flex-1">
+                        {/* Date */}
+                        <div className="flex items-center gap-2 min-w-[120px]">
+                          <Calendar className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm font-medium text-gray-700">
+                            {new Date(entry.session_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        
+                        {/* Client */}
+                        <div className="flex items-center gap-2 min-w-[120px]">
+                          <User className="h-4 w-4 text-gray-500" />
+                          <span className="font-semibold text-gray-900">{entry.client_id}</span>
+                          {entry.simulated && (
+                            <Badge variant="secondary" className="text-xs ml-2">
+                              Simulated
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {/* Duration */}
+                        <div className="flex items-center gap-2 min-w-[80px]">
+                          <Clock className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm text-gray-600">
+                            {formatDuration(entry.duration_minutes)}
+                          </span>
+                        </div>
+                        
+                        {/* Session Types */}
+                        <div className="flex items-center gap-2 min-w-[200px]">
+                          <div className="flex flex-wrap gap-1">
+                            {entry.session_activity_types.map((type, typeIndex) => (
+                              <Badge key={typeIndex} variant="outline" className="text-xs">
+                                {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        {/* Place of Practice */}
+                        <div className="flex-1 min-w-[150px]">
+                          <span className="text-sm text-gray-600">{entry.place_of_practice}</span>
+                        </div>
+                        
+                        {/* Reflections Preview */}
+                        {entry.reflections_on_experience && (
+                          <div className="flex-1 min-w-[200px]">
+                            <p className="text-sm text-gray-700 truncate">
+                              {truncateText(entry.reflections_on_experience, 80)}
+                            </p>
+                          </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <User className="h-4 w-4 text-gray-500" />
-                        <span className="font-semibold text-gray-900">{entry.client_id}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-gray-600">
-                          {formatDuration(entry.duration_minutes)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleViewDetails(entry)}
-                        title="View Details"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(entry)}
-                        title="Edit"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleAddCRA(entry)}
-                        title="Add CRA"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDelete(entry)}
-                        title="Delete"
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-3">
-                    {/* Session Types */}
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Session Types
-                      </label>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {entry.session_activity_types.map((type, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      
+                      {/* Right side - Actions and badges */}
+                      <div className="flex items-center gap-3">
+                        {/* CRA Count */}
+                        {entry.cra_entries && entry.cra_entries.length > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {entry.cra_entries.length} CRA
                           </Badge>
-                        ))}
+                        )}
+                        
+                        {/* Action buttons */}
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewDetails(entry)}
+                            title="View Details"
+                            className="h-8 w-8 p-0"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEdit(entry)}
+                            title="Edit"
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAddCRA(entry)}
+                            title="Add CRA"
+                            className="h-8 w-8 p-0"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDelete(entry)}
+                            title="Delete"
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                    
-                    {/* Place of Practice */}
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Place of Practice
-                      </label>
-                      <p className="text-sm text-gray-700 mt-1">{entry.place_of_practice}</p>
-                    </div>
-                    
-                    {/* Reflections Preview */}
-                    {entry.reflections_on_experience && (
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Reflections
-                        </label>
-                        <p className="text-sm text-gray-700 mt-1 leading-relaxed">
-                          {truncateText(entry.reflections_on_experience)}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {/* CRA Count */}
-                    {entry.cra_entries && entry.cra_entries.length > 0 && (
-                      <div>
-                        <Badge variant="secondary" className="text-xs">
-                          {entry.cra_entries.length} CRA {entry.cra_entries.length === 1 ? 'Entry' : 'Entries'}
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         )}
 
