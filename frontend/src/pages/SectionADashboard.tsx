@@ -536,8 +536,24 @@ export default function SectionADashboard() {
                           Client Related Activities ({entry.cra_entries.length})
                         </h4>
                         <div className="space-y-3">
-                          {entry.cra_entries.map((craEntry) => (
-                            <Card key={craEntry.id} className="bg-gray-50 border-gray-200 ml-4 relative">
+                          {entry.cra_entries.map((craEntry, craIndex) => {
+                            // Create subtle color variations for each CRA
+                            const craColorVariations = [
+                              'bg-gray-50 border-gray-200',
+                              'bg-blue-50 border-blue-100',
+                              'bg-green-50 border-green-100',
+                              'bg-purple-50 border-purple-100',
+                              'bg-orange-50 border-orange-100',
+                              'bg-pink-50 border-pink-100',
+                              'bg-indigo-50 border-indigo-100',
+                              'bg-teal-50 border-teal-100',
+                              'bg-rose-50 border-rose-100',
+                              'bg-cyan-50 border-cyan-100'
+                            ]
+                            const craCardColorClass = craColorVariations[craIndex % craColorVariations.length]
+                            
+                            return (
+                            <Card key={craEntry.id} className={`${craCardColorClass} ml-4 relative`}>
                               {/* CRA Action buttons */}
                               <div className="absolute top-2 right-2 flex gap-1 z-10">
                                 <Button
@@ -608,7 +624,8 @@ export default function SectionADashboard() {
                                 </div>
                               </CardContent>
                             </Card>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     </div>
