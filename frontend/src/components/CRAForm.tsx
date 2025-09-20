@@ -129,7 +129,7 @@ export default function CRAForm({
                 placeholder="Enter activity type..."
                 required
               />
-              {/* Quick selection buttons */}
+              {/* Standard activity types */}
               <div className="flex flex-wrap gap-2 mt-2">
                 {['report writing', 'case formulation', 'test scoring', 'documentation', 'file review'].map((type) => (
                   <button
@@ -149,6 +149,72 @@ export default function CRAForm({
                     {type}
                   </button>
                 ))}
+              </div>
+
+              {/* Custom activity types */}
+              {customActivityTypes.length > 0 && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium mb-2 text-gray-600">
+                    Your Custom Activity Types
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {customActivityTypes.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => {
+                          const currentTypes = entryForm.session_activity_types.filter(t => t !== type.name)
+                          const newTypes = entryForm.session_activity_types.includes(type.name) ? currentTypes : [...currentTypes, type.name]
+                          setEntryForm({ ...entryForm, session_activity_types: newTypes })
+                        }}
+                        className={`px-2 py-1 text-xs rounded border flex items-center gap-1 ${
+                          entryForm.session_activity_types.includes(type.name)
+                            ? 'bg-green-100 text-green-800 border-green-300'
+                            : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                        }`}
+                      >
+                        {type.name}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteCustomActivityType(type.id)
+                          }}
+                          className="ml-1 text-red-500 hover:text-red-700"
+                          title="Delete custom type"
+                        >
+                          ×
+                        </button>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add custom activity type */}
+              <div className="mt-3">
+                <label className="block text-sm font-medium mb-2 text-gray-600">
+                  Add Custom Activity Type
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    value={newCustomActivityType}
+                    onChange={(e) => setNewCustomActivityType(e.target.value)}
+                    placeholder="Enter custom activity type..."
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddCustomActivityType}
+                    disabled={!newCustomActivityType.trim()}
+                    className="px-3"
+                  >
+                    Add
+                  </Button>
+                </div>
               </div>
             </div>
 

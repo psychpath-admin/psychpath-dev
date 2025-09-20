@@ -69,6 +69,10 @@ export default function SectionADashboard() {
   const [editingEntry, setEditingEntry] = useState(false)
   const [editingCRAId, setEditingCRAId] = useState<number | null>(null)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
+  
+  // Custom activity types state
+  const [customActivityTypes, setCustomActivityTypes] = useState<Array<{id: number, name: string}>>([])
+  const [newCustomActivityType, setNewCustomActivityType] = useState('')
   const [craFormData, setCraFormData] = useState({
     client_id: '',
     client_pseudonym: '',
@@ -103,6 +107,25 @@ export default function SectionADashboard() {
   useEffect(() => {
     loadDCCEntries()
   }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax])
+
+  // Load custom activity types from localStorage
+  useEffect(() => {
+    const savedCustomTypes = localStorage.getItem(`customActivityTypes_${user?.id}`)
+    if (savedCustomTypes) {
+      try {
+        setCustomActivityTypes(JSON.parse(savedCustomTypes))
+      } catch (error) {
+        console.error('Error loading custom activity types:', error)
+      }
+    }
+  }, [user?.id])
+
+  // Save custom activity types to localStorage
+  useEffect(() => {
+    if (user?.id && customActivityTypes.length > 0) {
+      localStorage.setItem(`customActivityTypes_${user.id}`, JSON.stringify(customActivityTypes))
+    }
+  }, [customActivityTypes, user?.id])
 
   const loadDCCEntries = async () => {
     setLoading(true)
@@ -344,6 +367,23 @@ export default function SectionADashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleAddCustomActivityType = () => {
+    if (newCustomActivityType.trim() && !customActivityTypes.some(type => type.name.toLowerCase() === newCustomActivityType.toLowerCase())) {
+      const newType = {
+        id: Date.now(), // Simple ID generation
+        name: newCustomActivityType.trim()
+      }
+      setCustomActivityTypes([...customActivityTypes, newType])
+      setNewCustomActivityType('')
+      toast.success(`Added custom activity type: ${newCustomActivityType.trim()}`)
+    }
+  }
+
+  const handleDeleteCustomActivityType = (id: number) => {
+    setCustomActivityTypes(customActivityTypes.filter(type => type.id !== id))
+    toast.success('Custom activity type removed')
   }
 
   const formatDuration = (minutes: string) => {
@@ -1358,11 +1398,11 @@ export default function SectionADashboard() {
                   : [...currentTypes, type]
                 setCraFormData({ ...craFormData, session_activity_types: updatedTypes })
               }}
-              handleAddCustomActivityType={() => {}}
-              newCustomActivityType=""
-              setNewCustomActivityType={() => {}}
-              customActivityTypes={[]}
-              handleDeleteCustomActivityType={() => {}}
+              handleAddCustomActivityType={handleAddCustomActivityType}
+              newCustomActivityType={newCustomActivityType}
+              setNewCustomActivityType={setNewCustomActivityType}
+              customActivityTypes={customActivityTypes}
+              handleDeleteCustomActivityType={handleDeleteCustomActivityType}
               calculateWeekStarting={(date: string) => date}
               title={selectedEntry?.parent_dcc_entry ? "Edit Client Related Activity (CRA)" : "Add Client Related Activity (CRA)"}
               showClientIdInput={true}
@@ -1402,11 +1442,11 @@ export default function SectionADashboard() {
                   : [...currentTypes, type]
                 setIcraFormData({ ...icraFormData, session_activity_types: updatedTypes })
               }}
-              handleAddCustomActivityType={() => {}}
-              newCustomActivityType=""
-              setNewCustomActivityType={() => {}}
-              customActivityTypes={[]}
-              handleDeleteCustomActivityType={() => {}}
+              handleAddCustomActivityType={handleAddCustomActivityType}
+              newCustomActivityType={newCustomActivityType}
+              setNewCustomActivityType={setNewCustomActivityType}
+              customActivityTypes={customActivityTypes}
+              handleDeleteCustomActivityType={handleDeleteCustomActivityType}
               calculateWeekStarting={(date: string) => {
                 const d = new Date(date)
                 const day = d.getDay()
