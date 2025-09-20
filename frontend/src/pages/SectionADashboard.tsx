@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight, Eye, Edit, Plus, Trash2, Calendar, Clock, User, FileText, TrendingUp, Target, Award, Filter, X, Search, BarChart3 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, Edit, Plus, Trash2, Calendar, Clock, User, FileText, TrendingUp, Target, Award, Filter, X, Search, BarChart3, ChevronDown, ChevronUp } from 'lucide-react'
 import { 
   getSectionAEntries, 
   createSectionAEntry, 
@@ -67,6 +67,7 @@ export default function SectionADashboard() {
   const [showCRAForm, setShowCRAForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState(false)
   const [editingCRAId, setEditingCRAId] = useState<number | null>(null)
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
   const [craFormData, setCraFormData] = useState({
     client_id: '',
     client_pseudonym: '',
@@ -169,8 +170,16 @@ export default function SectionADashboard() {
   }
 
   const handleViewDetails = (entry: DCCEntry) => {
-    setSelectedEntry(entry)
-    // TODO: Navigate to detailed view or open modal
+    const entryId = entry.id.toString()
+    setExpandedEntries(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(entryId)) {
+        newSet.delete(entryId)
+      } else {
+        newSet.add(entryId)
+      }
+      return newSet
+    })
   }
 
   const handleEdit = (entry: DCCEntry) => {
@@ -744,10 +753,14 @@ export default function SectionADashboard() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleViewDetails(entry)}
-                      title="View Details"
+                      title={expandedEntries.has(entry.id.toString()) ? "Collapse Details" : "Expand Details"}
                       className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
                     >
-                      <Eye className="h-4 w-4 text-textDark" />
+                      {expandedEntries.has(entry.id.toString()) ? (
+                        <ChevronUp className="h-4 w-4 text-textDark" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-textDark" />
+                      )}
                     </Button>
                     <Button
                       size="sm"
@@ -831,6 +844,68 @@ export default function SectionADashboard() {
                       
                     </div>
                   </CardContent>
+
+                  {/* Expanded Details Section */}
+                  {expandedEntries.has(entry.id.toString()) && (
+                    <div className="border-t border-gray-200 bg-gray-50/50">
+                      <CardContent className="p-4">
+                        <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                          <Eye className="h-4 w-4" />
+                          Detailed Information
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                          {/* Client Information */}
+                          <div className="space-y-2">
+                            <h5 className="font-medium text-gray-700">Client Details</h5>
+                            <div className="space-y-1 text-gray-600">
+                              <div><span className="font-medium">Client ID:</span> {entry.client_id}</div>
+                              {entry.client_pseudonym && (
+                                <div><span className="font-medium">Pseudonym:</span> {entry.client_pseudonym}</div>
+                              )}
+                              {entry.presenting_issues && (
+                                <div><span className="font-medium">Presenting Issues:</span> {entry.presenting_issues}</div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Session Information */}
+                          <div className="space-y-2">
+                            <h5 className="font-medium text-gray-700">Session Details</h5>
+                            <div className="space-y-1 text-gray-600">
+                              <div><span className="font-medium">Date:</span> {new Date(entry.session_date).toLocaleDateString()}</div>
+                              <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
+                              <div><span className="font-medium">Location:</span> {entry.place_of_practice}</div>
+                              {entry.simulated && (
+                                <div><span className="font-medium">Type:</span> <Badge variant="secondary" className="text-xs ml-1">Simulated</Badge></div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Activity Types */}
+                          <div className="md:col-span-2 space-y-2">
+                            <h5 className="font-medium text-gray-700">Activity Types</h5>
+                            <div className="flex flex-wrap gap-1">
+                              {entry.session_activity_types.map((type, typeIndex) => (
+                                <Badge key={typeIndex} variant="outline" className="text-xs">
+                                  {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Reflections */}
+                          {entry.reflections_on_experience && (
+                            <div className="md:col-span-2 space-y-2">
+                              <h5 className="font-medium text-gray-700">Reflections</h5>
+                              <p className="text-gray-600 text-sm leading-relaxed bg-white p-3 rounded border">
+                                {entry.reflections_on_experience}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </div>
+                  )}
 
                   {/* Nested CRA Entries */}
                   {entry.cra_entries && entry.cra_entries.length > 0 && (
