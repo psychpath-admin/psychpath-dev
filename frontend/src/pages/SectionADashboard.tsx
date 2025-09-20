@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight, Eye, Edit, Plus, Trash2, Calendar, Clock, User, FileText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, Edit, Plus, Trash2, Calendar, Clock, User, FileText, TrendingUp, Target, Award, Filter, X, Search, BarChart3 } from 'lucide-react'
 import { 
   getSectionAEntries, 
   createSectionAEntry, 
@@ -259,13 +259,105 @@ export default function SectionADashboard() {
   const hasActiveFilters = dateFrom || dateTo || (sessionType && sessionType !== 'all') || durationMin || durationMax
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
+        {/* Hero Section */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Section A: Direct Client Contact</h1>
-          <p className="text-gray-600">Manage your direct client contact records and related activities</p>
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 text-white shadow-xl">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div>
+                <h1 className="text-4xl font-bold mb-2">Section A: Direct Client Contact</h1>
+                <p className="text-blue-100 text-lg">Track your client interactions and build your professional portfolio</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  onClick={() => navigate('/section-a/create')}
+                  size="lg"
+                  className="bg-white text-blue-600 hover:bg-blue-50 font-semibold shadow-lg"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  New DCC Entry
+                </Button>
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  className="border-white text-white hover:bg-white hover:text-blue-600 font-semibold"
+                >
+                  <BarChart3 className="h-5 w-5 mr-2" />
+                  View Reports
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* Quick Stats Cards */}
+        {(() => {
+          const totalEntries = dccEntries.length
+          const totalHours = dccEntries.reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60
+          const uniqueClients = new Set(dccEntries.map(entry => entry.client_id)).size
+          const simulatedHours = dccEntries.filter(entry => entry.simulated).reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Entries</p>
+                      <p className="text-3xl font-bold text-blue-600">{totalEntries}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+                      <FileText className="h-6 w-6 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Hours</p>
+                      <p className="text-3xl font-bold text-green-600">{totalHours.toFixed(1)}h</p>
+                    </div>
+                    <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
+                      <Clock className="h-6 w-6 text-green-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Unique Clients</p>
+                      <p className="text-3xl font-bold text-purple-600">{uniqueClients}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
+                      <User className="h-6 w-6 text-purple-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Simulated Hours</p>
+                      <p className="text-3xl font-bold text-orange-600">{simulatedHours.toFixed(1)}h</p>
+                    </div>
+                    <div className="h-12 w-12 bg-orange-100 rounded-full flex items-center justify-center">
+                      <Target className="h-6 w-6 text-orange-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )
+        })()}
 
         {/* Hours Summary */}
         {(() => {
@@ -304,102 +396,181 @@ export default function SectionADashboard() {
           const remainingPractice = Math.max(0, practiceHoursTotal - (totalDccHours + totalCRAHours))
           const simulatedOverflow = Math.max(0, simulatedDccHours - simulatedMaximum)
 
-          return (
-            <Card className="mb-6 shadow-sm bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-              <CardContent className="p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">AHPRA 5+1 Program Progress</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* DCC Hours */}
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600">
-                      {totalDccHours.toFixed(1)}h
+              const progressPercentage = Math.min((totalDccHours + totalCRAHours) / 1360 * 100, 100)
+              
+              return (
+                <Card className="mb-8 bg-gradient-to-r from-slate-50 to-gray-50 border-0 shadow-xl">
+                  <CardContent className="p-8">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="h-10 w-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+                        <Award className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">AHPRA 5+1 Program Progress</h2>
+                        <p className="text-gray-600">Track your internship requirements and milestones</p>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600 mb-2">Direct Client Contact</div>
-                    <div className="text-xs text-gray-500">
-                      {remainingDcc > 0 ? (
-                        <span className="text-orange-600">
-                          ({remainingDcc.toFixed(1)}h remaining)
-                        </span>
-                      ) : (
-                        <span className="text-green-600">(✓ Requirement met)</span>
-                      )}
-                    </div>
-                    {simulatedDccHours > 0 && (
-                      <div className="text-xs mt-1">
-                        <span className="text-purple-600">
-                          {simulatedDccHours.toFixed(1)}h simulated
-                        </span>
-                        {simulatedOverflow > 0 && (
-                          <span className="text-red-600 ml-1">
-                            (+{simulatedOverflow.toFixed(1)}h over limit)
-                          </span>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                      {/* DCC Hours */}
+                      <div className="text-center p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300">
+                        <div className="h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Target className="h-8 w-8 text-blue-600" />
+                        </div>
+                        <div className="text-4xl font-bold text-blue-600 mb-2">
+                          {totalDccHours.toFixed(1)}h
+                        </div>
+                        <div className="text-sm font-semibold text-gray-700 mb-2">Direct Client Contact</div>
+                        <div className="text-xs text-gray-500 mb-2">Target: 500h minimum</div>
+                        {remainingDcc > 0 ? (
+                          <Badge variant="outline" className="text-orange-600 border-orange-200">
+                            {remainingDcc.toFixed(1)}h remaining
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-green-100 text-green-800 border-green-200">
+                            ✓ Requirement met
+                          </Badge>
+                        )}
+                        {simulatedDccHours > 0 && (
+                          <div className="mt-3 p-2 bg-purple-50 rounded-lg">
+                            <div className="text-xs font-medium text-purple-700">
+                              {simulatedDccHours.toFixed(1)}h simulated
+                            </div>
+                            {simulatedOverflow > 0 && (
+                              <div className="text-xs text-red-600 mt-1">
+                                +{simulatedOverflow.toFixed(1)}h over limit
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* CRA Hours (including ICRA) */}
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-green-600">
-                      {totalCRAHours.toFixed(1)}h
-                    </div>
-                    <div className="text-sm text-gray-600 mb-2">Client Related Activities</div>
-                    <div className="text-xs text-gray-500">(includes ICRA)</div>
-                  </div>
+                      {/* CRA Hours */}
+                      <div className="text-center p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300">
+                        <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <FileText className="h-8 w-8 text-green-600" />
+                        </div>
+                        <div className="text-4xl font-bold text-green-600 mb-2">
+                          {totalCRAHours.toFixed(1)}h
+                        </div>
+                        <div className="text-sm font-semibold text-gray-700 mb-2">Client Related Activities</div>
+                        <div className="text-xs text-gray-500">(includes ICRA)</div>
+                        <div className="mt-3">
+                          <Badge variant="outline" className="text-green-600 border-green-200">
+                            Supporting DCC
+                          </Badge>
+                        </div>
+                      </div>
 
-                  {/* Total Practice Hours */}
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-indigo-600">
-                      {(totalDccHours + totalCRAHours).toFixed(1)}h
+                      {/* Total Practice Hours */}
+                      <div className="text-center p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300">
+                        <div className="h-16 w-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <TrendingUp className="h-8 w-8 text-indigo-600" />
+                        </div>
+                        <div className="text-4xl font-bold text-indigo-600 mb-2">
+                          {(totalDccHours + totalCRAHours).toFixed(1)}h
+                        </div>
+                        <div className="text-sm font-semibold text-gray-700 mb-2">Total Practice Hours</div>
+                        <div className="text-xs text-gray-500 mb-2">Target: 1,360h</div>
+                        {remainingPractice > 0 ? (
+                          <Badge variant="outline" className="text-orange-600 border-orange-200">
+                            {remainingPractice.toFixed(1)}h remaining
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-green-100 text-green-800 border-green-200">
+                            ✓ Requirement met
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600 mb-2">Total Practice Hours</div>
-                    <div className="text-xs text-gray-500">
-                      {remainingPractice > 0 ? (
-                        <span className="text-orange-600">
-                          ({remainingPractice.toFixed(1)}h remaining)
-                        </span>
-                      ) : (
-                        <span className="text-green-600">(✓ Requirement met)</span>
-                      )}
+                    
+                    {/* Enhanced Progress Bar */}
+                    <div className="bg-white p-6 rounded-xl shadow-md">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-lg font-semibold text-gray-900">Overall Progress</span>
+                        <span className="text-2xl font-bold text-indigo-600">{progressPercentage.toFixed(1)}%</span>
+                      </div>
+                      <div className="relative">
+                        <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                          <div 
+                            className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-4 rounded-full transition-all duration-1000 ease-out relative"
+                            style={{ width: `${progressPercentage}%` }}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-500 mt-2">
+                          <span>0h</span>
+                          <span className="font-medium">1,360h target</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">Target: 1,360h</div>
-                  </div>
-                </div>
-                
-                {/* Progress Bar */}
-                <div className="mt-4">
-                  <div className="flex justify-between text-xs text-gray-600 mb-1">
-                    <span>Practice Hours Progress</span>
-                    <span>{((totalDccHours + totalCRAHours) / 1360 * 100).toFixed(1)}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min((totalDccHours + totalCRAHours) / 1360 * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
+                  </CardContent>
+                </Card>
+              )
         })()}
 
-        {/* Filters and Controls */}
-        <Card className="mb-6">
-          <CardHeader>
+        {/* Enhanced Filters and Controls */}
+        <Card className="mb-8 bg-white border-0 shadow-lg">
+          <CardHeader className="pb-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <CardTitle className="text-lg">Filters & Controls</CardTitle>
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Filter className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl">Filters & Search</CardTitle>
+                  <p className="text-sm text-gray-500">Refine your DCC entries</p>
+                </div>
+              </div>
               <div className="flex gap-2">
-                <Button onClick={() => navigate('/section-a/create')} size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New DCC Entry
-                </Button>
                 {hasActiveFilters && (
-                  <Button onClick={clearFilters} variant="outline" size="sm">
-                    Clear Filters
+                  <Button onClick={clearFilters} variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
+                    <X className="h-4 w-4 mr-2" />
+                    Clear All
                   </Button>
                 )}
               </div>
+            </div>
+            
+            {/* Quick Filter Chips */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {hasActiveFilters && (
+                <>
+                  {dateFrom && (
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                      From: {new Date(dateFrom).toLocaleDateString()}
+                      <button onClick={() => setDateFrom('')} className="ml-2 hover:bg-blue-200 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {dateTo && (
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                      To: {new Date(dateTo).toLocaleDateString()}
+                      <button onClick={() => setDateTo('')} className="ml-2 hover:bg-blue-200 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {sessionType && sessionType !== 'all' && (
+                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                      Type: {sessionType.replace('_', ' ')}
+                      <button onClick={() => setSessionType('all')} className="ml-2 hover:bg-green-200 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {(durationMin || durationMax) && (
+                    <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                      Duration: {durationMin || '0'} - {durationMax || '∞'} min
+                      <button onClick={() => { setDurationMin(''); setDurationMax('') }} className="ml-2 hover:bg-purple-200 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                </>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -501,26 +672,54 @@ export default function SectionADashboard() {
           </CardContent>
         </Card>
 
-        {/* DCC Cards */}
+        {/* Enhanced DCC Cards */}
         {loading ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
+          <Card className="bg-white border-0 shadow-lg">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <div className="relative">
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200"></div>
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent absolute top-0 left-0"></div>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-2">Loading your entries...</h3>
+              <p className="text-gray-500 text-center">Fetching your Direct Client Contact records</p>
+            </CardContent>
+          </Card>
         ) : dccEntries.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <FileText className="h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No DCC Records Found</h3>
-              <p className="text-gray-500 text-center mb-4">
+          <Card className="bg-white border-0 shadow-lg">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <div className="h-24 w-24 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mb-6">
+                <FileText className="h-12 w-12 text-blue-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                {hasActiveFilters ? "No matching records found" : "No DCC Records Yet"}
+              </h3>
+              <p className="text-gray-500 text-center mb-8 max-w-md">
                 {hasActiveFilters 
-                  ? "No records match your current filters. Try adjusting your search criteria."
-                  : "You haven't created any Direct Client Contact records yet."
+                  ? "No records match your current filters. Try adjusting your search criteria or clear filters to see all entries."
+                  : "Start building your professional portfolio by creating your first Direct Client Contact entry."
                 }
               </p>
-              <Button onClick={() => setShowEntryForm(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First DCC Entry
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  onClick={() => navigate('/section-a/create')}
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  Create Your First DCC Entry
+                </Button>
+                {hasActiveFilters && (
+                  <Button 
+                    onClick={clearFilters}
+                    variant="outline"
+                    size="lg"
+                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                  >
+                    <X className="h-5 w-5 mr-2" />
+                    Clear Filters
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -542,15 +741,15 @@ export default function SectionADashboard() {
               const cardColorClass = colorVariations[index % colorVariations.length]
               
               return (
-                <Card key={entry.id} className={`hover:shadow-lg transition-all duration-200 relative ${cardColorClass}`}>
-                  {/* Action buttons in top right corner */}
-                  <div className="absolute top-4 right-4 flex gap-1 z-10">
+                <Card key={entry.id} className={`hover:shadow-xl transition-all duration-300 relative border-0 shadow-lg group ${cardColorClass}`}>
+                  {/* Enhanced Action buttons */}
+                  <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleViewDetails(entry)}
                       title="View Details"
-                      className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm"
+                      className="h-9 w-9 p-0 bg-white/95 backdrop-blur-sm shadow-md hover:shadow-lg border-gray-200"
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
@@ -559,7 +758,7 @@ export default function SectionADashboard() {
                       variant="outline"
                       onClick={() => handleEdit(entry)}
                       title="Edit"
-                      className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm"
+                      className="h-9 w-9 p-0 bg-white/95 backdrop-blur-sm shadow-md hover:shadow-lg border-gray-200"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -568,7 +767,7 @@ export default function SectionADashboard() {
                       variant="outline"
                       onClick={() => handleAddCRA(entry)}
                       title="Add CRA"
-                      className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm"
+                      className="h-9 w-9 p-0 bg-white/95 backdrop-blur-sm shadow-md hover:shadow-lg border-gray-200"
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -577,7 +776,7 @@ export default function SectionADashboard() {
                       variant="outline"
                       onClick={() => handleDelete(entry)}
                       title="Delete"
-                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 bg-white/90 backdrop-blur-sm"
+                      className="h-9 w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 bg-white/95 backdrop-blur-sm shadow-md hover:shadow-lg border-red-200"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
