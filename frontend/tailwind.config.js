@@ -8,15 +8,18 @@ export default {
   theme: {
   	extend: {
   		colors: {
-  			// PsychPathway Brand Colors
-  			primary: '#3F72AF',        // Deep Blue
-  			secondary: '#F9AB55',      // Amber
-  			accent: '#B26734',         // Rust Orange
-  			textDark: '#222831',       // Charcoal
-  			textLight: '#6C757D',      // Slate Grey
+  			// PsychPathway Brand Colors - Enhanced for better contrast
+  			primary: '#2563EB',        // Brighter Deep Blue
+  			primaryLight: '#3B82F6',   // Lighter Blue
+  			secondary: '#F59E0B',      // Brighter Amber
+  			secondaryLight: '#FBBF24', // Lighter Amber
+  			accent: '#DC2626',         // Brighter Red-Orange
+  			accentLight: '#EF4444',    // Lighter Red
+  			textDark: '#111827',       // Darker Charcoal
+  			textLight: '#4B5563',      // Darker Grey for better contrast
   			bgCard: '#FFFFFF',         // White
-  			bgSection: '#EEEEEE',      // Light Grey
-  			border: '#E9ECEF',         // Pale Grey
+  			bgSection: '#F9FAFB',      // Very Light Grey
+  			border: '#D1D5DB',         // Darker border for visibility
   			
   			// Legacy color mappings for compatibility
   			primaryBlue: '#3F72AF',

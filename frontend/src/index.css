@@ -21,15 +21,18 @@ body {
 
 @layer base {
   :root {
-    /* PsychPathway Brand Colors */
-    --color-primary: #3F72AF;        /* Deep Blue */
-    --color-secondary: #F9AB55;      /* Amber */
-    --color-accent: #B26734;         /* Rust Orange */
-    --color-text-dark: #222831;      /* Charcoal */
-    --color-text-light: #6C757D;     /* Slate Grey */
+    /* PsychPathway Brand Colors - Enhanced for better contrast */
+    --color-primary: #2563EB;        /* Brighter Deep Blue */
+    --color-primary-light: #3B82F6;  /* Lighter Blue */
+    --color-secondary: #F59E0B;      /* Brighter Amber */
+    --color-secondary-light: #FBBF24; /* Lighter Amber */
+    --color-accent: #DC2626;         /* Brighter Red-Orange */
+    --color-accent-light: #EF4444;   /* Lighter Red */
+    --color-text-dark: #111827;      /* Darker Charcoal */
+    --color-text-light: #4B5563;     /* Darker Grey for better contrast */
     --color-bg-card: #FFFFFF;        /* White */
-    --color-bg-section: #EEEEEE;     /* Light Grey */
-    --color-border: #E9ECEF;         /* Pale Grey */
+    --color-bg-section: #F9FAFB;     /* Very Light Grey */
+    --color-border: #D1D5DB;         /* Darker border for visibility */
     
     /* Shadcn/ui compatibility */
     --background: 0 0% 100%;
@@ -100,23 +103,23 @@ body {
 @layer components {
   /* PsychPathway Brand Components */
   .brand-card {
-    @apply bg-bgCard border border-border rounded-card shadow-sm;
+    @apply bg-bgCard border border-border rounded-card shadow-md;
   }
   
   .brand-button-primary {
-    @apply bg-primary text-white hover:bg-primary/90 rounded-lg px-4 py-2 font-medium transition-colors;
+    @apply bg-primary text-white hover:bg-primaryLight rounded-lg px-4 py-2 font-semibold transition-colors shadow-sm;
   }
   
   .brand-button-secondary {
-    @apply bg-secondary text-textDark hover:bg-secondary/90 rounded-lg px-4 py-2 font-medium transition-colors;
+    @apply bg-secondary text-white hover:bg-secondaryLight rounded-lg px-4 py-2 font-semibold transition-colors shadow-sm;
   }
   
   .brand-button-accent {
-    @apply bg-accent text-white hover:bg-accent/90 rounded-lg px-4 py-2 font-medium transition-colors;
+    @apply bg-accent text-white hover:bg-accentLight rounded-lg px-4 py-2 font-semibold transition-colors shadow-sm;
   }
   
   .brand-heading {
-    @apply font-headings text-textDark;
+    @apply font-headings text-textDark font-bold;
   }
   
   .brand-text {
@@ -124,6 +127,27 @@ body {
   }
   
   .brand-label {
-    @apply font-labels text-textLight text-sm font-medium;
+    @apply font-labels text-textLight text-sm font-semibold;
+  }
+  
+  /* Enhanced CRA card variations */
+  .cra-card-primary {
+    @apply bg-blue-50 border-blue-200 hover:border-blue-300;
+  }
+  
+  .cra-card-secondary {
+    @apply bg-amber-50 border-amber-200 hover:border-amber-300;
+  }
+  
+  .cra-card-accent {
+    @apply bg-orange-50 border-orange-200 hover:border-orange-300;
+  }
+  
+  .cra-card-success {
+    @apply bg-green-50 border-green-200 hover:border-green-300;
+  }
+  
+  .cra-card-purple {
+    @apply bg-purple-50 border-purple-200 hover:border-purple-300;
   }
 }

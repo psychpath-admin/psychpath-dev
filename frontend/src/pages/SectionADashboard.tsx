@@ -399,46 +399,46 @@ export default function SectionADashboard() {
               const progressPercentage = Math.min((totalDccHours + totalCRAHours) / 1360 * 100, 100)
               
               return (
-                <Card className="mb-8 brand-card">
-                  <CardContent className="p-8">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="h-10 w-10 bg-primary rounded-full flex items-center justify-center">
-                        <Award className="h-5 w-5 text-white" />
+                <Card className="mb-6 brand-card">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="h-8 w-8 bg-primary rounded-full flex items-center justify-center">
+                        <Award className="h-4 w-4 text-white" />
                       </div>
                       <div>
-                        <h2 className="text-2xl font-headings text-textDark">AHPRA 5+1 Program Progress</h2>
-                        <p className="text-textLight font-body">Track your internship requirements and milestones</p>
+                        <h2 className="text-xl font-headings text-textDark">AHPRA 5+1 Program Progress</h2>
+                        <p className="text-textLight font-body text-sm">Track your internship requirements</p>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       {/* DCC Hours */}
-                      <div className="text-center p-6 bg-bgCard rounded-card shadow-sm hover:shadow-md transition-all duration-300">
-                        <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Target className="h-8 w-8 text-primary" />
+                      <div className="text-center p-4 bg-bgCard rounded-lg border border-border hover:shadow-sm transition-all duration-300">
+                        <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                          <Target className="h-5 w-5 text-primary" />
                         </div>
-                        <div className="text-4xl font-bold text-primary mb-2">
+                        <div className="text-2xl font-bold text-primary mb-1">
                           {totalDccHours.toFixed(1)}h
                         </div>
-                        <div className="text-sm font-semibold text-textDark mb-2 font-body">Direct Client Contact</div>
-                        <div className="text-xs text-textLight mb-2">Target: 500h minimum</div>
+                        <div className="text-xs font-semibold text-textDark mb-1 font-body">Direct Client Contact</div>
+                        <div className="text-xs text-textLight mb-2">Target: 500h</div>
                         {remainingDcc > 0 ? (
-                          <Badge variant="outline" className="text-accent border-accent/20">
+                          <Badge variant="outline" className="text-accent border-accent/30 text-xs">
                             {remainingDcc.toFixed(1)}h remaining
                           </Badge>
                         ) : (
-                          <Badge className="bg-secondary/10 text-secondary border-secondary/20">
-                            ✓ Requirement met
+                          <Badge className="bg-secondary/10 text-secondary border-secondary/20 text-xs">
+                            ✓ Met
                           </Badge>
                         )}
                         {simulatedDccHours > 0 && (
-                          <div className="mt-3 p-2 bg-primary/5 rounded-lg">
-                            <div className="text-xs font-medium text-primary">
+                          <div className="mt-2 p-1 bg-primary/5 rounded text-xs">
+                            <div className="font-medium text-primary">
                               {simulatedDccHours.toFixed(1)}h simulated
                             </div>
                             {simulatedOverflow > 0 && (
-                              <div className="text-xs text-accent mt-1">
-                                +{simulatedOverflow.toFixed(1)}h over limit
+                              <div className="text-accent">
+                                +{simulatedOverflow.toFixed(1)}h over
                               </div>
                             )}
                           </div>
@@ -446,60 +446,56 @@ export default function SectionADashboard() {
                       </div>
 
                       {/* CRA Hours */}
-                      <div className="text-center p-6 bg-bgCard rounded-card shadow-sm hover:shadow-md transition-all duration-300">
-                        <div className="h-16 w-16 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <FileText className="h-8 w-8 text-secondary" />
+                      <div className="text-center p-4 bg-bgCard rounded-lg border border-border hover:shadow-sm transition-all duration-300">
+                        <div className="h-10 w-10 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                          <FileText className="h-5 w-5 text-secondary" />
                         </div>
-                        <div className="text-4xl font-bold text-secondary mb-2">
+                        <div className="text-2xl font-bold text-secondary mb-1">
                           {totalCRAHours.toFixed(1)}h
                         </div>
-                        <div className="text-sm font-semibold text-textDark mb-2 font-body">Client Related Activities</div>
-                        <div className="text-xs text-textLight">(includes ICRA)</div>
-                        <div className="mt-3">
-                          <Badge variant="outline" className="text-secondary border-secondary/20">
-                            Supporting DCC
-                          </Badge>
-                        </div>
+                        <div className="text-xs font-semibold text-textDark mb-1 font-body">Client Related Activities</div>
+                        <div className="text-xs text-textLight mb-2">(includes ICRA)</div>
+                        <Badge variant="outline" className="text-secondary border-secondary/30 text-xs">
+                          Supporting DCC
+                        </Badge>
                       </div>
 
                       {/* Total Practice Hours */}
-                      <div className="text-center p-6 bg-bgCard rounded-card shadow-sm hover:shadow-md transition-all duration-300">
-                        <div className="h-16 w-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <TrendingUp className="h-8 w-8 text-accent" />
+                      <div className="text-center p-4 bg-bgCard rounded-lg border border-border hover:shadow-sm transition-all duration-300">
+                        <div className="h-10 w-10 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                          <TrendingUp className="h-5 w-5 text-accent" />
                         </div>
-                        <div className="text-4xl font-bold text-accent mb-2">
+                        <div className="text-2xl font-bold text-accent mb-1">
                           {(totalDccHours + totalCRAHours).toFixed(1)}h
                         </div>
-                        <div className="text-sm font-semibold text-textDark mb-2 font-body">Total Practice Hours</div>
+                        <div className="text-xs font-semibold text-textDark mb-1 font-body">Total Practice Hours</div>
                         <div className="text-xs text-textLight mb-2">Target: 1,360h</div>
                         {remainingPractice > 0 ? (
-                          <Badge variant="outline" className="text-accent border-accent/20">
+                          <Badge variant="outline" className="text-accent border-accent/30 text-xs">
                             {remainingPractice.toFixed(1)}h remaining
                           </Badge>
                         ) : (
-                          <Badge className="bg-secondary/10 text-secondary border-secondary/20">
-                            ✓ Requirement met
+                          <Badge className="bg-secondary/10 text-secondary border-secondary/20 text-xs">
+                            ✓ Met
                           </Badge>
                         )}
                       </div>
                     </div>
                     
-                    {/* Enhanced Progress Bar */}
-                    <div className="bg-bgCard p-6 rounded-card shadow-sm">
-                      <div className="flex justify-between items-center mb-4">
-                        <span className="text-lg font-semibold text-textDark font-body">Overall Progress</span>
-                        <span className="text-2xl font-bold text-primary">{progressPercentage.toFixed(1)}%</span>
+                    {/* Compact Progress Bar */}
+                    <div className="bg-bgCard p-4 rounded-lg border border-border">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-semibold text-textDark font-body">Overall Progress</span>
+                        <span className="text-lg font-bold text-primary">{progressPercentage.toFixed(1)}%</span>
                       </div>
                       <div className="relative">
-                        <div className="w-full bg-border rounded-full h-4 overflow-hidden">
+                        <div className="w-full bg-border rounded-full h-2 overflow-hidden">
                           <div 
-                            className="bg-gradient-to-r from-primary via-secondary to-accent h-4 rounded-full transition-all duration-1000 ease-out relative"
+                            className="bg-gradient-to-r from-primary via-secondary to-accent h-2 rounded-full transition-all duration-1000 ease-out"
                             style={{ width: `${progressPercentage}%` }}
-                          >
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
-                          </div>
+                          ></div>
                         </div>
-                        <div className="flex justify-between text-xs text-textLight mt-2">
+                        <div className="flex justify-between text-xs text-textLight mt-1">
                           <span>0h</span>
                           <span className="font-medium">1,360h target</span>
                         </div>
@@ -725,18 +721,18 @@ export default function SectionADashboard() {
         ) : (
           <div className="space-y-4">
             {dccEntries.map((entry, index) => {
-              // Create subtle color variations using PsychPathway brand colors
+              // Create vibrant color variations using PsychPathway brand colors
               const colorVariations = [
-                'bg-bgCard border-border hover:border-primary/20',
-                'bg-primary/5 border-primary/20 hover:border-primary/30',
-                'bg-secondary/5 border-secondary/20 hover:border-secondary/30',
-                'bg-accent/5 border-accent/20 hover:border-accent/30',
-                'bg-primary/5 border-primary/10 hover:border-primary/20',
-                'bg-secondary/5 border-secondary/10 hover:border-secondary/20',
-                'bg-accent/5 border-accent/10 hover:border-accent/20',
-                'bg-primary/5 border-primary/15 hover:border-primary/25',
-                'bg-secondary/5 border-secondary/15 hover:border-secondary/25',
-                'bg-accent/5 border-accent/15 hover:border-accent/25'
+                'bg-blue-50 border-blue-200 hover:border-blue-300',
+                'bg-amber-50 border-amber-200 hover:border-amber-300', 
+                'bg-orange-50 border-orange-200 hover:border-orange-300',
+                'bg-green-50 border-green-200 hover:border-green-300',
+                'bg-purple-50 border-purple-200 hover:border-purple-300',
+                'bg-pink-50 border-pink-200 hover:border-pink-300',
+                'bg-indigo-50 border-indigo-200 hover:border-indigo-300',
+                'bg-teal-50 border-teal-200 hover:border-teal-300',
+                'bg-rose-50 border-rose-200 hover:border-rose-300',
+                'bg-cyan-50 border-cyan-200 hover:border-cyan-300'
               ]
               const cardColorClass = colorVariations[index % colorVariations.length]
               
@@ -853,18 +849,18 @@ export default function SectionADashboard() {
                         </h4>
                         <div className="space-y-3">
                           {entry.cra_entries.map((craEntry, craIndex) => {
-                            // Create subtle color variations for each CRA
+                            // Create vibrant color variations for each CRA entry
                             const craColorVariations = [
-                              'bg-gray-50 border-gray-200',
-                              'bg-blue-50 border-blue-100',
-                              'bg-green-50 border-green-100',
-                              'bg-purple-50 border-purple-100',
-                              'bg-orange-50 border-orange-100',
-                              'bg-pink-50 border-pink-100',
-                              'bg-indigo-50 border-indigo-100',
-                              'bg-teal-50 border-teal-100',
-                              'bg-rose-50 border-rose-100',
-                              'bg-cyan-50 border-cyan-100'
+                              'bg-blue-100 border-blue-300 hover:border-blue-400',
+                              'bg-green-100 border-green-300 hover:border-green-400',
+                              'bg-purple-100 border-purple-300 hover:border-purple-400',
+                              'bg-orange-100 border-orange-300 hover:border-orange-400',
+                              'bg-pink-100 border-pink-300 hover:border-pink-400',
+                              'bg-indigo-100 border-indigo-300 hover:border-indigo-400',
+                              'bg-teal-100 border-teal-300 hover:border-teal-400',
+                              'bg-rose-100 border-rose-300 hover:border-rose-400',
+                              'bg-cyan-100 border-cyan-300 hover:border-cyan-400',
+                              'bg-emerald-100 border-emerald-300 hover:border-emerald-400'
                             ]
                             const craCardColorClass = craColorVariations[craIndex % craColorVariations.length]
                             
@@ -895,15 +891,15 @@ export default function SectionADashboard() {
                               <CardContent className="p-4 pr-16">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   <div className="flex items-center gap-2">
-                                    <Clock className="h-3 w-3 text-gray-500" />
-                                    <span className="text-xs font-medium text-gray-600">
+                                    <Clock className="h-3 w-3 text-textLight" />
+                                    <span className="text-xs font-semibold text-textDark">
                                       {formatDuration(parseInt(craEntry.duration_minutes))}
                                     </span>
                                   </div>
                                   
                                   <div className="flex items-center gap-2">
-                                    <User className="h-3 w-3 text-gray-500" />
-                                    <span className="text-xs font-medium text-gray-700">
+                                    <User className="h-3 w-3 text-textLight" />
+                                    <span className="text-xs font-semibold text-textDark">
                                       {craEntry.client_pseudonym || craEntry.client_id}
                                     </span>
                                   </div>
@@ -917,14 +913,14 @@ export default function SectionADashboard() {
                                   </div>
                                   
                                   <div className="md:col-span-2">
-                                    <span className="text-xs text-gray-600">
+                                    <span className="text-xs text-textLight font-medium">
                                       {craEntry.place_of_practice}
                                     </span>
                                   </div>
                                   
                                   {craEntry.presenting_issues && (
                                     <div className="md:col-span-2">
-                                      <p className="text-xs text-gray-700 break-words">
+                                      <p className="text-xs text-textDark break-words font-medium">
                                         {truncateText(craEntry.presenting_issues, 80)}
                                       </p>
                                     </div>
@@ -932,7 +928,7 @@ export default function SectionADashboard() {
                                   
                                   {craEntry.reflections_on_experience && (
                                     <div className="md:col-span-2">
-                                      <p className="text-xs text-gray-600 italic break-words">
+                                      <p className="text-xs text-textLight italic break-words">
                                         "{truncateText(craEntry.reflections_on_experience, 100)}"
                                       </p>
                                     </div>
