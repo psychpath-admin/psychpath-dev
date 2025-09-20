@@ -140,8 +140,10 @@ export default function SectionADashboard() {
       // TODO: Update backend to support pagination and filtering
       const allEntries = await getSectionAEntries()
       
-      // Filter for DCC entries only
-      let filteredEntries = allEntries.filter(entry => entry.entry_type === 'client_contact')
+      // Filter for DCC and ICRA entries
+      let filteredEntries = allEntries.filter(entry => 
+        entry.entry_type === 'client_contact' || entry.entry_type === 'independent_activity'
+      )
       
       // Apply filters
       if (dateFrom) {
@@ -549,7 +551,7 @@ export default function SectionADashboard() {
               if (entry.simulated) {
                 simulatedDccHours += entryHours
               }
-            } else if (entry.entry_type === 'cra') {
+            } else if (entry.entry_type === 'cra' || entry.entry_type === 'independent_activity') {
               totalCRAHours += entryHours
             }
 
@@ -1448,8 +1450,8 @@ export default function SectionADashboard() {
 
       {/* ICRA Form Modal */}
       {showICRAForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 pt-16">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 pt-8">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
             <CRAForm
               onSubmit={handleICRAFormSubmit}
               onCancel={() => {
