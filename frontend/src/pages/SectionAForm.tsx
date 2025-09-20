@@ -295,12 +295,12 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   {saving ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Creating...
+                      {isEditing ? 'Updating...' : 'Creating...'}
                     </>
                   ) : (
                     <>
                       <Save className="h-4 w-4 mr-2" />
-                      Create Entry
+                      {isEditing ? 'Update Entry' : 'Create Entry'}
                     </>
                   )}
                 </Button>
