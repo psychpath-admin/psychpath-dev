@@ -240,7 +240,7 @@ export default function SectionADashboard() {
       // Edit ICRA entry in CRA form modal
       setSelectedEntry(entry)
       setEditingCRAId(entry.id)
-      setCraFormData({
+      setIcraFormData({
         client_id: entry.client_id,
         client_pseudonym: entry.client_pseudonym,
         session_date: entry.session_date,
