@@ -287,14 +287,14 @@ export default function SectionADashboard() {
                   <Plus className="h-5 w-5 mr-2" />
                   New DCC Entry
                 </Button>
-                <Button 
-                  variant="outline"
-                  size="lg"
-                  className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg"
-                >
-                  <BarChart3 className="h-5 w-5 mr-2" />
-                  View Reports
-                </Button>
+                    <Button 
+                      variant="outline"
+                      size="lg"
+                      className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+                    >
+                      <BarChart3 className="h-5 w-5 mr-2" />
+                      View Reports
+                    </Button>
               </div>
             </div>
           </div>
