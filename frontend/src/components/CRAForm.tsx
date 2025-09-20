@@ -296,14 +296,14 @@ export default function CRAForm({
                 variant="outline"
                 onClick={onCancel}
                 disabled={saving}
-                className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+                className="bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={saving}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {saving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Entry' : 'Create Entry')}
               </Button>
