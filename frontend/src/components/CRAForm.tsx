@@ -291,24 +291,30 @@ export default function CRAForm({
             <input type="hidden" name="week_starting" value={entryForm.week_starting} />
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button
+              <button
                 type="button"
-                variant="outline"
                 onClick={onCancel}
                 disabled={saving}
-                className="bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300"
-                style={{ color: '#1f2937', backgroundColor: '#f3f4f6' }}
+                className="px-4 py-2 rounded-lg border border-gray-300 bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ 
+                  color: '#1f2937 !important', 
+                  backgroundColor: '#f3f4f6 !important',
+                  borderColor: '#d1d5db !important'
+                }}
               >
                 Cancel
-              </Button>
-              <Button
+              </button>
+              <button
                 type="submit"
                 disabled={saving}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-                style={{ color: '#ffffff', backgroundColor: '#2563eb' }}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ 
+                  color: '#ffffff !important', 
+                  backgroundColor: '#2563eb !important'
+                }}
               >
                 {saving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Entry' : 'Create Entry')}
-              </Button>
+              </button>
             </div>
           </form>
         </CardContent>
