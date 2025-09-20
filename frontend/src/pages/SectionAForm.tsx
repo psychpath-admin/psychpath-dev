@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -6,11 +6,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ArrowLeft, Save } from 'lucide-react'
-import { createSectionAEntry } from '@/lib/api'
+import { createSectionAEntry, updateSectionAEntry, getSectionAEntry } from '@/lib/api'
 import { toast } from 'sonner'
 
 interface SectionAFormProps {
   onCancel: () => void
+  entryId?: string
 }
 
 interface EntryForm {
@@ -31,18 +32,47 @@ const ACTIVITY_TYPES = [
   'evaluation'
 ]
 
-function SectionAForm({ onCancel }: SectionAFormProps) {
+function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   const [formData, setFormData] = useState<EntryForm>({
     client_id: '',
     session_date: new Date().toISOString().split('T')[0],
     place_of_practice: '',
     presenting_issues: '',
     session_activity_types: [],
-    duration_minutes: '',
+    duration_minutes: '50',
     reflections_on_experience: '',
     simulated: false
   })
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const isEditing = !!entryId
+
+  // Load existing entry data when editing
+  useEffect(() => {
+    if (entryId) {
+      setLoading(true)
+      getSectionAEntry(entryId)
+        .then(entry => {
+          setFormData({
+            client_id: entry.client_id || '',
+            session_date: entry.session_date || new Date().toISOString().split('T')[0],
+            place_of_practice: entry.place_of_practice || '',
+            presenting_issues: entry.presenting_issues || '',
+            session_activity_types: entry.session_activity_types || [],
+            duration_minutes: entry.duration_minutes?.toString() || '50',
+            reflections_on_experience: entry.reflections_on_experience || '',
+            simulated: entry.simulated || false
+          })
+        })
+        .catch(error => {
+          console.error('Error loading entry:', error)
+          toast.error('Failed to load entry data')
+        })
+        .finally(() => {
+          setLoading(false)
+        })
+    }
+  }, [entryId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -78,8 +108,13 @@ function SectionAForm({ onCancel }: SectionAFormProps) {
         reflections_on_experience: formData.reflections_on_experience,
       }
 
-      await createSectionAEntry(entryData)
-      toast.success('DCC entry created successfully!')
+      if (isEditing && entryId) {
+        await updateSectionAEntry(entryId, entryData)
+        toast.success('DCC entry updated successfully!')
+      } else {
+        await createSectionAEntry(entryData)
+        toast.success('DCC entry created successfully!')
+      }
       onCancel() // Navigate back to dashboard
     } catch (error) {
       console.error('Error creating entry:', error)
@@ -104,6 +139,17 @@ function SectionAForm({ onCancel }: SectionAFormProps) {
     ).join(' ')
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading entry data...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
@@ -112,7 +158,9 @@ function SectionAForm({ onCancel }: SectionAFormProps) {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to DCC Logbook
           </Button>
-          <h1 className="text-3xl font-bold text-gray-900">Create New DCC Entry</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {isEditing ? 'Edit DCC Entry' : 'Create New DCC Entry'}
+          </h1>
         </div>
 
         <Card className="max-w-2xl mx-auto">

@@ -162,9 +162,7 @@ export default function SectionADashboard() {
   }
 
   const handleEdit = (entry: DCCEntry) => {
-    setSelectedEntry(entry)
-    setEditingEntry(true)
-    setShowEntryForm(true)
+    navigate(`/section-a/edit/${entry.id}`)
   }
 
   const handleAddCRA = (entry: DCCEntry) => {
