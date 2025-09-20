@@ -31,7 +31,7 @@ const ACTIVITY_TYPES = [
   'evaluation'
 ]
 
-export default function SectionAForm({ onCancel }: SectionAFormProps) {
+function SectionAForm({ onCancel }: SectionAFormProps) {
   const [formData, setFormData] = useState<EntryForm>({
     client_id: '',
     session_date: new Date().toISOString().split('T')[0],
