@@ -43,6 +43,7 @@ export default function CRAForm({
   clientSuggestions = []
 }: CRAFormProps) {
   const [validationError, setValidationError] = useState('')
+  const [showReflections, setShowReflections] = useState(entryForm.reflections_on_experience.length > 0)
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <Card className="w-full max-w-md">
@@ -168,8 +169,9 @@ export default function CRAForm({
                 <input
                   type="checkbox"
                   id="addReflections"
-                  checked={entryForm.reflections_on_experience.length > 0}
+                  checked={showReflections}
                   onChange={(e) => {
+                    setShowReflections(e.target.checked)
                     if (e.target.checked) {
                       // When checked, add a placeholder text
                       setEntryForm({ ...entryForm, reflections_on_experience: 'Enter reflections...' })
@@ -202,7 +204,7 @@ export default function CRAForm({
             {/* ICRA has the same fields as CRA; only difference is no parent DCC link */}
 
             {/* Reflections - conditional based on checkbox */}
-            {entryForm.reflections_on_experience.length > 0 && (
+            {showReflections && (
               <div>
                 <label className="block text-sm font-medium mb-2">
                   Reflections <span className="text-red-500">*</span>
