@@ -1,5 +1,6 @@
 import './App.css'
 import Navbar from '@/components/Navbar'
+import { AuthProvider } from '@/context/AuthContext'
 import EPAList from '@/components/EPAList'
 import ReflectionLog from '@/components/ReflectionLog'
 import LoginPage from '@/pages/LoginPage'
@@ -86,8 +87,9 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen">
-      {!loaded ? null : (
+    <AuthProvider>
+      <div className="min-h-screen">
+        {!loaded ? null : (
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -119,6 +121,7 @@ function App() {
       )}
       <Toaster position="top-right" richColors />
     </div>
+    </AuthProvider>
   )
 }
 
