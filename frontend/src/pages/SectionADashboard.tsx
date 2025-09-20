@@ -778,8 +778,8 @@ export default function SectionADashboard() {
                     </Button>
                   </div>
 
-                  <CardContent className="p-6 pr-32">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <CardContent className="p-4 pr-32">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                       {/* Row 1: Basic Info */}
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
@@ -829,25 +829,17 @@ export default function SectionADashboard() {
                         </div>
                       )}
                       
-                      {/* CRA Count */}
-                      {entry.cra_entries && entry.cra_entries.length > 0 && (
-                        <div className="lg:col-span-1">
-                          <Badge variant="secondary" className="text-xs">
-                            {entry.cra_entries.length} CRA
-                          </Badge>
-                        </div>
-                      )}
                     </div>
                   </CardContent>
 
                   {/* Nested CRA Entries */}
                   {entry.cra_entries && entry.cra_entries.length > 0 && (
-                    <div className="px-6 pb-6">
-                      <div className="border-t border-gray-200 pt-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">
+                    <div className="px-4 pb-4">
+                      <div className="border-t border-gray-200 pt-3">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">
                           Client Related Activities ({entry.cra_entries.length})
                         </h4>
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           {entry.cra_entries.map((craEntry, craIndex) => {
                             // Create vibrant color variations for each CRA entry
                             const craColorVariations = [
@@ -888,8 +880,8 @@ export default function SectionADashboard() {
                                 </Button>
                               </div>
 
-                              <CardContent className="p-4 pr-16">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <CardContent className="p-3 pr-16">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                   <div className="flex items-center gap-2">
                                     <Clock className="h-3 w-3 text-textLight" />
                                     <span className="text-xs font-semibold text-textDark">
