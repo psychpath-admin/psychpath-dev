@@ -17,7 +17,7 @@ def validate_section_a_entry(sender, instance, **kwargs):
         validation_service = InternshipValidationService()
         
         # Check if user is an intern
-        if hasattr(instance, 'trainee') and instance.trainee.role in ['INTERN', 'PROVISIONAL']:
+        if hasattr(instance, 'trainee') and hasattr(instance.trainee, 'userprofile') and instance.trainee.userprofile.role in ['INTERN', 'PROVISIONAL']:
             entry_data = {
                 'entry_type': instance.entry_type,
                 'simulated': getattr(instance, 'simulated', False),
@@ -39,7 +39,7 @@ def update_progress_after_section_a_entry(sender, instance, created, **kwargs):
     if created and hasattr(instance, 'trainee'):
         validation_service = InternshipValidationService()
         
-        if instance.trainee.role in ['INTERN', 'PROVISIONAL']:
+        if hasattr(instance.trainee, 'userprofile') and instance.trainee.userprofile.role in ['INTERN', 'PROVISIONAL']:
             # Update weekly validation
             from datetime import datetime
             from django.utils import timezone
@@ -57,7 +57,7 @@ def update_progress_after_pd_entry(sender, instance, created, **kwargs):
     if created and hasattr(instance, 'trainee'):
         validation_service = InternshipValidationService()
         
-        if instance.trainee.role in ['INTERN', 'PROVISIONAL']:
+        if hasattr(instance.trainee, 'userprofile') and instance.trainee.userprofile.role in ['INTERN', 'PROVISIONAL']:
             progress = validation_service._get_or_create_progress(instance.trainee)
             current_week = progress.current_week
             
@@ -71,7 +71,7 @@ def update_progress_after_supervision_entry(sender, instance, created, **kwargs)
     if created and hasattr(instance, 'trainee'):
         validation_service = InternshipValidationService()
         
-        if instance.trainee.role in ['INTERN', 'PROVISIONAL']:
+        if hasattr(instance.trainee, 'userprofile') and instance.trainee.userprofile.role in ['INTERN', 'PROVISIONAL']:
             progress = validation_service._get_or_create_progress(instance.trainee)
             current_week = progress.current_week
             
