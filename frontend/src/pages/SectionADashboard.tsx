@@ -234,9 +234,29 @@ export default function SectionADashboard() {
   }
 
   const handleEdit = (entry: DCCEntry) => {
-    console.log('Edit button clicked for entry:', entry.id)
-    console.log('Navigating to:', `/section-a/edit/${entry.id}`)
-    navigate(`/section-a/edit/${entry.id}`)
+    console.log('Edit button clicked for entry:', entry.id, 'type:', entry.entry_type)
+    
+    if (entry.entry_type === 'independent_activity') {
+      // Edit ICRA entry in CRA form modal
+      setSelectedEntry(entry)
+      setEditingCRAId(entry.id)
+      setCraFormData({
+        client_id: entry.client_id,
+        client_pseudonym: entry.client_pseudonym,
+        session_date: entry.session_date,
+        place_of_practice: entry.place_of_practice || '',
+        presenting_issues: entry.presenting_issues || '',
+        session_activity_types: entry.session_activity_types || [],
+        duration_minutes: entry.duration_minutes?.toString() || '50',
+        reflections_on_experience: entry.reflections_on_experience || '',
+        simulated: entry.simulated || false
+      })
+      setShowICRAForm(true)
+    } else {
+      // Edit DCC entry in separate form
+      console.log('Navigating to:', `/section-a/edit/${entry.id}`)
+      navigate(`/section-a/edit/${entry.id}`)
+    }
   }
 
   const handleAddCRA = (entry: DCCEntry) => {
@@ -361,10 +381,17 @@ export default function SectionADashboard() {
         week_starting: calculateWeekStarting(formData.session_date)
       }
 
-      await createSectionAEntry(entryData)
-      toast.success('ICRA entry created successfully!')
+      if (editingCRAId) {
+        await updateSectionAEntry(editingCRAId, entryData)
+        toast.success('ICRA entry updated successfully!')
+      } else {
+        await createSectionAEntry(entryData)
+        toast.success('ICRA entry created successfully!')
+      }
 
       setShowICRAForm(false)
+      setSelectedEntry(null)
+      setEditingCRAId(null)
       setIcraFormData({
         client_id: '',
         client_pseudonym: '',
@@ -980,6 +1007,15 @@ export default function SectionADashboard() {
                   </div>
 
                   <CardContent className="p-4 pr-32">
+                    {/* ICRA Identification */}
+                    {entry.entry_type === 'independent_activity' && (
+                      <div className="mb-3">
+                        <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold">
+                          📋 Independent Client Related Activity (ICRA)
+                        </Badge>
+                      </div>
+                    )}
+                    
                     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                       {/* Row 1: Basic Info */}
                       <div className="flex items-center gap-2">
@@ -1456,6 +1492,8 @@ export default function SectionADashboard() {
               onSubmit={handleICRAFormSubmit}
               onCancel={() => {
                 setShowICRAForm(false)
+                setSelectedEntry(null)
+                setEditingCRAId(null)
                 setIcraFormData({
                   client_id: '',
                   client_pseudonym: '',
@@ -1484,9 +1522,9 @@ export default function SectionADashboard() {
               customActivityTypes={customActivityTypes}
               handleDeleteCustomActivityType={handleDeleteCustomActivityType}
               calculateWeekStarting={calculateWeekStarting}
-              title="Add Independent Client Related Activity (ICRA)"
+              title={editingCRAId ? "Edit Independent Client Related Activity (ICRA)" : "Add Independent Client Related Activity (ICRA)"}
               showClientIdInput={true}
-              isEditing={false}
+              isEditing={!!editingCRAId}
             />
           </div>
         </div>
