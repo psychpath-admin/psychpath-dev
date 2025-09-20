@@ -22,6 +22,7 @@ interface CRAFormProps {
   showClientIdInput?: boolean
   onClientIdChange?: (value: string) => void
   clientSuggestions?: string[]
+  isEditing?: boolean
 }
 
 export default function CRAForm({
@@ -40,7 +41,8 @@ export default function CRAForm({
   title = 'Section A: Client Related Activity',
   showClientIdInput = false,
   onClientIdChange,
-  clientSuggestions = []
+  clientSuggestions = [],
+  isEditing = false
 }: CRAFormProps) {
   const [validationError, setValidationError] = useState('')
   const [showReflections, setShowReflections] = useState(entryForm.reflections_on_experience.length > 0)
@@ -237,7 +239,7 @@ export default function CRAForm({
                 disabled={saving}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                {saving ? 'Creating...' : 'Create'}
+                {saving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Entry' : 'Create Entry')}
               </Button>
             </div>
           </form>

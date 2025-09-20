@@ -723,6 +723,7 @@ export default function SectionADashboard() {
               calculateWeekStarting={(date: string) => date}
               title={selectedEntry?.parent_dcc_entry ? "Edit Client Related Activity (CRA)" : "Add Client Related Activity (CRA)"}
               showClientIdInput={false}
+              isEditing={!!selectedEntry?.parent_dcc_entry}
             />
           </div>
         </div>
