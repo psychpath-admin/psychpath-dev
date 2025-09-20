@@ -314,7 +314,7 @@ export default function SectionADashboard() {
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Records per page:</label>
                 <Select 
-                  value={pagination.records_per_page.toString()} 
+                  value={pagination.records_per_page?.toString() || '10'} 
                   onValueChange={(value) => handleRecordsPerPageChange(parseInt(value))}
                 >
                   <SelectTrigger className="w-20">
