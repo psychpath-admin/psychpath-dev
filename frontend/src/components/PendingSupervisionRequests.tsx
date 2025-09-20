@@ -19,6 +19,7 @@ interface SupervisionRequest {
   expires_at: string
   is_expired: boolean
   can_be_accepted: boolean
+  verification_token: string
 }
 
 export const PendingSupervisionRequests: React.FC<PendingSupervisionRequestsProps> = ({ onUpdate }) => {
@@ -51,17 +52,16 @@ export const PendingSupervisionRequests: React.FC<PendingSupervisionRequestsProp
     setResponding(supervisionId)
     
     try {
-      // First get the supervision details to get the token
-      const supervisionResponse = await apiFetch(`/api/supervisions/`)
-      if (!supervisionResponse.ok) {
-        throw new Error('Failed to fetch supervision details')
-      }
-      
-      const supervisions = await supervisionResponse.json()
-      const supervision = supervisions.find((s: any) => s.id === supervisionId)
+      // Find the supervision request from our current requests data
+      const supervision = requests.find((s) => s.id === supervisionId)
       
       if (!supervision) {
         throw new Error('Supervision request not found')
+      }
+
+      if (!supervision.can_be_accepted && action === 'accept') {
+        toast.error('This invitation can no longer be accepted')
+        return
       }
 
       const response = await apiFetch('/api/supervisions/respond/', {
