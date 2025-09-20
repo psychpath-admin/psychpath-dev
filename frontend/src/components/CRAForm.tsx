@@ -295,30 +295,42 @@ export default function CRAForm({
                 type="button"
                 onClick={onCancel}
                 disabled={saving}
-                className="px-6 py-3 rounded-lg font-bold text-lg"
+                className="px-6 py-3 rounded-lg"
                 style={{ 
-                  color: '#000000', 
-                  backgroundColor: '#ff0000',
-                  border: '3px solid #000000',
-                  fontSize: '16px',
-                  fontWeight: 'bold'
+                  color: '#000000 !important', 
+                  backgroundColor: '#ff0000 !important',
+                  border: '5px solid #000000 !important',
+                  fontSize: '20px !important',
+                  fontWeight: '900 !important',
+                  textShadow: '2px 2px 4px rgba(0,0,0,1) !important',
+                  fontFamily: 'Arial, sans-serif !important',
+                  zIndex: '9999 !important',
+                  position: 'relative !important'
                 }}
               >
-                CANCEL BUTTON
+                <span style={{ color: '#000000 !important', fontSize: '20px !important', fontWeight: '900 !important' }}>
+                  CANCEL
+                </span>
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-6 py-3 rounded-lg font-bold text-lg"
+                className="px-6 py-3 rounded-lg"
                 style={{ 
-                  color: '#000000', 
-                  backgroundColor: '#00ff00',
-                  border: '3px solid #000000',
-                  fontSize: '16px',
-                  fontWeight: 'bold'
+                  color: '#000000 !important', 
+                  backgroundColor: '#00ff00 !important',
+                  border: '5px solid #000000 !important',
+                  fontSize: '20px !important',
+                  fontWeight: '900 !important',
+                  textShadow: '2px 2px 4px rgba(0,0,0,1) !important',
+                  fontFamily: 'Arial, sans-serif !important',
+                  zIndex: '9999 !important',
+                  position: 'relative !important'
                 }}
               >
-                SUBMIT BUTTON
+                <span style={{ color: '#000000 !important', fontSize: '20px !important', fontWeight: '900 !important' }}>
+                  SUBMIT
+                </span>
               </button>
             </div>
           </form>
