@@ -373,113 +373,107 @@ export default function SectionADashboard() {
               const cardColorClass = colorVariations[index % colorVariations.length]
               
               return (
-                <Card key={entry.id} className={`hover:shadow-lg transition-all duration-200 ${cardColorClass}`}>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      {/* Left side - Main info */}
-                      <div className="flex items-center gap-8 flex-1">
-                        {/* Date */}
-                        <div className="flex items-center gap-2 min-w-[120px]">
-                          <Calendar className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm font-medium text-gray-700">
-                            {new Date(entry.session_date).toLocaleDateString()}
-                          </span>
-                        </div>
-                        
-                        {/* Client */}
-                        <div className="flex items-center gap-2 min-w-[120px]">
-                          <User className="h-4 w-4 text-gray-500" />
-                          <span className="font-semibold text-gray-900">{entry.client_id}</span>
-                          {entry.simulated && (
-                            <Badge variant="secondary" className="text-xs ml-2">
-                              Simulated
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        {/* Duration */}
-                        <div className="flex items-center gap-2 min-w-[80px]">
-                          <Clock className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm text-gray-600">
-                            {formatDuration(entry.duration_minutes)}
-                          </span>
-                        </div>
-                        
-                        {/* Session Types */}
-                        <div className="flex items-center gap-2 min-w-[200px]">
-                          <div className="flex flex-wrap gap-1">
-                            {entry.session_activity_types.map((type, typeIndex) => (
-                              <Badge key={typeIndex} variant="outline" className="text-xs">
-                                {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        
-                        {/* Place of Practice */}
-                        <div className="flex-1 min-w-[150px]">
-                          <span className="text-sm text-gray-600">{entry.place_of_practice}</span>
-                        </div>
-                        
-                        {/* Reflections Preview */}
-                        {entry.reflections_on_experience && (
-                          <div className="flex-1 min-w-[200px]">
-                            <p className="text-sm text-gray-700 truncate">
-                              {truncateText(entry.reflections_on_experience, 80)}
-                            </p>
-                          </div>
+                <Card key={entry.id} className={`hover:shadow-lg transition-all duration-200 relative ${cardColorClass}`}>
+                  {/* Action buttons in top right corner */}
+                  <div className="absolute top-4 right-4 flex gap-1 z-10">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleViewDetails(entry)}
+                      title="View Details"
+                      className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleEdit(entry)}
+                      title="Edit"
+                      className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAddCRA(entry)}
+                      title="Add CRA"
+                      className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDelete(entry)}
+                      title="Delete"
+                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 bg-white/90 backdrop-blur-sm"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <CardContent className="p-6 pr-24">
+                    <div className="flex items-center gap-8">
+                      {/* Date */}
+                      <div className="flex items-center gap-2 min-w-[120px]">
+                        <Calendar className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm font-medium text-gray-700">
+                          {new Date(entry.session_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      
+                      {/* Client */}
+                      <div className="flex items-center gap-2 min-w-[120px]">
+                        <User className="h-4 w-4 text-gray-500" />
+                        <span className="font-semibold text-gray-900">{entry.client_id}</span>
+                        {entry.simulated && (
+                          <Badge variant="secondary" className="text-xs ml-2">
+                            Simulated
+                          </Badge>
                         )}
                       </div>
                       
-                      {/* Right side - Actions and badges */}
-                      <div className="flex items-center gap-3">
-                        {/* CRA Count */}
-                        {entry.cra_entries && entry.cra_entries.length > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            {entry.cra_entries.length} CRA
-                          </Badge>
-                        )}
-                        
-                        {/* Action buttons */}
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleViewDetails(entry)}
-                            title="View Details"
-                            className="h-8 w-8 p-0"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEdit(entry)}
-                            title="Edit"
-                            className="h-8 w-8 p-0"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleAddCRA(entry)}
-                            title="Add CRA"
-                            className="h-8 w-8 p-0"
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDelete(entry)}
-                            title="Delete"
-                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                      {/* Duration */}
+                      <div className="flex items-center gap-2 min-w-[80px]">
+                        <Clock className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm text-gray-600">
+                          {formatDuration(entry.duration_minutes)}
+                        </span>
+                      </div>
+                      
+                      {/* Session Types */}
+                      <div className="flex items-center gap-2 min-w-[200px]">
+                        <div className="flex flex-wrap gap-1">
+                          {entry.session_activity_types.map((type, typeIndex) => (
+                            <Badge key={typeIndex} variant="outline" className="text-xs">
+                              {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </Badge>
+                          ))}
                         </div>
                       </div>
+                      
+                      {/* Place of Practice */}
+                      <div className="flex-1 min-w-[150px]">
+                        <span className="text-sm text-gray-600">{entry.place_of_practice}</span>
+                      </div>
+                      
+                      {/* Reflections Preview */}
+                      {entry.reflections_on_experience && (
+                        <div className="flex-1 min-w-[200px]">
+                          <p className="text-sm text-gray-700 truncate">
+                            {truncateText(entry.reflections_on_experience, 80)}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* CRA Count */}
+                      {entry.cra_entries && entry.cra_entries.length > 0 && (
+                        <Badge variant="secondary" className="text-xs">
+                          {entry.cra_entries.length} CRA
+                        </Badge>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
