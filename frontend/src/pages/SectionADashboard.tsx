@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { ChevronLeft, ChevronRight, Eye, Edit, Plus, Trash2, Calendar, Clock, User, FileText, TrendingUp, Target, Award, Filter, X, Search, BarChart3, ChevronDown, ChevronUp } from 'lucide-react'
+import { toast } from 'sonner'
 import { 
   getSectionAEntries, 
   createSectionAEntry, 
@@ -199,6 +200,14 @@ export default function SectionADashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const calculateWeekStarting = (dateString: string) => {
+    const date = new Date(dateString)
+    const dayOfWeek = date.getDay() // 0 for Sunday, 1 for Monday, etc.
+    const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1) // Adjust to Monday
+    const weekStart = new Date(date.setDate(diff))
+    return weekStart.toISOString().split('T')[0]
   }
 
   const handlePageChange = (page: number) => {
@@ -1439,8 +1448,8 @@ export default function SectionADashboard() {
 
       {/* ICRA Form Modal */}
       {showICRAForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 pt-16">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
             <CRAForm
               onSubmit={handleICRAFormSubmit}
               onCancel={() => {
@@ -1472,13 +1481,7 @@ export default function SectionADashboard() {
               setNewCustomActivityType={setNewCustomActivityType}
               customActivityTypes={customActivityTypes}
               handleDeleteCustomActivityType={handleDeleteCustomActivityType}
-              calculateWeekStarting={(date: string) => {
-                const d = new Date(date)
-                const day = d.getDay()
-                const diff = d.getDate() - day
-                const weekStart = new Date(d.setDate(diff))
-                return weekStart.toISOString().split('T')[0]
-              }}
+              calculateWeekStarting={calculateWeekStarting}
               title="Add Independent Client Related Activity (ICRA)"
               showClientIdInput={true}
               isEditing={false}
