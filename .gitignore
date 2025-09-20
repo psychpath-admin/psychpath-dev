@@ -152,3 +152,9 @@ locals/
 *.pyc
 __pycache__/
 *.out
+
+# VPS-specific backup files (not for GitHub)
+.env.vps*
+nginx/nginx.conf.vps*
+backend/Dockerfile.vps*
+docker-compose.prod.vps*.yml
