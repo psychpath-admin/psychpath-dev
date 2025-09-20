@@ -26,9 +26,6 @@ class Command(BaseCommand):
         registrar = mk("registrar@demo.test", UserRole.REGISTRAR)
         org_admin = mk("admin@demo.test", UserRole.ORG_ADMIN)
 
-        Supervision.objects.get_or_create(supervisor=supervisor, supervisee=intern, defaults={"active": True})
-        Supervision.objects.get_or_create(supervisor=supervisor, supervisee=registrar, defaults={"active": True})
-
-        self.stdout.write(self.style.SUCCESS("Demo users and supervision links created."))
+        self.stdout.write(self.style.SUCCESS("Demo users created successfully."))
 
 

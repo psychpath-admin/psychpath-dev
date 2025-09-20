@@ -1,6 +1,7 @@
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from .services import InternshipValidationService
 from .models import ValidationAlert
 from section_a.models import SectionAEntry
@@ -83,5 +84,5 @@ def initialize_internship_progress(sender, instance, created, **kwargs):
     """Initialize internship progress when a new intern profile is created"""
     if created and instance.role in ['INTERN', 'PROVISIONAL']:
         validation_service = InternshipValidationService()
-        validation_service.initialize_internship_progress(instance, instance.intern_start_date or timezone.now().date())
+        validation_service.initialize_internship_progress(instance, instance.provisional_start_date or timezone.now().date())
 
