@@ -259,21 +259,21 @@ export default function SectionADashboard() {
   const hasActiveFilters = dateFrom || dateTo || (sessionType && sessionType !== 'all') || durationMin || durationMax
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+    <div className="min-h-screen bg-bgSection">
       <div className="container mx-auto px-4 py-8">
-        {/* Hero Section */}
+        {/* Hero Section - PsychPathway Brand */}
         <div className="mb-8">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 text-white shadow-xl">
+          <div className="bg-gradient-to-r from-primary to-primary/90 rounded-card p-8 text-white shadow-md">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
-                <h1 className="text-4xl font-bold mb-2">Section A: Direct Client Contact</h1>
-                <p className="text-blue-100 text-lg">Track your client interactions and build your professional portfolio</p>
+                <h1 className="text-4xl font-headings mb-2">Section A: Direct Client Contact</h1>
+                <p className="text-white/90 text-lg font-body">Track your client interactions and build your professional portfolio</p>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button 
                   onClick={() => navigate('/section-a/create')}
                   size="lg"
-                  className="bg-white text-blue-600 hover:bg-blue-50 font-semibold shadow-lg"
+                  className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg"
                 >
                   <Plus className="h-5 w-5 mr-2" />
                   New DCC Entry
@@ -281,7 +281,7 @@ export default function SectionADashboard() {
                 <Button 
                   variant="outline"
                   size="lg"
-                  className="border-white text-white hover:bg-white hover:text-blue-600 font-semibold"
+                  className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg"
                 >
                   <BarChart3 className="h-5 w-5 mr-2" />
                   View Reports
@@ -300,57 +300,57 @@ export default function SectionADashboard() {
 
           return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Total Entries</p>
-                      <p className="text-3xl font-bold text-blue-600">{totalEntries}</p>
+                      <p className="brand-label">Total Entries</p>
+                      <p className="text-3xl font-bold text-primary">{totalEntries}</p>
                     </div>
-                    <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <FileText className="h-6 w-6 text-blue-600" />
+                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <FileText className="h-6 w-6 text-primary" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Total Hours</p>
-                      <p className="text-3xl font-bold text-green-600">{totalHours.toFixed(1)}h</p>
+                      <p className="brand-label">Total Hours</p>
+                      <p className="text-3xl font-bold text-secondary">{totalHours.toFixed(1)}h</p>
                     </div>
-                    <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-                      <Clock className="h-6 w-6 text-green-600" />
+                    <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
+                      <Clock className="h-6 w-6 text-secondary" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Unique Clients</p>
-                      <p className="text-3xl font-bold text-purple-600">{uniqueClients}</p>
+                      <p className="brand-label">Unique Clients</p>
+                      <p className="text-3xl font-bold text-accent">{uniqueClients}</p>
                     </div>
-                    <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
-                      <User className="h-6 w-6 text-purple-600" />
+                    <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
+                      <User className="h-6 w-6 text-accent" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Simulated Hours</p>
-                      <p className="text-3xl font-bold text-orange-600">{simulatedHours.toFixed(1)}h</p>
+                      <p className="brand-label">Simulated Hours</p>
+                      <p className="text-3xl font-bold text-primary">{simulatedHours.toFixed(1)}h</p>
                     </div>
-                    <div className="h-12 w-12 bg-orange-100 rounded-full flex items-center justify-center">
-                      <Target className="h-6 w-6 text-orange-600" />
+                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Target className="h-6 w-6 text-primary" />
                     </div>
                   </div>
                 </CardContent>
@@ -399,45 +399,45 @@ export default function SectionADashboard() {
               const progressPercentage = Math.min((totalDccHours + totalCRAHours) / 1360 * 100, 100)
               
               return (
-                <Card className="mb-8 bg-gradient-to-r from-slate-50 to-gray-50 border-0 shadow-xl">
+                <Card className="mb-8 brand-card">
                   <CardContent className="p-8">
                     <div className="flex items-center gap-3 mb-6">
-                      <div className="h-10 w-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+                      <div className="h-10 w-10 bg-primary rounded-full flex items-center justify-center">
                         <Award className="h-5 w-5 text-white" />
                       </div>
                       <div>
-                        <h2 className="text-2xl font-bold text-gray-900">AHPRA 5+1 Program Progress</h2>
-                        <p className="text-gray-600">Track your internship requirements and milestones</p>
+                        <h2 className="text-2xl font-headings text-textDark">AHPRA 5+1 Program Progress</h2>
+                        <p className="text-textLight font-body">Track your internship requirements and milestones</p>
                       </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
                       {/* DCC Hours */}
-                      <div className="text-center p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300">
-                        <div className="h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Target className="h-8 w-8 text-blue-600" />
+                      <div className="text-center p-6 bg-bgCard rounded-card shadow-sm hover:shadow-md transition-all duration-300">
+                        <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Target className="h-8 w-8 text-primary" />
                         </div>
-                        <div className="text-4xl font-bold text-blue-600 mb-2">
+                        <div className="text-4xl font-bold text-primary mb-2">
                           {totalDccHours.toFixed(1)}h
                         </div>
-                        <div className="text-sm font-semibold text-gray-700 mb-2">Direct Client Contact</div>
-                        <div className="text-xs text-gray-500 mb-2">Target: 500h minimum</div>
+                        <div className="text-sm font-semibold text-textDark mb-2 font-body">Direct Client Contact</div>
+                        <div className="text-xs text-textLight mb-2">Target: 500h minimum</div>
                         {remainingDcc > 0 ? (
-                          <Badge variant="outline" className="text-orange-600 border-orange-200">
+                          <Badge variant="outline" className="text-accent border-accent/20">
                             {remainingDcc.toFixed(1)}h remaining
                           </Badge>
                         ) : (
-                          <Badge className="bg-green-100 text-green-800 border-green-200">
+                          <Badge className="bg-secondary/10 text-secondary border-secondary/20">
                             ✓ Requirement met
                           </Badge>
                         )}
                         {simulatedDccHours > 0 && (
-                          <div className="mt-3 p-2 bg-purple-50 rounded-lg">
-                            <div className="text-xs font-medium text-purple-700">
+                          <div className="mt-3 p-2 bg-primary/5 rounded-lg">
+                            <div className="text-xs font-medium text-primary">
                               {simulatedDccHours.toFixed(1)}h simulated
                             </div>
                             {simulatedOverflow > 0 && (
-                              <div className="text-xs text-red-600 mt-1">
+                              <div className="text-xs text-accent mt-1">
                                 +{simulatedOverflow.toFixed(1)}h over limit
                               </div>
                             )}
@@ -446,38 +446,38 @@ export default function SectionADashboard() {
                       </div>
 
                       {/* CRA Hours */}
-                      <div className="text-center p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300">
-                        <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <FileText className="h-8 w-8 text-green-600" />
+                      <div className="text-center p-6 bg-bgCard rounded-card shadow-sm hover:shadow-md transition-all duration-300">
+                        <div className="h-16 w-16 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <FileText className="h-8 w-8 text-secondary" />
                         </div>
-                        <div className="text-4xl font-bold text-green-600 mb-2">
+                        <div className="text-4xl font-bold text-secondary mb-2">
                           {totalCRAHours.toFixed(1)}h
                         </div>
-                        <div className="text-sm font-semibold text-gray-700 mb-2">Client Related Activities</div>
-                        <div className="text-xs text-gray-500">(includes ICRA)</div>
+                        <div className="text-sm font-semibold text-textDark mb-2 font-body">Client Related Activities</div>
+                        <div className="text-xs text-textLight">(includes ICRA)</div>
                         <div className="mt-3">
-                          <Badge variant="outline" className="text-green-600 border-green-200">
+                          <Badge variant="outline" className="text-secondary border-secondary/20">
                             Supporting DCC
                           </Badge>
                         </div>
                       </div>
 
                       {/* Total Practice Hours */}
-                      <div className="text-center p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300">
-                        <div className="h-16 w-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <TrendingUp className="h-8 w-8 text-indigo-600" />
+                      <div className="text-center p-6 bg-bgCard rounded-card shadow-sm hover:shadow-md transition-all duration-300">
+                        <div className="h-16 w-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <TrendingUp className="h-8 w-8 text-accent" />
                         </div>
-                        <div className="text-4xl font-bold text-indigo-600 mb-2">
+                        <div className="text-4xl font-bold text-accent mb-2">
                           {(totalDccHours + totalCRAHours).toFixed(1)}h
                         </div>
-                        <div className="text-sm font-semibold text-gray-700 mb-2">Total Practice Hours</div>
-                        <div className="text-xs text-gray-500 mb-2">Target: 1,360h</div>
+                        <div className="text-sm font-semibold text-textDark mb-2 font-body">Total Practice Hours</div>
+                        <div className="text-xs text-textLight mb-2">Target: 1,360h</div>
                         {remainingPractice > 0 ? (
-                          <Badge variant="outline" className="text-orange-600 border-orange-200">
+                          <Badge variant="outline" className="text-accent border-accent/20">
                             {remainingPractice.toFixed(1)}h remaining
                           </Badge>
                         ) : (
-                          <Badge className="bg-green-100 text-green-800 border-green-200">
+                          <Badge className="bg-secondary/10 text-secondary border-secondary/20">
                             ✓ Requirement met
                           </Badge>
                         )}
@@ -485,21 +485,21 @@ export default function SectionADashboard() {
                     </div>
                     
                     {/* Enhanced Progress Bar */}
-                    <div className="bg-white p-6 rounded-xl shadow-md">
+                    <div className="bg-bgCard p-6 rounded-card shadow-sm">
                       <div className="flex justify-between items-center mb-4">
-                        <span className="text-lg font-semibold text-gray-900">Overall Progress</span>
-                        <span className="text-2xl font-bold text-indigo-600">{progressPercentage.toFixed(1)}%</span>
+                        <span className="text-lg font-semibold text-textDark font-body">Overall Progress</span>
+                        <span className="text-2xl font-bold text-primary">{progressPercentage.toFixed(1)}%</span>
                       </div>
                       <div className="relative">
-                        <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                        <div className="w-full bg-border rounded-full h-4 overflow-hidden">
                           <div 
-                            className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-4 rounded-full transition-all duration-1000 ease-out relative"
+                            className="bg-gradient-to-r from-primary via-secondary to-accent h-4 rounded-full transition-all duration-1000 ease-out relative"
                             style={{ width: `${progressPercentage}%` }}
                           >
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
                           </div>
                         </div>
-                        <div className="flex justify-between text-xs text-gray-500 mt-2">
+                        <div className="flex justify-between text-xs text-textLight mt-2">
                           <span>0h</span>
                           <span className="font-medium">1,360h target</span>
                         </div>
@@ -511,16 +511,16 @@ export default function SectionADashboard() {
         })()}
 
         {/* Enhanced Filters and Controls */}
-        <Card className="mb-8 bg-white border-0 shadow-lg">
+        <Card className="mb-8 brand-card">
           <CardHeader className="pb-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Filter className="h-4 w-4 text-blue-600" />
+                <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <Filter className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <CardTitle className="text-xl">Filters & Search</CardTitle>
-                  <p className="text-sm text-gray-500">Refine your DCC entries</p>
+                  <CardTitle className="text-xl font-headings text-textDark">Filters & Search</CardTitle>
+                  <p className="text-sm text-textLight font-body">Refine your DCC entries</p>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -538,33 +538,33 @@ export default function SectionADashboard() {
               {hasActiveFilters && (
                 <>
                   {dateFrom && (
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
                       From: {new Date(dateFrom).toLocaleDateString()}
-                      <button onClick={() => setDateFrom('')} className="ml-2 hover:bg-blue-200 rounded-full p-0.5">
+                      <button onClick={() => setDateFrom('')} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>
                   )}
                   {dateTo && (
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
                       To: {new Date(dateTo).toLocaleDateString()}
-                      <button onClick={() => setDateTo('')} className="ml-2 hover:bg-blue-200 rounded-full p-0.5">
+                      <button onClick={() => setDateTo('')} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>
                   )}
                   {sessionType && sessionType !== 'all' && (
-                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                    <Badge variant="secondary" className="bg-secondary/10 text-secondary">
                       Type: {sessionType.replace('_', ' ')}
-                      <button onClick={() => setSessionType('all')} className="ml-2 hover:bg-green-200 rounded-full p-0.5">
+                      <button onClick={() => setSessionType('all')} className="ml-2 hover:bg-secondary/20 rounded-full p-0.5">
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>
                   )}
                   {(durationMin || durationMax) && (
-                    <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                    <Badge variant="secondary" className="bg-accent/10 text-accent">
                       Duration: {durationMin || '0'} - {durationMax || '∞'} min
-                      <button onClick={() => { setDurationMin(''); setDurationMax('') }} className="ml-2 hover:bg-purple-200 rounded-full p-0.5">
+                      <button onClick={() => { setDurationMin(''); setDurationMax('') }} className="ml-2 hover:bg-accent/20 rounded-full p-0.5">
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>
@@ -674,26 +674,26 @@ export default function SectionADashboard() {
 
         {/* Enhanced DCC Cards */}
         {loading ? (
-          <Card className="bg-white border-0 shadow-lg">
+          <Card className="brand-card">
             <CardContent className="flex flex-col items-center justify-center py-16">
               <div className="relative">
-                <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200"></div>
-                <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent absolute top-0 left-0"></div>
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary/20"></div>
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary border-t-transparent absolute top-0 left-0"></div>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-2">Loading your entries...</h3>
-              <p className="text-gray-500 text-center">Fetching your Direct Client Contact records</p>
+              <h3 className="text-xl font-semibold text-textDark mt-6 mb-2 font-body">Loading your entries...</h3>
+              <p className="text-textLight text-center font-body">Fetching your Direct Client Contact records</p>
             </CardContent>
           </Card>
         ) : dccEntries.length === 0 ? (
-          <Card className="bg-white border-0 shadow-lg">
+          <Card className="brand-card">
             <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="h-24 w-24 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mb-6">
-                <FileText className="h-12 w-12 text-blue-600" />
+              <div className="h-24 w-24 bg-primary/10 rounded-full flex items-center justify-center mb-6">
+                <FileText className="h-12 w-12 text-primary" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-3">
+              <h3 className="text-2xl font-bold text-textDark mb-3 font-headings">
                 {hasActiveFilters ? "No matching records found" : "No DCC Records Yet"}
               </h3>
-              <p className="text-gray-500 text-center mb-8 max-w-md">
+              <p className="text-textLight text-center mb-8 max-w-md font-body">
                 {hasActiveFilters 
                   ? "No records match your current filters. Try adjusting your search criteria or clear filters to see all entries."
                   : "Start building your professional portfolio by creating your first Direct Client Contact entry."
@@ -703,7 +703,7 @@ export default function SectionADashboard() {
                 <Button 
                   onClick={() => navigate('/section-a/create')}
                   size="lg"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8"
+                  className="brand-button-primary px-8"
                 >
                   <Plus className="h-5 w-5 mr-2" />
                   Create Your First DCC Entry
@@ -713,7 +713,7 @@ export default function SectionADashboard() {
                     onClick={clearFilters}
                     variant="outline"
                     size="lg"
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    className="border-border text-textDark hover:bg-bgSection rounded-lg"
                   >
                     <X className="h-5 w-5 mr-2" />
                     Clear Filters
@@ -725,23 +725,23 @@ export default function SectionADashboard() {
         ) : (
           <div className="space-y-4">
             {dccEntries.map((entry, index) => {
-              // Create subtle color variations
+              // Create subtle color variations using PsychPathway brand colors
               const colorVariations = [
-                'bg-white border-blue-200 hover:border-blue-300',
-                'bg-blue-50 border-blue-100 hover:border-blue-200',
-                'bg-green-50 border-green-100 hover:border-green-200',
-                'bg-purple-50 border-purple-100 hover:border-purple-200',
-                'bg-orange-50 border-orange-100 hover:border-orange-200',
-                'bg-pink-50 border-pink-100 hover:border-pink-200',
-                'bg-indigo-50 border-indigo-100 hover:border-indigo-200',
-                'bg-teal-50 border-teal-100 hover:border-teal-200',
-                'bg-rose-50 border-rose-100 hover:border-rose-200',
-                'bg-cyan-50 border-cyan-100 hover:border-cyan-200'
+                'bg-bgCard border-border hover:border-primary/20',
+                'bg-primary/5 border-primary/20 hover:border-primary/30',
+                'bg-secondary/5 border-secondary/20 hover:border-secondary/30',
+                'bg-accent/5 border-accent/20 hover:border-accent/30',
+                'bg-primary/5 border-primary/10 hover:border-primary/20',
+                'bg-secondary/5 border-secondary/10 hover:border-secondary/20',
+                'bg-accent/5 border-accent/10 hover:border-accent/20',
+                'bg-primary/5 border-primary/15 hover:border-primary/25',
+                'bg-secondary/5 border-secondary/15 hover:border-secondary/25',
+                'bg-accent/5 border-accent/15 hover:border-accent/25'
               ]
               const cardColorClass = colorVariations[index % colorVariations.length]
               
               return (
-                <Card key={entry.id} className={`hover:shadow-xl transition-all duration-300 relative border-0 shadow-lg group ${cardColorClass}`}>
+                <Card key={entry.id} className={`hover:shadow-md transition-all duration-300 relative shadow-sm group rounded-card ${cardColorClass}`}>
                   {/* Enhanced Action buttons */}
                   <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <Button
@@ -749,34 +749,34 @@ export default function SectionADashboard() {
                       variant="outline"
                       onClick={() => handleViewDetails(entry)}
                       title="View Details"
-                      className="h-9 w-9 p-0 bg-white/95 backdrop-blur-sm shadow-md hover:shadow-lg border-gray-200"
+                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
                     >
-                      <Eye className="h-4 w-4" />
+                      <Eye className="h-4 w-4 text-textDark" />
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleEdit(entry)}
                       title="Edit"
-                      className="h-9 w-9 p-0 bg-white/95 backdrop-blur-sm shadow-md hover:shadow-lg border-gray-200"
+                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-4 w-4 text-textDark" />
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleAddCRA(entry)}
                       title="Add CRA"
-                      className="h-9 w-9 p-0 bg-white/95 backdrop-blur-sm shadow-md hover:shadow-lg border-gray-200"
+                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
                     >
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-4 w-4 text-textDark" />
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleDelete(entry)}
                       title="Delete"
-                      className="h-9 w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 bg-white/95 backdrop-blur-sm shadow-md hover:shadow-lg border-red-200"
+                      className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

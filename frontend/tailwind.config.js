@@ -8,11 +8,20 @@ export default {
   theme: {
   	extend: {
   		colors: {
+  			// PsychPathway Brand Colors
+  			primary: '#3F72AF',        // Deep Blue
+  			secondary: '#F9AB55',      // Amber
+  			accent: '#B26734',         // Rust Orange
+  			textDark: '#222831',       // Charcoal
+  			textLight: '#6C757D',      // Slate Grey
+  			bgCard: '#FFFFFF',         // White
+  			bgSection: '#EEEEEE',      // Light Grey
+  			border: '#E9ECEF',         // Pale Grey
+  			
+  			// Legacy color mappings for compatibility
   			primaryBlue: '#3F72AF',
   			secondaryAmber: '#F9AB55',
   			accentOrange: '#B26734',
-  			textDark: '#222831',
-  			textLight: '#6C757D',
   			backgroundCard: '#FFFFFF',
   			backgroundSection: '#EEEEEE',
   			borderLight: '#E9ECEF',
@@ -59,7 +68,7 @@ export default {
   		},
   		fontFamily: {
   			headings: [
-  				'Bebas Neue"',
+  				'Bebas Neue',
   				'sans-serif'
   			],
   			body: [
@@ -68,7 +77,7 @@ export default {
   				'sans-serif'
   			],
   			labels: [
-  				'Lexend Deca"',
+  				'Lexend Deca',
   				'sans-serif'
   			]
   		},
