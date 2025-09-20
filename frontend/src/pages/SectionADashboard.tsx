@@ -414,30 +414,30 @@ export default function SectionADashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       {/* DCC Hours */}
                       <div className="text-center p-4 bg-bgCard rounded-lg border border-border hover:shadow-sm transition-all duration-300">
-                        <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2">
-                          <Target className="h-5 w-5 text-primary" />
+                        <div className="h-10 w-10 bg-primary rounded-full flex items-center justify-center mx-auto mb-2">
+                          <Target className="h-5 w-5 text-white" />
                         </div>
-                        <div className="text-2xl font-bold text-primary mb-1">
+                        <div className="text-2xl font-bold text-textDark mb-1">
                           {totalDccHours.toFixed(1)}h
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Direct Client Contact</div>
                         <div className="text-xs text-textLight mb-2">Target: 500h</div>
                         {remainingDcc > 0 ? (
-                          <Badge variant="outline" className="text-accent border-accent/30 text-xs">
+                          <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
                             {remainingDcc.toFixed(1)}h remaining
                           </Badge>
                         ) : (
-                          <Badge className="bg-secondary/10 text-secondary border-secondary/20 text-xs">
+                          <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
                             ✓ Met
                           </Badge>
                         )}
                         {simulatedDccHours > 0 && (
-                          <div className="mt-2 p-1 bg-primary/5 rounded text-xs">
-                            <div className="font-medium text-primary">
+                          <div className="mt-2 p-1 bg-primary/10 rounded text-xs border border-primary/20">
+                            <div className="font-semibold text-primary">
                               {simulatedDccHours.toFixed(1)}h simulated
                             </div>
                             {simulatedOverflow > 0 && (
-                              <div className="text-accent">
+                              <div className="text-accent font-semibold">
                                 +{simulatedOverflow.toFixed(1)}h over
                               </div>
                             )}
@@ -447,35 +447,35 @@ export default function SectionADashboard() {
 
                       {/* CRA Hours */}
                       <div className="text-center p-4 bg-bgCard rounded-lg border border-border hover:shadow-sm transition-all duration-300">
-                        <div className="h-10 w-10 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-2">
-                          <FileText className="h-5 w-5 text-secondary" />
+                        <div className="h-10 w-10 bg-secondary rounded-full flex items-center justify-center mx-auto mb-2">
+                          <FileText className="h-5 w-5 text-white" />
                         </div>
-                        <div className="text-2xl font-bold text-secondary mb-1">
+                        <div className="text-2xl font-bold text-textDark mb-1">
                           {totalCRAHours.toFixed(1)}h
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Client Related Activities</div>
                         <div className="text-xs text-textLight mb-2">(includes ICRA)</div>
-                        <Badge variant="outline" className="text-secondary border-secondary/30 text-xs">
+                        <Badge variant="outline" className="text-secondary border-secondary text-xs font-semibold">
                           Supporting DCC
                         </Badge>
                       </div>
 
                       {/* Total Practice Hours */}
                       <div className="text-center p-4 bg-bgCard rounded-lg border border-border hover:shadow-sm transition-all duration-300">
-                        <div className="h-10 w-10 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-2">
-                          <TrendingUp className="h-5 w-5 text-accent" />
+                        <div className="h-10 w-10 bg-accent rounded-full flex items-center justify-center mx-auto mb-2">
+                          <TrendingUp className="h-5 w-5 text-white" />
                         </div>
-                        <div className="text-2xl font-bold text-accent mb-1">
+                        <div className="text-2xl font-bold text-textDark mb-1">
                           {(totalDccHours + totalCRAHours).toFixed(1)}h
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Total Practice Hours</div>
                         <div className="text-xs text-textLight mb-2">Target: 1,360h</div>
                         {remainingPractice > 0 ? (
-                          <Badge variant="outline" className="text-accent border-accent/30 text-xs">
+                          <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
                             {remainingPractice.toFixed(1)}h remaining
                           </Badge>
                         ) : (
-                          <Badge className="bg-secondary/10 text-secondary border-secondary/20 text-xs">
+                          <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
                             ✓ Met
                           </Badge>
                         )}
