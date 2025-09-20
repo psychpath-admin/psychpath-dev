@@ -297,6 +297,7 @@ export default function CRAForm({
                 onClick={onCancel}
                 disabled={saving}
                 className="bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300"
+                style={{ color: '#1f2937', backgroundColor: '#f3f4f6' }}
               >
                 Cancel
               </Button>
@@ -304,6 +305,7 @@ export default function CRAForm({
                 type="submit"
                 disabled={saving}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
+                style={{ color: '#ffffff', backgroundColor: '#2563eb' }}
               >
                 {saving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Entry' : 'Create Entry')}
               </Button>
