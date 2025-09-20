@@ -75,6 +75,9 @@ export default function SectionADashboard() {
   // Custom activity types state
   const [customActivityTypes, setCustomActivityTypes] = useState<Array<{id: number, name: string}>>([])
   const [newCustomActivityType, setNewCustomActivityType] = useState('')
+  
+  // Filters state
+  const [showFilters, setShowFilters] = useState(false)
   const [craFormData, setCraFormData] = useState({
     client_id: '',
     client_pseudonym: '',
@@ -683,6 +686,24 @@ export default function SectionADashboard() {
                 </div>
               </div>
               <div className="flex gap-2">
+                <Button 
+                  onClick={() => setShowFilters(!showFilters)} 
+                  variant="outline" 
+                  size="sm"
+                  className="text-primary border-primary/20 hover:bg-primary/5"
+                >
+                  {showFilters ? (
+                    <>
+                      <ChevronUp className="h-4 w-4 mr-2" />
+                      Hide Filters
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4 mr-2" />
+                      Show Filters
+                    </>
+                  )}
+                </Button>
                 {hasActiveFilters && (
                   <Button onClick={clearFilters} variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
                     <X className="h-4 w-4 mr-2" />
@@ -732,7 +753,8 @@ export default function SectionADashboard() {
               )}
             </div>
           </CardHeader>
-          <CardContent>
+          {showFilters && (
+            <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               {/* Date Range */}
               <div>
@@ -828,7 +850,8 @@ export default function SectionADashboard() {
                 </Select>
               </div>
             </div>
-          </CardContent>
+            </CardContent>
+          )}
         </Card>
 
         {/* Enhanced DCC Cards */}
@@ -1416,8 +1439,8 @@ export default function SectionADashboard() {
 
       {/* ICRA Form Modal */}
       {showICRAForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
             <CRAForm
               onSubmit={handleICRAFormSubmit}
               onCancel={() => {
