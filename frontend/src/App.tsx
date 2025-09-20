@@ -101,6 +101,7 @@ function App() {
           <Route path="/epa/:code" element={<RequireAuth><EPADetail /></RequireAuth>} />
           <Route path="/section-a" element={<RequireAuth><SectionA /></RequireAuth>} />
           <Route path="/section-a/create" element={<RequireAuth><SectionA /></RequireAuth>} />
+          <Route path="/section-a/edit/:id" element={<RequireAuth><SectionA /></RequireAuth>} />
           <Route path="/section-b" element={<RequireAuth><SectionB /></RequireAuth>} />
           <Route path="/section-c" element={<RequireAuth><SectionC /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><UserProfile /></RequireAuth>} />
