@@ -29,11 +29,60 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', '1') == '1'
 
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'detailed': {
+            'format': '{levelname} {asctime} {name} {process:d} {thread:d} {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'detailed',
+        },
+        'file': {
+            'level': 'ERROR',
+            'class': 'logging.FileHandler',
+            'filename': 'logs/support_errors.log',
+            'formatter': 'detailed',
+        },
+    },
+    'loggers': {
+        'psychpath.support': {
+            'handlers': ['file', 'console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'psychpath.audit': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'psychpath.app': {
+            'handlers': ['file', 'console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}
+
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
+    'http://localhost:5174', 
+    'http://localhost:5175',
     'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:5175',
     'http://0.0.0.0:5173',
+    'http://0.0.0.0:5174',
+    'http://0.0.0.0:5175',
 ]
 
 
@@ -49,8 +98,24 @@ INSTALLED_APPS = [
     # Third-party
     'rest_framework',
     'corsheaders',
+    'rest_framework_simplejwt',
     # Local
     'api',
+    'logbook_app',
+    'section_a',
+    'section_b',
+    'section_c',
+    'support',
+    'internship_validation', # Added internship validation app
+]
+
+# Strong password hashers: prefer Argon2
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+    'django.contrib.auth.hashers.ScryptPasswordHasher',
 ]
 
 MIDDLEWARE = [
@@ -91,9 +156,9 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
-        'NAME': os.getenv('DB_NAME', 'cape'),
-        'USER': os.getenv('DB_USER', 'cape'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'cape'),
+        'NAME': os.getenv('DB_NAME', 'psychpath'),
+        'USER': os.getenv('DB_USER', 'psychpath'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'psychpath'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': int(os.getenv('DB_PORT', '5432')),
     }
@@ -131,7 +196,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Australia/Melbourne'
 
 USE_I18N = True
 
@@ -152,6 +217,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
     ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
 }
 
 # CORS (open for dev)
@@ -161,3 +229,54 @@ CORS_ALLOW_ALL_ORIGINS = True
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Role-based annual PD requirements (hours)
+PD_ANNUAL_REQUIREMENTS = {
+    'INTERN': float(os.getenv('PD_ANNUAL_INTERN', '60')),      # Provisional/Intern
+    'REGISTRAR': float(os.getenv('PD_ANNUAL_REGISTRAR', '40')),
+}
+
+# Annual PD requirements by role
+PROVISIONAL_PD_ANNUAL_HOURS_REQUIRED = 60
+REGISTRAR_PD_ANNUAL_HOURS_REQUIRED = 40
+
+# Role-specific program requirements
+PROGRAM_REQUIREMENTS = {
+    '5+1': {
+        'total_hours': 1500,
+        'dcc_hours': 500,
+        'max_simulated_dcc_hours': 60,
+        'supervision_hours': 80,
+        'pd_hours': 60,
+        'min_weeks': 44,
+        'weekly_commitment_guideline': 17.5,
+    },
+    'registrar': {
+        'qualifications': {
+            'MASTERS': {
+                'duration_weeks': 88,
+                'practice_hours': 3000,
+                'supervision_hours': 80,
+                'pd_hours': 80,
+            },
+            'COMBINED': {
+                'duration_weeks': 66,
+                'practice_hours': 2250,
+                'supervision_hours': 60,
+                'pd_hours': 60,
+            },
+            'DOCTORATE': {
+                'duration_weeks': 44,
+                'practice_hours': 1500,
+                'supervision_hours': 40,
+                'pd_hours': 40,
+            },
+            'SECOND_AOPE': {
+                'duration_weeks': 66,
+                'practice_hours': 2250,
+                'supervision_hours': 60,
+                'pd_hours': 60,
+            },
+        }
+    }
+}

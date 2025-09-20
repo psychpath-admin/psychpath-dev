@@ -4,9 +4,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: cape
-      POSTGRES_USER: cape
-      POSTGRES_PASSWORD: cape
+      POSTGRES_DB: psychpath
+      POSTGRES_USER: psychpath
+      POSTGRES_PASSWORD: psychpath
     ports:
       - "5432:5432"
     volumes:
@@ -21,9 +21,9 @@ services:
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=cape
-      - DB_USER=cape
-      - DB_PASSWORD=cape
+      - DB_NAME=psychpath
+      - DB_USER=psychpath
+      - DB_PASSWORD=psychpath
       - DEBUG=1
     depends_on:
       - postgres
