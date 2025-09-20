@@ -32,9 +32,6 @@ export function Navbar() {
             <NavigationMenuItem>
               <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue" to="/">Dashboard</Link>
             </NavigationMenuItem>
-            <NavigationMenuItem>
-              <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue" to="/epas">EPAs</Link>
-            </NavigationMenuItem>
             {(me?.role === 'PROVISIONAL' || me?.role === 'REGISTRAR') && (
               <>
                 <NavigationMenuItem>
