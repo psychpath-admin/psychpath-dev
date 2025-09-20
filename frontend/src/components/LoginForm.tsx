@@ -37,7 +37,7 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleLogin} className="space-y-3 rounded-card border borderLight bg-backgroundCard p-4 shadow-psychpath" autoComplete="on">
+    <form onSubmit={handleLogin} className="space-y-3 rounded-card border borderLight bg-backgroundCard p-4 shadow-cape" autoComplete="on">
       <div className="font-headings text-xl text-textDark">Login</div>
       <div className="space-y-1">
         <label className="font-labels text-sm text-textLight">Email</label>

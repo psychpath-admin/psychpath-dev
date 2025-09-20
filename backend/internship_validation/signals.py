@@ -84,5 +84,4 @@ def initialize_internship_progress(sender, instance, created, **kwargs):
     """Initialize internship progress when a new intern profile is created"""
     if created and instance.role in ['INTERN', 'PROVISIONAL']:
         validation_service = InternshipValidationService()
-        validation_service.initialize_internship_progress(instance, instance.provisional_start_date or timezone.now().date())
-
+        validation_service.initialize_internship_progress(instance, instance.intern_start_date or timezone.now().date())

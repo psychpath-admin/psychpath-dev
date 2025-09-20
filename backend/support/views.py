@@ -23,7 +23,7 @@ from section_a.models import SectionAEntry
 def support_dashboard(request):
     """Enhanced support dashboard with comprehensive statistics"""
     return render(request, 'support/dashboard.html', {
-        'title': 'PsychPATH Support Dashboard'
+        'title': 'CAPE Support Dashboard'
     })
 
 @staff_member_required

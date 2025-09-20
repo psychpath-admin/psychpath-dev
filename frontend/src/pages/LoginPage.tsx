@@ -11,16 +11,12 @@ const LoginPage: React.FC = () => {
         <CardContent className="p-0">
           <div className="grid grid-cols-1 md:grid-cols-2">
             {/* Left: Logo / visual */}
-            <div className="flex flex-col items-center justify-center bg-backgroundSection p-8">
+            <div className="flex items-center justify-center bg-backgroundSection p-8">
               <img
                 src="/cape-logo.png"
-                alt="PsychPATH - Psychology Professional Assessment and Training Hub"
-                className="w-48 h-auto object-contain mb-4"
+                alt="CAPE - Competency & Accreditation Psychology Pathway"
+                className="w-64 h-auto object-contain"
               />
-              <h1 className="text-4xl font-bold text-blue-800 mb-2">PsychPATH</h1>
-              <p className="text-sm text-gray-600 text-center max-w-xs">
-                Psychology Professional Assessment and Training Hub
-              </p>
             </div>
             {/* Right: Form */}
             <div className="p-6 md:p-8">

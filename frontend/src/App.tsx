@@ -11,7 +11,6 @@ import SupervisorLinks from '@/pages/SupervisorLinks'
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import MyReflections from '@/pages/MyReflections'
-import LogbookDashboard from '@/pages/LogbookDashboard'
 import LogbookPage from '@/pages/LogbookPage'
 import LogbookEditor from '@/pages/LogbookEditor'
 import SectionA from '@/pages/SectionA'
@@ -25,9 +24,6 @@ import RegisterTerms from '@/pages/RegisterTerms'
 import RegisterDetails from '@/pages/RegisterDetails'
 import RegisterVerify from '@/pages/RegisterVerify'
 import RegisterSubscribe from '@/pages/RegisterSubscribe'
-import SupervisorDashboard from '@/pages/SupervisorDashboard'
-import NotificationCenter from '@/pages/NotificationCenter'
-import { Toaster } from 'sonner'
 
 function App() {
   const [me, setMe] = useState<{ role?: string } | null>(null)
@@ -46,8 +42,6 @@ function App() {
       if (r.ok) {
         const userData = await r.json()
         console.log('App: User data received:', userData)
-        console.log('App: User role:', userData.role)
-        console.log('App: User role type:', typeof userData.role)
         setMe(userData)
       } else {
         console.log('App: Auth failed, status:', r.status)
@@ -96,7 +90,7 @@ function App() {
           <Route path="/register/verify" element={<PublicRoute><RegisterVerify /></PublicRoute>} />
           <Route path="/register/subscribe" element={<PublicRoute><RegisterSubscribe /></PublicRoute>} />
 
-          <Route path="/" element={<RequireAuth><Dashboard userRole={me?.role} /></RequireAuth>} />
+          <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/epas" element={<RequireAuth><><EPAList /><section id="reflections"><ReflectionLog /></section></></RequireAuth>} />
           <Route path="/epa/:code" element={<RequireAuth><EPADetail /></RequireAuth>} />
           <Route path="/section-a" element={<RequireAuth><SectionA /></RequireAuth>} />
@@ -108,14 +102,12 @@ function App() {
           <Route path="/logbook/:id" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
           <Route path="/logbook/:id/edit" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
           <Route path="/section-a/cra-edit" element={<RequireAuth><CRAEdit /></RequireAuth>} />
-          <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
           {me?.role === 'ORG_ADMIN' && <Route path="/org" element={<RequireAuth><OrgDashboard /></RequireAuth>} />}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       )}
-      <Toaster position="top-right" richColors />
     </div>
   )
 }

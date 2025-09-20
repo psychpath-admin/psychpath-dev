@@ -14,7 +14,7 @@ export default function OrgDashboard() {
         <div className="mb-2 font-labels text-textDark">Supervisees</div>
         <ul className="grid gap-2">
           {data.supervisees.map((u) => (
-            <li key={u.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-psychpath">{u.email || u.username} — {u.role}</li>
+            <li key={u.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-cape">{u.email || u.username} — {u.role}</li>
           ))}
         </ul>
       </div>
@@ -22,7 +22,7 @@ export default function OrgDashboard() {
         <div className="mb-2 font-labels text-textDark">Recent Approvals</div>
         <ul className="grid gap-2">
           {data.approvals.map((r) => (
-            <li key={r.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-psychpath">{r.title}</li>
+            <li key={r.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-cape">{r.title}</li>
           ))}
         </ul>
       </div>

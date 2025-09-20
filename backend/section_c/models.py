@@ -23,11 +23,6 @@ class SupervisionEntry(models.Model):
     duration_minutes = models.IntegerField(help_text="Duration in minutes")
     summary = models.TextField(help_text="Supervision summary and key points discussed")
     
-    # Logbook integration
-    locked = models.BooleanField(default=False, help_text="True if this entry is part of a submitted logbook")
-    supervisor_comment = models.TextField(blank=True, default="", help_text="Supervisor comment for this entry when reviewing a logbook")
-    trainee_response = models.TextField(blank=True, default="", help_text="Trainee response to supervisor comment when resubmitting")
-    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

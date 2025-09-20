@@ -7,14 +7,17 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Removed conflicting CSS variables - using the ones defined in @layer base below */
+:root {
+  --background: #EEEEEE;
+  --foreground: #222831;
+}
 
 html, body, #root {
   height: 100%;
 }
 
 body {
-  @apply bg-background text-foreground font-body antialiased;
+  @apply bg-[color:var(--background)] text-[color:var(--foreground)] font-body antialiased;
 }
 
 

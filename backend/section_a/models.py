@@ -87,11 +87,6 @@ class SectionAEntry(models.Model):
     duration_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Legacy field")
     reflection = models.TextField(blank=True, help_text="Legacy field")
     
-    # Logbook integration
-    locked = models.BooleanField(default=False, help_text="True if this entry is part of a submitted logbook")
-    supervisor_comment = models.TextField(blank=True, default="", help_text="Supervisor comment for this entry when reviewing a logbook")
-    trainee_response = models.TextField(blank=True, default="", help_text="Trainee response to supervisor comment when resubmitting")
-    
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

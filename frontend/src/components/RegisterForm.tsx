@@ -34,7 +34,7 @@ export default function RegisterForm() {
   }
 
   return (
-    <form onSubmit={handleRegister} className="space-y-3 rounded-card border borderLight bg-backgroundCard p-4 shadow-psychpath">
+    <form onSubmit={handleRegister} className="space-y-3 rounded-card border borderLight bg-backgroundCard p-4 shadow-cape">
       <div className="font-headings text-xl text-textDark">Register</div>
       <div className="space-y-1">
         <label className="font-labels text-sm text-textLight">Email</label>

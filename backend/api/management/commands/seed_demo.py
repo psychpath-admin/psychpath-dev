@@ -10,7 +10,7 @@ class Command(BaseCommand):
         User = get_user_model()
         org, _ = Organization.objects.get_or_create(name="Demo Clinic")
 
-        def mk(email, role, first_name="", last_name=""):
+        def mk(email, role, first_name="", last_name="", ahpra_number=""):
             u, created = User.objects.get_or_create(username=email, defaults={"email": email})
             if created:
                 u.set_password("password123")
@@ -20,13 +20,15 @@ class Command(BaseCommand):
             prof.organization = org
             prof.first_name = first_name
             prof.last_name = last_name
+            if ahpra_number:
+                prof.ahpra_registration_number = ahpra_number
             prof.save()
             return u
 
-        supervisor = mk("supervisor@demo.test", UserRole.SUPERVISOR, "Demo", "Supervisor")
-        intern = mk("intern@demo.test", UserRole.PROVISIONAL, "Demo", "Intern")
-        registrar = mk("registrar@demo.test", UserRole.REGISTRAR, "Demo", "Registrar")
-        org_admin = mk("admin@demo.test", UserRole.ORG_ADMIN, "Demo", "Admin")
+        supervisor = mk("supervisor@demo.test", UserRole.SUPERVISOR, "Demo", "Supervisor", "SUP001")
+        intern = mk("intern@demo.test", UserRole.PROVISIONAL, "Demo", "Intern", "INT001")
+        registrar = mk("registrar@demo.test", UserRole.REGISTRAR, "Demo", "Registrar", "REG001")
+        org_admin = mk("admin@demo.test", UserRole.ORG_ADMIN, "Demo", "Admin", "ADM001")
 
         self.stdout.write(self.style.SUCCESS("Demo users created successfully."))
 

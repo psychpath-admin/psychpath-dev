@@ -37,4 +37,3 @@ class WeeklyLogbookSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['trainee', 'submitted_at', 'dcc_minutes', 'cra_minutes', 'pd_minutes']
 
-

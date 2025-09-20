@@ -1,22 +1,31 @@
 from django.contrib import admin
-from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification
+from .models import WeeklyLogbook, DCCEntry, CRAEntry, PDEntry, SUPEntry, LogbookAuditLog
 
 
 @admin.register(WeeklyLogbook)
 class WeeklyLogbookAdmin(admin.ModelAdmin):
     list_display = [
-        'trainee', 'week_start_date', 'week_end_date', 'status', 'supervisor', 'created_at'
+        'trainee', 'week_start_date', 'week_end_date', 'status', 
+        'total_weekly_hours', 'cumulative_total_hours', 'supervisor'
     ]
     list_filter = ['status', 'week_start_date', 'trainee']
-    search_fields = ['trainee__email', 'trainee__profile__first_name', 'trainee__profile__last_name']
-    readonly_fields = ['created_at', 'updated_at']
+    search_fields = ['trainee__email', 'trainee__first_name', 'trainee__last_name']
+    readonly_fields = [
+        'total_dcc_hours', 'total_cra_hours', 'total_pd_hours', 'total_sup_hours',
+        'total_weekly_hours', 'cumulative_dcc_hours', 'cumulative_cra_hours',
+        'cumulative_pd_hours', 'cumulative_sup_hours', 'cumulative_total_hours',
+        'created_at', 'updated_at'
+    ]
     
     fieldsets = (
         ('Basic Info', {
-            'fields': ('trainee', 'week_start_date', 'week_end_date', 'week_number', 'status')
+            'fields': ('trainee', 'week_start_date', 'week_end_date', 'status')
         }),
-        ('Entry References', {
-            'fields': ('section_a_entry_ids', 'section_b_entry_ids', 'section_c_entry_ids')
+        ('Weekly Totals', {
+            'fields': ('total_dcc_hours', 'total_cra_hours', 'total_pd_hours', 'total_sup_hours', 'total_weekly_hours')
+        }),
+        ('Cumulative Totals', {
+            'fields': ('cumulative_dcc_hours', 'cumulative_cra_hours', 'cumulative_pd_hours', 'cumulative_sup_hours', 'cumulative_total_hours')
         }),
         ('Supervision', {
             'fields': ('supervisor', 'submitted_at', 'reviewed_by', 'reviewed_at', 'supervisor_comments')
@@ -28,43 +37,31 @@ class WeeklyLogbookAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(LogbookMessage)
-class LogbookMessageAdmin(admin.ModelAdmin):
-    list_display = ['logbook', 'author', 'author_role', 'created_at']
-    list_filter = ['author_role', 'created_at']
-    search_fields = ['message', 'logbook__trainee__email']
-    readonly_fields = ['created_at']
+class LogbookEntryAdmin(admin.ModelAdmin):
+    list_display = ['logbook', 'date', 'client_age', 'client_issue', 'duration_hours']
+    list_filter = ['date', 'logbook__trainee']
+    search_fields = ['client_issue', 'activity_description', 'reflection']
+    readonly_fields = ['created_at', 'updated_at']
 
 
-@admin.register(CommentThread)
-class CommentThreadAdmin(admin.ModelAdmin):
-    list_display = ['logbook', 'thread_type', 'entry_id', 'created_at']
-    list_filter = ['thread_type', 'created_at']
-    search_fields = ['logbook__trainee__email', 'entry_id']
+@admin.register(DCCEntry)
+class DCCEntryAdmin(LogbookEntryAdmin):
+    pass
 
 
-@admin.register(CommentMessage)
-class CommentMessageAdmin(admin.ModelAdmin):
-    list_display = ['thread', 'author', 'author_role', 'created_at', 'locked']
-    list_filter = ['author_role', 'locked', 'created_at']
-    search_fields = ['message', 'thread__logbook__trainee__email']
-    readonly_fields = ['created_at', 'updated_at', 'seen_by']
+@admin.register(CRAEntry)
+class CRAEntryAdmin(LogbookEntryAdmin):
+    pass
 
 
-@admin.register(UnlockRequest)
-class UnlockRequestAdmin(admin.ModelAdmin):
-    list_display = ['logbook', 'requester', 'status', 'duration_minutes', 'created_at']
-    list_filter = ['status', 'requester_role', 'reviewer_role', 'created_at']
-    search_fields = ['logbook__trainee__email', 'reason', 'admin_comment']
-    readonly_fields = ['created_at']
+@admin.register(PDEntry)
+class PDEntryAdmin(LogbookEntryAdmin):
+    pass
 
 
-@admin.register(Notification)
-class NotificationAdmin(admin.ModelAdmin):
-    list_display = ['user', 'notification_type', 'read', 'created_at']
-    list_filter = ['notification_type', 'read', 'created_at']
-    search_fields = ['user__email', 'payload']
-    readonly_fields = ['created_at']
+@admin.register(SUPEntry)
+class SUPEntryAdmin(LogbookEntryAdmin):
+    pass
 
 
 @admin.register(LogbookAuditLog)

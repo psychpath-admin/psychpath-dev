@@ -1,5 +1,4 @@
-# Support app for PsychPATH system
-
+# Support app for CAPE system
 
 
 

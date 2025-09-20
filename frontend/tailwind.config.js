@@ -78,9 +78,9 @@ export default {
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
   		},
-		boxShadow: {
-			psychpath: '0 1px 2px 0 rgba(0,0,0,0.05)'
-		},
+  		boxShadow: {
+  			cape: '0 1px 2px 0 rgba(0,0,0,0.05)'
+  		},
   		spacing: {
   			section: '24px'
   		}

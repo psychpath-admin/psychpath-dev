@@ -31,4 +31,3 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.ERROR(f'Error resetting password: {str(e)}')
             )
-

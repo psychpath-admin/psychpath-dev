@@ -6,15 +6,15 @@ from django.contrib.auth.models import User
 
 def get_support_logger():
     """Get logger for support team issues"""
-    return logging.getLogger('psychpath.support')
+    return logging.getLogger('cape.support')
 
 def get_audit_logger():
     """Get logger for data access auditing"""
-    return logging.getLogger('psychpath.audit')
+    return logging.getLogger('cape.audit')
 
 def get_app_logger():
     """Get logger for general application errors"""
-    return logging.getLogger('psychpath.app')
+    return logging.getLogger('cape.app')
 
 def log_support_error(user_id=None, function_name=None, error=None, additional_context=None):
     """
@@ -34,7 +34,7 @@ def log_support_error(user_id=None, function_name=None, error=None, additional_c
     context = {
         'user': user_email,
         'function': function_name or 'Unknown',
-        'error_message': str(error) if error else 'Unknown error',
+        'message': str(error) if error else 'Unknown error',
         'traceback': traceback.format_exc(),
     }
     

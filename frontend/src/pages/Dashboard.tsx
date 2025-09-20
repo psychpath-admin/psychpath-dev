@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getSectionAEntries, getPDMetrics, getSupervisionMetrics, getProgramSummary } from '@/lib/api'
+import { getSectionAEntries, getPDMetrics, getSupervisionMetrics } from '@/lib/api'
 import type { PDMetrics } from '@/types/pd'
 import type { SupervisionMetrics } from '@/types/supervision'
-import type { ProgramSummary } from '@/types/program'
 import { InternshipValidationCard } from '@/components/InternshipValidationCard'
-import RegistrarSummaryCard from '@/components/RegistrarSummaryCard'
-import PendingSupervisionRequests from '@/components/PendingSupervisionRequests'
-import SupervisorDashboard from '@/pages/SupervisorDashboard'
 import {
   DndContext,
   closestCenter,
@@ -44,32 +40,19 @@ function minutesToHours(minutes: number): number {
   return Math.round((minutes / 60) * 10) / 10
 }
 
-interface DashboardProps {
-  userRole?: string
-}
-
-export default function Dashboard({ userRole }: DashboardProps) {
-  console.log('Dashboard: Component rendering, userRole:', userRole)
+export default function Dashboard() {
+  console.log('Dashboard: Component rendering')
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<Entry[]>([])
   const [pdMetrics, setPdMetrics] = useState<PDMetrics | null>(null)
   const [supervisionMetrics, setSupervisionMetrics] = useState<SupervisionMetrics | null>(null)
-  const [programSummary, setProgramSummary] = useState<ProgramSummary | null>(null)
   const [cardOrder, setCardOrder] = useState<string[]>([])
-  const [refreshKey, setRefreshKey] = useState(0) // For triggering refreshes
-
-  // Function to trigger dashboard refresh (called by child components)
-  const handleSupervisionUpdate = () => {
-    setRefreshKey(prev => prev + 1)
-    // Also refresh data
-    fetchData()
-  }
 
   // Load saved card order from localStorage
   useEffect(() => {
     console.log('Dashboard: Loading card order from localStorage')
     const savedOrder = localStorage.getItem('dashboard-card-order')
-    let cardOrderToSet = ['supervision_requests', 'overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'internship_validation']
+    let cardOrderToSet = ['overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'internship_validation']
     
     if (savedOrder) {
       const parsed = JSON.parse(savedOrder)
@@ -82,9 +65,6 @@ export default function Dashboard({ userRole }: DashboardProps) {
       }
       if (!parsed.includes('internship_validation')) {
         parsed.push('internship_validation')
-      }
-      if (!parsed.includes('registrar_summary')) {
-        parsed.push('registrar_summary')
       }
       cardOrderToSet = parsed
     }
@@ -133,19 +113,6 @@ export default function Dashboard({ userRole }: DashboardProps) {
         console.log('Dashboard: No auth, showing empty supervision data', error)
         // Show empty data when not authenticated - no demo data
         setSupervisionMetrics(null)
-      })
-    
-    // Load Program Summary
-    getProgramSummary()
-      .then((data) => {
-        if (!mounted) return
-        console.log('Dashboard: Program summary loaded from API:', data)
-        setProgramSummary(data)
-      })
-      .catch((error) => {
-        console.log('Dashboard: No auth, showing empty program summary', error)
-        // Show empty data when not authenticated - no demo data
-        setProgramSummary(null)
       })
     
     return () => { mounted = false }
@@ -398,25 +365,13 @@ export default function Dashboard({ userRole }: DashboardProps) {
         )
       })()
     },
-    supervision_requests: {
-      id: 'supervision_requests',
-      type: 'custom',
-      title: 'Supervision Requests',
-      component: <PendingSupervisionRequests onUpdate={handleSupervisionUpdate} />
-    },
     internship_validation: {
       id: 'internship_validation',
       type: 'custom',
       title: '5+1 Internship Progress',
       component: <InternshipValidationCard />
-    },
-    registrar_summary: {
-      id: 'registrar_summary',
-      type: 'custom',
-      title: 'Registrar Progress',
-      component: <RegistrarSummaryCard />
     }
-  }), [metrics, targets, supervisionStatus, pdMetrics, supervisionMetrics, programSummary])
+  }), [metrics, targets, supervisionStatus, pdMetrics, supervisionMetrics])
 
   console.log('Dashboard render:', { loading, entries: entries.length, cardOrder, pdMetrics })
   console.log('Dashboard: Available cards:', Object.keys(dashboardCards))
@@ -432,23 +387,14 @@ export default function Dashboard({ userRole }: DashboardProps) {
   console.log('Dashboard: loading =', loading)
   console.log('Dashboard: entries =', entries)
 
-  // Show supervisor dashboard for supervisors
-  console.log('Dashboard: Checking userRole:', userRole)
-  console.log('Dashboard: userRole type:', typeof userRole)
-  console.log('Dashboard: userRole === "SUPERVISOR":', userRole === 'SUPERVISOR')
-  if (userRole === 'SUPERVISOR') {
-    console.log('Dashboard: Showing supervisor dashboard')
-    return <SupervisorDashboard />
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-headings text-3xl text-textDark">Provisional Dashboard</h1>
+        <h1 className="font-headings text-3xl text-textDark">Intern Dashboard</h1>
         <div className="flex gap-2">
           <button
             onClick={() => {
-              const defaultOrder = ['overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'supervision_requests', 'internship_validation', 'registrar_summary']
+              const defaultOrder = ['overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'internship_validation']
               setCardOrder(defaultOrder)
               localStorage.setItem('dashboard-card-order', JSON.stringify(defaultOrder))
               console.log('Dashboard: Reset layout to default order')
@@ -505,15 +451,6 @@ export default function Dashboard({ userRole }: DashboardProps) {
                 if (!card) {
                   console.log('Dashboard: Missing card for', cardId)
                   return null
-                }
-                
-                // Role-based card filtering
-                const userRole = programSummary?.role
-                if (cardId === 'internship_validation' && userRole !== 'PROVISIONAL') {
-                  return null // Hide internship validation for non-provisionals
-                }
-                if (cardId === 'registrar_summary' && userRole !== 'REGISTRAR') {
-                  return null // Hide registrar summary for non-registrars
                 }
                 
                 console.log('Dashboard: Rendering card', cardId, card.title)

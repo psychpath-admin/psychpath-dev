@@ -44,13 +44,13 @@ export default function RegisterTerms() {
           <div className="prose max-w-none">
             <h3>1. Acceptance of Terms</h3>
             <p>
-              By accessing and using the PsychPATH (Psychology Professional Assessment and Training Hub) platform, 
+              By accessing and using the CAPE (Clinical Assessment and Professional Evaluation) platform, 
               you accept and agree to be bound by the terms and provision of this agreement.
             </p>
             
             <h3>2. Use License</h3>
             <p>
-              Permission is granted to temporarily download one copy of the materials on PsychPATH for personal, 
+              Permission is granted to temporarily download one copy of the materials on CAPE for personal, 
               non-commercial transitory viewing only. This is the grant of a license, not a transfer of title.
             </p>
             
@@ -63,7 +63,7 @@ export default function RegisterTerms() {
             
             <h3>4. Data Privacy and Security</h3>
             <p>
-              PsychPATH is committed to protecting your personal information and professional data. 
+              CAPE is committed to protecting your personal information and professional data. 
               All data is stored securely and used only for the purposes outlined in our Privacy Policy.
             </p>
             
@@ -75,14 +75,14 @@ export default function RegisterTerms() {
             
             <h3>6. Limitation of Liability</h3>
             <p>
-              In no event shall PsychPATH or its suppliers be liable for any damages arising out of the use 
-              or inability to use the materials on PsychPATH, even if PsychPATH or an authorized representative 
+              In no event shall CAPE or its suppliers be liable for any damages arising out of the use 
+              or inability to use the materials on CAPE, even if CAPE or an authorized representative 
               has been notified orally or in writing of the possibility of such damage.
             </p>
             
             <h3>7. Modifications</h3>
             <p>
-              PsychPATH may revise these terms of service at any time without notice. By using this platform, 
+              CAPE may revise these terms of service at any time without notice. By using this platform, 
               you are agreeing to be bound by the then current version of these terms.
             </p>
           </div>

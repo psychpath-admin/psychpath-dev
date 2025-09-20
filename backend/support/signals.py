@@ -119,4 +119,3 @@ def log_user_activity(user, activity_type, description, request=None, metadata=N
 
 
 
-

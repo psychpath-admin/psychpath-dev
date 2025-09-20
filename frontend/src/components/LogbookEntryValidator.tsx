@@ -180,4 +180,3 @@ export function ValidationSummary({ entryData, className = '' }: ValidationSumma
     </div>
   )
 }
-

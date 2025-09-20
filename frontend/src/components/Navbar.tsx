@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button'
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { Link } from 'react-router-dom'
-import HeaderNotificationBell from '@/components/HeaderNotificationBell'
 // Logo is served from public folder
 
 export function Navbar() {
@@ -22,10 +21,10 @@ export function Navbar() {
         <Link to="/" className="flex items-center gap-3">
           <img 
             src="/cape-logo.png" 
-            alt="PsychPATH Logo" 
+            alt="CAPE Logo" 
             className="h-8 w-auto"
           />
-          <span className="font-headings text-2xl text-textDark">PsychPATH</span>
+          <span className="font-headings text-2xl text-textDark">CAPE</span>
         </Link>
         <NavigationMenu>
           <NavigationMenuList>
@@ -35,7 +34,7 @@ export function Navbar() {
             <NavigationMenuItem>
               <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue" to="/epas">EPAs</Link>
             </NavigationMenuItem>
-            {(me?.role === 'PROVISIONAL' || me?.role === 'REGISTRAR') && (
+            {(me?.role === 'INTERN' || me?.role === 'REGISTRAR') && (
               <>
                 <NavigationMenuItem>
                   <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue" to="/section-a">Section A</Link>
@@ -73,10 +72,6 @@ export function Navbar() {
             <span className="text-sm text-textLight">Guest</span>
           ) : (
             <>
-              <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue" to="/notifications">
-                Notifications
-              </Link>
-              <HeaderNotificationBell />
               <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue" to="/profile">
                 Profile
               </Link>

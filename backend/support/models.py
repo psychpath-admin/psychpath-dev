@@ -158,4 +158,3 @@ class WeeklyStats(models.Model):
 
 
 
-

@@ -34,7 +34,7 @@ export default function SupervisorQueue() {
       <div className="font-headings text-2xl text-textDark">Supervisor Approval Queue</div>
       <ul className="grid gap-3">
         {items.map((r) => (
-          <li key={r.id} className="rounded-card border borderLight bg-backgroundCard p-4 shadow-psychpath">
+          <li key={r.id} className="rounded-card border borderLight bg-backgroundCard p-4 shadow-cape">
             <div className="mb-2 font-labels text-textDark">{r.title}</div>
             <div className="mb-3 text-sm text-textLight">{r.content}</div>
             <button onClick={() => approve(r.id)} className="rounded-md bg-primaryBlue px-3 py-1 text-white">Approve</button>
