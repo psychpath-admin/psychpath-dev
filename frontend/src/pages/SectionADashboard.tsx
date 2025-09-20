@@ -204,6 +204,32 @@ export default function SectionADashboard() {
     }
   }
 
+  const handleEditCRA = (craEntry: DCCEntry) => {
+    setSelectedEntry(craEntry)
+    setCraFormData({
+      client_id: craEntry.client_id,
+      session_date: craEntry.session_date,
+      place_of_practice: craEntry.place_of_practice || '',
+      presenting_issues: craEntry.presenting_issues || '',
+      session_activity_types: craEntry.session_activity_types || [],
+      duration_minutes: craEntry.duration_minutes?.toString() || '50',
+      reflections_on_experience: craEntry.reflections_on_experience || '',
+      simulated: craEntry.simulated || false
+    })
+    setShowCRAForm(true)
+  }
+
+  const handleDeleteCRA = async (craEntry: DCCEntry) => {
+    if (window.confirm(`Are you sure you want to delete this CRA record?`)) {
+      try {
+        await deleteSectionAEntry(craEntry.id)
+        loadDCCEntries()
+      } catch (error) {
+        console.error('Error deleting CRA entry:', error)
+      }
+    }
+  }
+
   const formatDuration = (minutes: string) => {
     const mins = parseInt(minutes)
     if (mins >= 60) {
@@ -508,8 +534,30 @@ export default function SectionADashboard() {
                         </h4>
                         <div className="space-y-3">
                           {entry.cra_entries.map((craEntry) => (
-                            <Card key={craEntry.id} className="bg-gray-50 border-gray-200 ml-4">
-                              <CardContent className="p-4">
+                            <Card key={craEntry.id} className="bg-gray-50 border-gray-200 ml-4 relative">
+                              {/* CRA Action buttons */}
+                              <div className="absolute top-2 right-2 flex gap-1 z-10">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEditCRA(craEntry)}
+                                  title="Edit CRA"
+                                  className="h-6 w-6 p-0 bg-white/90 backdrop-blur-sm"
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDeleteCRA(craEntry)}
+                                  title="Delete CRA"
+                                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 bg-white/90 backdrop-blur-sm"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+
+                              <CardContent className="p-4 pr-16">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   <div className="flex items-center gap-2">
                                     <Clock className="h-3 w-3 text-gray-500" />
@@ -631,20 +679,26 @@ export default function SectionADashboard() {
             <CRAForm
               onSubmit={async (data) => {
                 try {
-                  const craData = {
-                    ...data,
-                    entry_type: 'cra',
-                    parent_dcc_entry: selectedEntry.id,
-                    client_id: selectedEntry.client_id,
-                    session_date: selectedEntry.session_date,
-                    week_starting: selectedEntry.week_starting
+                  if (selectedEntry?.parent_dcc_entry) {
+                    // Editing existing CRA entry
+                    await updateSectionAEntry(selectedEntry.id, data)
+                  } else {
+                    // Creating new CRA entry
+                    const craData = {
+                      ...data,
+                      entry_type: 'cra',
+                      parent_dcc_entry: selectedEntry.id,
+                      client_id: selectedEntry.client_id,
+                      session_date: selectedEntry.session_date,
+                      week_starting: selectedEntry.week_starting
+                    }
+                    await createSectionAEntry(craData)
                   }
-                  await createSectionAEntry(craData)
                   setShowCRAForm(false)
                   setSelectedEntry(null)
                   loadDCCEntries()
                 } catch (error) {
-                  console.error('Error creating CRA entry:', error)
+                  console.error('Error saving CRA entry:', error)
                 }
               }}
               onCancel={() => {
@@ -667,7 +721,7 @@ export default function SectionADashboard() {
               customActivityTypes={[]}
               handleDeleteCustomActivityType={() => {}}
               calculateWeekStarting={(date: string) => date}
-              title="Add Client Related Activity (CRA)"
+              title={selectedEntry?.parent_dcc_entry ? "Edit Client Related Activity (CRA)" : "Add Client Related Activity (CRA)"}
               showClientIdInput={false}
             />
           </div>
