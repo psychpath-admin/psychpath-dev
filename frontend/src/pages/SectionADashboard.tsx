@@ -414,37 +414,35 @@ export default function SectionADashboard() {
                     </Button>
                   </div>
 
-                  <CardContent className="p-6 pr-24">
-                    <div className="flex items-center gap-8">
-                      {/* Date */}
-                      <div className="flex items-center gap-2 min-w-[120px]">
-                        <Calendar className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm font-medium text-gray-700">
+                  <CardContent className="p-6 pr-32">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {/* Row 1: Basic Info */}
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                        <span className="text-sm font-medium text-gray-700 break-words">
                           {new Date(entry.session_date).toLocaleDateString()}
                         </span>
                       </div>
                       
-                      {/* Client */}
-                      <div className="flex items-center gap-2 min-w-[120px]">
-                        <User className="h-4 w-4 text-gray-500" />
-                        <span className="font-semibold text-gray-900">{entry.client_id}</span>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                        <span className="font-semibold text-gray-900 break-words">{entry.client_id}</span>
                         {entry.simulated && (
-                          <Badge variant="secondary" className="text-xs ml-2">
+                          <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
                             Simulated
                           </Badge>
                         )}
                       </div>
                       
-                      {/* Duration */}
-                      <div className="flex items-center gap-2 min-w-[80px]">
-                        <Clock className="h-4 w-4 text-gray-500" />
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
                         <span className="text-sm text-gray-600">
                           {formatDuration(entry.duration_minutes)}
                         </span>
                       </div>
-                      
-                      {/* Session Types */}
-                      <div className="flex items-center gap-2 min-w-[200px]">
+
+                      {/* Row 2: Session Types - Full Width */}
+                      <div className="lg:col-span-2 xl:col-span-3">
                         <div className="flex flex-wrap gap-1">
                           {entry.session_activity_types.map((type, typeIndex) => (
                             <Badge key={typeIndex} variant="outline" className="text-xs">
@@ -454,25 +452,26 @@ export default function SectionADashboard() {
                         </div>
                       </div>
                       
-                      {/* Place of Practice */}
-                      <div className="flex-1 min-w-[150px]">
-                        <span className="text-sm text-gray-600">{entry.place_of_practice}</span>
+                      {/* Row 3: Location and Reflections */}
+                      <div className="lg:col-span-1">
+                        <span className="text-sm text-gray-600 break-words">{entry.place_of_practice}</span>
                       </div>
                       
-                      {/* Reflections Preview */}
                       {entry.reflections_on_experience && (
-                        <div className="flex-1 min-w-[200px]">
-                          <p className="text-sm text-gray-700 truncate">
-                            {truncateText(entry.reflections_on_experience, 80)}
+                        <div className="lg:col-span-2">
+                          <p className="text-sm text-gray-700 break-words line-clamp-2">
+                            {truncateText(entry.reflections_on_experience, 120)}
                           </p>
                         </div>
                       )}
                       
                       {/* CRA Count */}
                       {entry.cra_entries && entry.cra_entries.length > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          {entry.cra_entries.length} CRA
-                        </Badge>
+                        <div className="lg:col-span-1">
+                          <Badge variant="secondary" className="text-xs">
+                            {entry.cra_entries.length} CRA
+                          </Badge>
+                        </div>
                       )}
                     </div>
                   </CardContent>
