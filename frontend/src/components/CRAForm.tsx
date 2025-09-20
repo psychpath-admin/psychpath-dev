@@ -67,7 +67,7 @@ export default function CRAForm({
               setValidationError('Please select at least one activity type')
               return
             }
-            onSubmit(e)
+            onSubmit(entryForm)
           }} className="space-y-6">
             {/* Client Pseudonym (ICRA only) */}
             {showClientIdInput && (
