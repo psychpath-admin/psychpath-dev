@@ -295,25 +295,30 @@ export default function CRAForm({
                 type="button"
                 onClick={onCancel}
                 disabled={saving}
-                className="px-4 py-2 rounded-lg border border-gray-300 bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 rounded-lg font-bold text-lg"
                 style={{ 
-                  color: '#1f2937 !important', 
-                  backgroundColor: '#f3f4f6 !important',
-                  borderColor: '#d1d5db !important'
+                  color: '#000000', 
+                  backgroundColor: '#ff0000',
+                  border: '3px solid #000000',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
                 }}
               >
-                Cancel
+                CANCEL BUTTON
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 rounded-lg font-bold text-lg"
                 style={{ 
-                  color: '#ffffff !important', 
-                  backgroundColor: '#2563eb !important'
+                  color: '#000000', 
+                  backgroundColor: '#00ff00',
+                  border: '3px solid #000000',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
                 }}
               >
-                {saving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Entry' : 'Create Entry')}
+                SUBMIT BUTTON
               </button>
             </div>
           </form>
