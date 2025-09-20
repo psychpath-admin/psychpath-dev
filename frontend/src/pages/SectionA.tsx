@@ -26,7 +26,6 @@ interface SectionAEntry {
   session_date: string
   week_starting: string
   place_of_practice: string
-  client_age: string
   presenting_issues: string
   session_activity_types: string[]
   duration_minutes: string
@@ -77,7 +76,6 @@ export default function SectionA() {
     session_date: '',
     week_starting: '',
     place_of_practice: '',
-    client_age: '',
     presenting_issues: '',
     session_activity_types: [] as string[],
     duration_minutes: '50',
@@ -115,7 +113,6 @@ export default function SectionA() {
           session_date: '2025-01-15',
           week_starting: '2025-01-13',
           place_of_practice: 'Private Practice',
-          client_age: '35',
           presenting_issues: 'Anxiety and depression',
           session_activity_types: ['evaluation', 'intervention'],
           duration_minutes: '50',
@@ -167,7 +164,6 @@ export default function SectionA() {
           setEntryForm(prev => ({
             ...prev,
             place_of_practice: lastSessionData.place_of_practice || '',
-            client_age: lastSessionData.client_age || '',
             presenting_issues: lastSessionData.presenting_issues || ''
           }))
         }
@@ -216,7 +212,6 @@ export default function SectionA() {
       session_date: '',
       week_starting: '',
       place_of_practice: '',
-      client_age: '',
       presenting_issues: '',
       session_activity_types: [],
       duration_minutes: currentTab === 'cra' || currentTab === 'icra' ? '15' : '50',
@@ -258,7 +253,6 @@ export default function SectionA() {
       session_date: entry.session_date || entry.created_at?.split('T')[0] || '',
       week_starting: entry.week_starting || '',
       place_of_practice: entry.place_of_practice || '',
-      client_age: entry.client_age || '',
       presenting_issues: entry.presenting_issues || '',
       session_activity_types: entry.session_activity_types || [],
       duration_minutes: entry.duration_minutes || '50',
@@ -289,7 +283,6 @@ export default function SectionA() {
       session_date: craEntry.session_date || craEntry.created_at?.split('T')[0] || '',
       week_starting: craEntry.week_starting || '',
       place_of_practice: craEntry.place_of_practice || '',
-      client_age: craEntry.client_age || '',
       presenting_issues: craEntry.presenting_issues || '',
       session_activity_types: craEntry.session_activity_types || [],
       duration_minutes: craEntry.duration_minutes || '15',
@@ -353,7 +346,7 @@ export default function SectionA() {
       if (updatedEntries) {
         setEntries(updatedEntries)
         if (activeTab === 'cra' && selectedEntry) {
-          setSelectedEntry(updatedEntries.find(e => e.id === selectedEntry.id) || selectedEntry)
+          setSelectedEntry(updatedEntries.find((entry: SectionAEntry) => entry.id === selectedEntry.id) || selectedEntry)
         }
       }
 
@@ -366,7 +359,6 @@ export default function SectionA() {
         session_date: '',
         week_starting: '',
         place_of_practice: '',
-        client_age: '',
         presenting_issues: '',
         session_activity_types: [],
         duration_minutes: '50',
@@ -449,7 +441,7 @@ export default function SectionA() {
               <CardHeader>
                 <div className="flex items-center justify-between mb-4">
                   <CardTitle>Client Records</CardTitle>
-                  <Button onClick={handleCreateEntry} size="sm">
+                  <Button onClick={() => handleCreateEntry()} size="sm">
                     + New Entry
                   </Button>
                 </div>
@@ -676,10 +668,6 @@ export default function SectionA() {
                       <label className="text-sm font-medium text-gray-500">Place of Practice</label>
                       <p className="text-lg">{selectedEntry.place_of_practice}</p>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Client Age</label>
-                      <p className="text-lg">{selectedEntry.client_age}</p>
-                    </div>
                   </div>
 
                   <div>
@@ -736,7 +724,7 @@ export default function SectionA() {
                         <h4 className="font-medium text-lg">CLIENT RELATED ACTIVITY</h4>
                         <Button
                           size="sm"
-                          onClick={() => handleCreateEntry('cra')}
+                          onClick={(e) => { e.stopPropagation(); handleCreateEntry('cra'); }}
                           className="bg-green-600 hover:bg-green-700 text-white w-8 h-8 p-0 rounded-full"
                         >
                           +
@@ -799,7 +787,7 @@ export default function SectionA() {
                         <h4 className="font-medium text-lg">INDEPENDENT CLIENT RELATED ACTIVITY</h4>
                         <Button
                           size="sm"
-                          onClick={() => handleCreateEntry('icra')}
+                          onClick={(e) => { e.stopPropagation(); handleCreateEntry('icra'); }}
                           className="bg-blue-600 hover:bg-blue-700 text-white w-8 h-8 p-0 rounded-full"
                         >
                           +
@@ -819,7 +807,7 @@ export default function SectionA() {
                   <div className="text-center">
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No Entry Selected</h3>
                     <p className="text-gray-500 mb-4">Select an entry from the list to view details</p>
-                    <Button onClick={handleCreateEntry}>Create New Entry</Button>
+                    <Button onClick={() => handleCreateEntry()}>Create New Entry</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -923,17 +911,6 @@ export default function SectionA() {
                   />
                 </div>
 
-                {/* Client Age */}
-                <div>
-                  <label className="block text-sm font-medium mb-2">CLIENT AGE</label>
-                  <Input
-                    type="number"
-                    value={entryForm.client_age}
-                    onChange={(e) => setEntryForm({ ...entryForm, client_age: e.target.value })}
-                    placeholder="Age in years"
-                    required
-                  />
-                </div>
 
                 {/* Session Activity Types */}
                 <div>
@@ -941,7 +918,7 @@ export default function SectionA() {
                   <div className="space-y-2">
                     {/* Standard activity types */}
                     <div className="flex flex-wrap gap-2">
-                      {activeTab === 'dcc' && ['evaluation', 'intervention', 'assessment', 'consultation', 'supervision', 'other'].map((type) => (
+                      {['evaluation', 'intervention', 'assessment', 'consultation', 'supervision', 'other'].map((type) => (
                         <button
                           key={type}
                           type="button"
@@ -955,7 +932,7 @@ export default function SectionA() {
                           {type.charAt(0).toUpperCase() + type.slice(1)}
                         </button>
                       ))}
-                      {activeTab === 'cra' && ['report_writing', 'case_formulation', 'test_scoring', 'documentation', 'file_review', 'other'].map((type) => (
+                      {['report_writing', 'case_formulation', 'test_scoring', 'documentation', 'file_review', 'other'].map((type) => (
                         <button
                           key={type}
                           type="button"
@@ -969,7 +946,7 @@ export default function SectionA() {
                           {type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}
                         </button>
                       ))}
-                      {activeTab === 'icra' && ['report_writing', 'case_formulation', 'test_scoring', 'documentation', 'file_review', 'other'].map((type) => (
+                      {['report_writing', 'case_formulation', 'test_scoring', 'documentation', 'file_review', 'other'].map((type) => (
                         <button
                           key={type}
                           type="button"
@@ -1106,7 +1083,7 @@ export default function SectionA() {
                       duration_minutes: parseInt(entryForm.duration_minutes) || 0,
                       simulated: entryForm.simulated
                     }}
-                    onValidationChange={(isValid, errors) => {
+                    onValidationChange={(_, errors) => {
                       setValidationErrors(errors)
                     }}
                     showDetails={true}
@@ -1115,7 +1092,7 @@ export default function SectionA() {
                 </div>
 
                 {/* Simulated Contact Checkbox (only for DCC) */}
-                {activeTab === 'dcc' && (
+                {entryForm.entry_type === 'client_contact' && (
                   <div>
                     <label className="flex items-center space-x-2">
                       <input
@@ -1143,12 +1120,11 @@ export default function SectionA() {
                 </div>
 
                 {/* Hidden fields for CRA */}
-                {activeTab === 'cra' && (
+                {entryForm.entry_type === 'cra' && (
                   <>
                     <input type="hidden" name="parent_dcc_entry" value={selectedEntry?.id || ''} />
                     <input type="hidden" name="client_id" value={selectedEntry?.client_id || ''} />
                     <input type="hidden" name="place_of_practice" value={selectedEntry?.place_of_practice || ''} />
-                    <input type="hidden" name="client_age" value={selectedEntry?.client_age || ''} />
                     <input type="hidden" name="presenting_issues" value={selectedEntry?.presenting_issues || ''} />
                   </>
                 )}
