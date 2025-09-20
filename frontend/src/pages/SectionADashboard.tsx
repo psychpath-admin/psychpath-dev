@@ -498,6 +498,63 @@ export default function SectionADashboard() {
                       )}
                     </div>
                   </CardContent>
+
+                  {/* Nested CRA Entries */}
+                  {entry.cra_entries && entry.cra_entries.length > 0 && (
+                    <div className="px-6 pb-6">
+                      <div className="border-t border-gray-200 pt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">
+                          Client Related Activities ({entry.cra_entries.length})
+                        </h4>
+                        <div className="space-y-3">
+                          {entry.cra_entries.map((craEntry) => (
+                            <Card key={craEntry.id} className="bg-gray-50 border-gray-200 ml-4">
+                              <CardContent className="p-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="h-3 w-3 text-gray-500" />
+                                    <span className="text-xs font-medium text-gray-600">
+                                      {formatDuration(parseInt(craEntry.duration_minutes))}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex flex-wrap gap-1">
+                                    {craEntry.session_activity_types.map((type, typeIndex) => (
+                                      <Badge key={typeIndex} variant="outline" className="text-xs">
+                                        {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                  
+                                  <div className="md:col-span-2">
+                                    <span className="text-xs text-gray-600">
+                                      {craEntry.place_of_practice}
+                                    </span>
+                                  </div>
+                                  
+                                  {craEntry.presenting_issues && (
+                                    <div className="md:col-span-2">
+                                      <p className="text-xs text-gray-700 break-words">
+                                        {truncateText(craEntry.presenting_issues, 80)}
+                                      </p>
+                                    </div>
+                                  )}
+                                  
+                                  {craEntry.reflections_on_experience && (
+                                    <div className="md:col-span-2">
+                                      <p className="text-xs text-gray-600 italic break-words">
+                                        "{truncateText(craEntry.reflections_on_experience, 100)}"
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </Card>
               )
             })}
