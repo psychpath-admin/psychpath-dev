@@ -69,6 +69,7 @@ export default function SectionADashboard() {
   const [editingCRAId, setEditingCRAId] = useState<number | null>(null)
   const [craFormData, setCraFormData] = useState({
     client_id: '',
+    client_pseudonym: '',
     session_date: '',
     place_of_practice: '',
     presenting_issues: '',
@@ -182,6 +183,7 @@ export default function SectionADashboard() {
     setSelectedEntry(entry)
     setCraFormData({
       client_id: entry.client_id,
+      client_pseudonym: entry.client_id, // Default to same as client_id for consistency
       session_date: entry.session_date,
       place_of_practice: '',
       presenting_issues: '',
@@ -208,6 +210,7 @@ export default function SectionADashboard() {
     setSelectedEntry(craEntry)
     setCraFormData({
       client_id: craEntry.client_id,
+      client_pseudonym: craEntry.client_pseudonym || craEntry.client_id,
       session_date: craEntry.session_date,
       place_of_practice: craEntry.place_of_practice || '',
       presenting_issues: craEntry.presenting_issues || '',
@@ -566,7 +569,14 @@ export default function SectionADashboard() {
                                     </span>
                                   </div>
                                   
-                                  <div className="flex flex-wrap gap-1">
+                                  <div className="flex items-center gap-2">
+                                    <User className="h-3 w-3 text-gray-500" />
+                                    <span className="text-xs font-medium text-gray-700">
+                                      {craEntry.client_pseudonym || craEntry.client_id}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex flex-wrap gap-1 md:col-span-2">
                                     {craEntry.session_activity_types.map((type, typeIndex) => (
                                       <Badge key={typeIndex} variant="outline" className="text-xs">
                                         {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
@@ -722,7 +732,7 @@ export default function SectionADashboard() {
               handleDeleteCustomActivityType={() => {}}
               calculateWeekStarting={(date: string) => date}
               title={selectedEntry?.parent_dcc_entry ? "Edit Client Related Activity (CRA)" : "Add Client Related Activity (CRA)"}
-              showClientIdInput={false}
+              showClientIdInput={true}
               isEditing={!!selectedEntry?.parent_dcc_entry}
             />
           </div>

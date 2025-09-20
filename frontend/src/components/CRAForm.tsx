@@ -71,19 +71,19 @@ export default function CRAForm({
             }
             onSubmit(entryForm)
           }} className="space-y-6">
-            {/* Client Pseudonym (ICRA only) */}
+            {/* Client Pseudonym (CRA/ICRA) */}
             {showClientIdInput && (
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Client ID (Pseudonym) <span className="text-red-500">*</span>
+                  Client Pseudonym <span className="text-red-500">*</span>
                 </label>
                 <Input
-                  value={entryForm.client_id}
+                  value={entryForm.client_pseudonym || entryForm.client_id}
                   onChange={(e) => {
-                    setEntryForm({ ...entryForm, client_id: e.target.value })
+                    setEntryForm({ ...entryForm, client_pseudonym: e.target.value })
                     if (onClientIdChange) onClientIdChange(e.target.value)
                   }}
-                  placeholder="e.g., BM-1961-M"
+                  placeholder="e.g., Client A, BM-1961-M"
                   required
                   list="cra-client-suggestions"
                 />
