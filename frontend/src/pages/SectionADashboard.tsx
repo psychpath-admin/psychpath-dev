@@ -17,6 +17,7 @@ import {
   createCustomActivityType,
   deleteCustomActivityType
 } from '@/lib/api'
+import CRAForm from '@/components/CRAForm'
 
 interface DCCEntry {
   id: number
@@ -545,6 +546,59 @@ export default function SectionADashboard() {
           </Card>
         )}
       </div>
+
+      {/* CRA Form Modal */}
+      {showCRAForm && selectedEntry && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <CRAForm
+              onSubmit={async (data) => {
+                try {
+                  const craData = {
+                    ...data,
+                    entry_type: 'cra',
+                    parent_dcc_entry: selectedEntry.id,
+                    client_id: selectedEntry.client_id,
+                    session_date: selectedEntry.session_date,
+                    week_starting: selectedEntry.week_starting
+                  }
+                  await createSectionAEntry(craData)
+                  setShowCRAForm(false)
+                  setSelectedEntry(null)
+                  loadDCCEntries()
+                } catch (error) {
+                  console.error('Error creating CRA entry:', error)
+                }
+              }}
+              onCancel={() => {
+                setShowCRAForm(false)
+                setSelectedEntry(null)
+              }}
+              saving={false}
+              entryForm={{
+                client_id: selectedEntry.client_id,
+                session_date: selectedEntry.session_date,
+                place_of_practice: '',
+                presenting_issues: '',
+                session_activity_types: [],
+                duration_minutes: '50',
+                reflections_on_experience: '',
+                simulated: false
+              }}
+              setEntryForm={() => {}}
+              handleActivityTypeToggle={() => {}}
+              handleAddCustomActivityType={() => {}}
+              newCustomActivityType=""
+              setNewCustomActivityType={() => {}}
+              customActivityTypes={[]}
+              handleDeleteCustomActivityType={() => {}}
+              calculateWeekStarting={(date: string) => date}
+              title="Add Client Related Activity (CRA)"
+              showClientIdInput={false}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
