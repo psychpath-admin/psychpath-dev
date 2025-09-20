@@ -172,10 +172,8 @@ export default function CRAForm({
                   checked={showReflections}
                   onChange={(e) => {
                     setShowReflections(e.target.checked)
-                    if (e.target.checked) {
-                      // When checked, add a placeholder text
-                      setEntryForm({ ...entryForm, reflections_on_experience: 'Enter reflections...' })
-                    } else {
+                    if (!e.target.checked) {
+                      // Only clear the text when unchecking
                       setEntryForm({ ...entryForm, reflections_on_experience: '' })
                     }
                   }}
