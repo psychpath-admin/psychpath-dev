@@ -69,7 +69,7 @@ export default function SectionADashboard() {
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'duration' | 'client'>('newest')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [sessionType, setSessionType] = useState('')
+  const [sessionType, setSessionType] = useState('all')
   const [durationMin, setDurationMin] = useState('')
   const [durationMax, setDurationMax] = useState('')
 
@@ -94,7 +94,7 @@ export default function SectionADashboard() {
       if (dateTo) {
         filteredEntries = filteredEntries.filter(entry => entry.session_date <= dateTo)
       }
-      if (sessionType) {
+      if (sessionType && sessionType !== 'all') {
         filteredEntries = filteredEntries.filter(entry => 
           entry.session_activity_types.includes(sessionType)
         )
@@ -198,13 +198,13 @@ export default function SectionADashboard() {
   const clearFilters = () => {
     setDateFrom('')
     setDateTo('')
-    setSessionType('')
+    setSessionType('all')
     setDurationMin('')
     setDurationMax('')
     setPagination(prev => ({ ...prev, current_page: 1 }))
   }
 
-  const hasActiveFilters = dateFrom || dateTo || sessionType || durationMin || durationMax
+  const hasActiveFilters = dateFrom || dateTo || (sessionType && sessionType !== 'all') || durationMin || durationMax
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -263,7 +263,7 @@ export default function SectionADashboard() {
                     <SelectValue placeholder="All types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All types</SelectItem>
+                    <SelectItem value="all">All types</SelectItem>
                     <SelectItem value="psychological_assessment">Psychological Assessment</SelectItem>
                     <SelectItem value="intervention">Intervention</SelectItem>
                     <SelectItem value="prevention">Prevention</SelectItem>
