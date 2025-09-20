@@ -51,7 +51,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   useEffect(() => {
     if (entryId) {
       setLoading(true)
-      getSectionAEntry(entryId)
+      getSectionAEntry(parseInt(entryId))
         .then(entry => {
           setFormData({
             client_id: entry.client_id || '',
@@ -109,7 +109,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
       }
 
       if (isEditing && entryId) {
-        await updateSectionAEntry(entryId, entryData)
+        await updateSectionAEntry(parseInt(entryId), entryData)
         toast.success('DCC entry updated successfully!')
       } else {
         await createSectionAEntry(entryData)
