@@ -354,7 +354,7 @@ export default function SectionADashboard() {
       
       const entryData = {
         ...formData,
-        entry_type: 'icra',
+        entry_type: 'independent_activity', // Backend expects 'independent_activity' for ICRA
         parent_dcc_entry: null, // ICRA entries are independent
         week_starting: calculateWeekStarting(formData.session_date)
       }

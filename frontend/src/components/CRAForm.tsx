@@ -45,7 +45,7 @@ export default function CRAForm({
   isEditing = false
 }: CRAFormProps) {
   const [validationError, setValidationError] = useState('')
-  const [showReflections, setShowReflections] = useState(entryForm.reflections_on_experience.length > 0)
+  const [showReflections, setShowReflections] = useState((entryForm.reflections_on_experience || '').length > 0)
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <Card className="w-full max-w-md">
@@ -101,7 +101,7 @@ export default function CRAForm({
               </label>
               <Input
                 type="date"
-                value={entryForm.session_date}
+                value={entryForm.session_date || ''}
                 onChange={(e) => {
                   const newDate = e.target.value
                   setEntryForm({ 
@@ -226,7 +226,7 @@ export default function CRAForm({
                 </label>
                 <Input
                   type="number"
-                  value={entryForm.duration_minutes}
+                  value={entryForm.duration_minutes || ''}
                   onChange={(e) => setEntryForm({ ...entryForm, duration_minutes: e.target.value })}
                   placeholder="15"
                   min="1"
@@ -276,7 +276,7 @@ export default function CRAForm({
                   Reflections <span className="text-red-500">*</span>
                 </label>
                 <Textarea
-                  value={entryForm.reflections_on_experience}
+                  value={entryForm.reflections_on_experience || ''}
                   onChange={(e) => setEntryForm({ ...entryForm, reflections_on_experience: e.target.value })}
                   placeholder="Enter your reflections on this client related activity..."
                   rows={4}
