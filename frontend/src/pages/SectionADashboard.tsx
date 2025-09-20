@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,6 +52,7 @@ interface PaginationInfo {
 }
 
 export default function SectionADashboard() {
+  const navigate = useNavigate()
   const [dccEntries, setDccEntries] = useState<DCCEntry[]>([])
   const [pagination, setPagination] = useState<PaginationInfo>({
     current_page: 1,
@@ -221,7 +223,7 @@ export default function SectionADashboard() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <CardTitle className="text-lg">Filters & Controls</CardTitle>
               <div className="flex gap-2">
-                <Button onClick={() => setShowEntryForm(true)} size="sm">
+                <Button onClick={() => navigate('/section-a/create')} size="sm">
                   <Plus className="h-4 w-4 mr-2" />
                   New DCC Entry
                 </Button>
