@@ -267,6 +267,123 @@ export default function SectionADashboard() {
           <p className="text-gray-600">Manage your direct client contact records and related activities</p>
         </div>
 
+        {/* Hours Summary */}
+        {(() => {
+          // Calculate hours summary
+          let totalDccHours = 0
+          let totalCRAHours = 0
+          let simulatedDccHours = 0
+
+          dccEntries.forEach(entry => {
+            const entryHours = parseInt(entry.duration_minutes) / 60
+            
+            if (entry.entry_type === 'client_contact') {
+              totalDccHours += entryHours
+              if (entry.simulated) {
+                simulatedDccHours += entryHours
+              }
+            } else if (entry.entry_type === 'cra') {
+              totalCRAHours += entryHours
+            }
+
+            // Add CRA hours from nested entries
+            if (entry.cra_entries) {
+              entry.cra_entries.forEach(craEntry => {
+                const craHours = parseInt(craEntry.duration_minutes) / 60
+                totalCRAHours += craHours
+              })
+            }
+          })
+
+          // AHPRA 5+1 Requirements (assuming provisional/intern role)
+          const dccMinimum = 500 // hours
+          const simulatedMaximum = 60 // hours
+          const practiceHoursTotal = 1360 // hours (DCC + CRA combined)
+          
+          const remainingDcc = Math.max(0, dccMinimum - totalDccHours)
+          const remainingPractice = Math.max(0, practiceHoursTotal - (totalDccHours + totalCRAHours))
+          const simulatedOverflow = Math.max(0, simulatedDccHours - simulatedMaximum)
+
+          return (
+            <Card className="mb-6 shadow-sm bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+              <CardContent className="p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">AHPRA 5+1 Program Progress</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* DCC Hours */}
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-blue-600">
+                      {totalDccHours.toFixed(1)}h
+                    </div>
+                    <div className="text-sm text-gray-600 mb-2">Direct Client Contact</div>
+                    <div className="text-xs text-gray-500">
+                      {remainingDcc > 0 ? (
+                        <span className="text-orange-600">
+                          ({remainingDcc.toFixed(1)}h remaining)
+                        </span>
+                      ) : (
+                        <span className="text-green-600">(✓ Requirement met)</span>
+                      )}
+                    </div>
+                    {simulatedDccHours > 0 && (
+                      <div className="text-xs mt-1">
+                        <span className="text-purple-600">
+                          {simulatedDccHours.toFixed(1)}h simulated
+                        </span>
+                        {simulatedOverflow > 0 && (
+                          <span className="text-red-600 ml-1">
+                            (+{simulatedOverflow.toFixed(1)}h over limit)
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CRA Hours (including ICRA) */}
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-green-600">
+                      {totalCRAHours.toFixed(1)}h
+                    </div>
+                    <div className="text-sm text-gray-600 mb-2">Client Related Activities</div>
+                    <div className="text-xs text-gray-500">(includes ICRA)</div>
+                  </div>
+
+                  {/* Total Practice Hours */}
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-indigo-600">
+                      {(totalDccHours + totalCRAHours).toFixed(1)}h
+                    </div>
+                    <div className="text-sm text-gray-600 mb-2">Total Practice Hours</div>
+                    <div className="text-xs text-gray-500">
+                      {remainingPractice > 0 ? (
+                        <span className="text-orange-600">
+                          ({remainingPractice.toFixed(1)}h remaining)
+                        </span>
+                      ) : (
+                        <span className="text-green-600">(✓ Requirement met)</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">Target: 1,360h</div>
+                  </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="mt-4">
+                  <div className="flex justify-between text-xs text-gray-600 mb-1">
+                    <span>Practice Hours Progress</span>
+                    <span>{((totalDccHours + totalCRAHours) / 1360 * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min((totalDccHours + totalCRAHours) / 1360 * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })()}
+
         {/* Filters and Controls */}
         <Card className="mb-6">
           <CardHeader>
