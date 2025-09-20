@@ -12,7 +12,7 @@ export default function SectionA() {
   
   if (isCreateRoute || isEditRoute) {
     const entryId = isEditRoute ? location.pathname.split('/').pop() : undefined
-    return <SectionAForm onCancel={() => navigate('/section-a')} entryId={entryId} />
+    return <SectionAForm onCancel={() => navigate('/section-a')} entryId={entryId || undefined} />
   }
   
   // Use the new modern dashboard by default
