@@ -65,10 +65,22 @@ export default function SectionADashboard() {
   const [selectedEntry, setSelectedEntry] = useState<DCCEntry | null>(null)
   const [showEntryForm, setShowEntryForm] = useState(false)
   const [showCRAForm, setShowCRAForm] = useState(false)
+  const [showICRAForm, setShowICRAForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState(false)
   const [editingCRAId, setEditingCRAId] = useState<number | null>(null)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
   const [craFormData, setCraFormData] = useState({
+    client_id: '',
+    client_pseudonym: '',
+    session_date: '',
+    place_of_practice: '',
+    presenting_issues: '',
+    session_activity_types: [],
+    duration_minutes: '50',
+    reflections_on_experience: '',
+    simulated: false
+  })
+  const [icraFormData, setIcraFormData] = useState({
     client_id: '',
     client_pseudonym: '',
     session_date: '',
@@ -204,6 +216,21 @@ export default function SectionADashboard() {
     setShowCRAForm(true)
   }
 
+  const handleAddICRA = () => {
+    setIcraFormData({
+      client_id: '',
+      client_pseudonym: '',
+      session_date: new Date().toISOString().split('T')[0],
+      place_of_practice: '',
+      presenting_issues: '',
+      session_activity_types: [],
+      duration_minutes: '50',
+      reflections_on_experience: '',
+      simulated: false
+    })
+    setShowICRAForm(true)
+  }
+
   const handleDelete = async (entry: DCCEntry) => {
     if (window.confirm(`Are you sure you want to delete this DCC record for ${entry.client_id}?`)) {
       try {
@@ -239,6 +266,83 @@ export default function SectionADashboard() {
       } catch (error) {
         console.error('Error deleting CRA entry:', error)
       }
+    }
+  }
+
+  const handleCRAFormSubmit = async (formData: any) => {
+    try {
+      setLoading(true)
+      
+      const entryData = {
+        ...formData,
+        entry_type: 'cra',
+        parent_dcc_entry: selectedEntry?.id,
+        week_starting: calculateWeekStarting(formData.session_date)
+      }
+
+      if (editingCRAId) {
+        await updateSectionAEntry(editingCRAId, entryData)
+        toast.success('CRA entry updated successfully!')
+      } else {
+        await createSectionAEntry(entryData)
+        toast.success('CRA entry created successfully!')
+      }
+
+      setShowCRAForm(false)
+      setSelectedEntry(null)
+      setEditingCRAId(null)
+      setCraFormData({
+        client_id: '',
+        client_pseudonym: '',
+        session_date: '',
+        place_of_practice: '',
+        presenting_issues: '',
+        session_activity_types: [],
+        duration_minutes: '50',
+        reflections_on_experience: '',
+        simulated: false
+      })
+      loadDCCEntries()
+    } catch (error) {
+      console.error('Error submitting CRA form:', error)
+      toast.error('Failed to save CRA entry. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleICRAFormSubmit = async (formData: any) => {
+    try {
+      setLoading(true)
+      
+      const entryData = {
+        ...formData,
+        entry_type: 'icra',
+        parent_dcc_entry: null, // ICRA entries are independent
+        week_starting: calculateWeekStarting(formData.session_date)
+      }
+
+      await createSectionAEntry(entryData)
+      toast.success('ICRA entry created successfully!')
+
+      setShowICRAForm(false)
+      setIcraFormData({
+        client_id: '',
+        client_pseudonym: '',
+        session_date: new Date().toISOString().split('T')[0],
+        place_of_practice: '',
+        presenting_issues: '',
+        session_activity_types: [],
+        duration_minutes: '50',
+        reflections_on_experience: '',
+        simulated: false
+      })
+      loadDCCEntries()
+    } catch (error) {
+      console.error('Error submitting ICRA form:', error)
+      toast.error('Failed to save ICRA entry. Please try again.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -278,15 +382,23 @@ export default function SectionADashboard() {
                 <h1 className="text-4xl font-headings mb-2">Section A: Direct Client Contact</h1>
                 <p className="text-white/90 text-lg font-body">Track your client interactions and build your professional portfolio</p>
               </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button 
-                  onClick={() => navigate('/section-a/create')}
-                  size="lg"
-                  className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg"
-                >
-                  <Plus className="h-5 w-5 mr-2" />
-                  New DCC Entry
-                </Button>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button 
+                      onClick={() => navigate('/section-a/create')}
+                      size="lg"
+                      className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg"
+                    >
+                      <Plus className="h-5 w-5 mr-2" />
+                      New DCC Entry
+                    </Button>
+                    <Button 
+                      onClick={() => handleAddICRA()}
+                      size="lg"
+                      className="bg-white/20 text-white hover:bg-white/30 font-semibold shadow-sm rounded-lg border border-white/30"
+                    >
+                      <Plus className="h-5 w-5 mr-2" />
+                      New ICRA Entry
+                    </Button>
                     <Button 
                       variant="outline"
                       size="lg"
@@ -295,7 +407,7 @@ export default function SectionADashboard() {
                       <BarChart3 className="h-5 w-5 mr-2" />
                       View Reports
                     </Button>
-              </div>
+                  </div>
             </div>
           </div>
         </div>
@@ -1078,6 +1190,131 @@ export default function SectionADashboard() {
         )}
       </div>
 
+      {/* ICRA Entries Section */}
+      {(() => {
+        const icraEntries = dccEntries.filter(entry => entry.entry_type === 'icra')
+        if (icraEntries.length === 0) return null
+
+        return (
+          <div className="mt-8">
+            <Card className="brand-card">
+              <CardHeader>
+                <CardTitle className="text-2xl font-headings text-textDark flex items-center gap-3">
+                  <div className="h-8 w-8 bg-accent rounded-full flex items-center justify-center">
+                    <FileText className="h-4 w-4 text-white" />
+                  </div>
+                  Independent Client Related Activities (ICRA)
+                  <Badge variant="outline" className="ml-2">
+                    {icraEntries.length} entries
+                  </Badge>
+                </CardTitle>
+                <p className="text-textLight font-body">
+                  Independent client-related activities not linked to specific DCC sessions
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {icraEntries.map((entry, index) => {
+                    const icraColorVariations = [
+                      'bg-blue-100 border-blue-300 hover:border-blue-400',
+                      'bg-green-100 border-green-300 hover:border-green-400',
+                      'bg-purple-100 border-purple-300 hover:border-purple-400',
+                      'bg-orange-100 border-orange-300 hover:border-orange-400',
+                      'bg-pink-100 border-pink-300 hover:border-pink-400',
+                      'bg-indigo-100 border-indigo-300 hover:border-indigo-400',
+                      'bg-teal-100 border-teal-300 hover:border-teal-400',
+                      'bg-rose-100 border-rose-300 hover:border-rose-400',
+                      'bg-cyan-100 border-cyan-300 hover:border-cyan-400',
+                      'bg-emerald-100 border-emerald-300 hover:border-emerald-400'
+                    ]
+                    const cardColorClass = icraColorVariations[index % icraColorVariations.length]
+
+                    return (
+                      <Card key={entry.id} className={`${cardColorClass} hover:shadow-md transition-all duration-300 relative group rounded-card`}>
+                        {/* ICRA Action buttons */}
+                        <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEdit(entry)}
+                            title="Edit ICRA"
+                            className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
+                          >
+                            <Edit className="h-4 w-4 text-textDark" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDelete(entry)}
+                            title="Delete ICRA"
+                            className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        <CardContent className="p-4 pr-32">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {/* Client Information */}
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                              <span className="font-semibold text-gray-900 break-words">
+                                {entry.client_pseudonym || entry.client_id}
+                              </span>
+                            </div>
+                            
+                            {/* Date */}
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                              <span className="text-sm font-medium text-gray-700 break-words">
+                                {new Date(entry.session_date).toLocaleDateString()}
+                              </span>
+                            </div>
+                            
+                            {/* Duration */}
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                              <span className="text-sm text-gray-600">
+                                {formatDuration(entry.duration_minutes)}
+                              </span>
+                            </div>
+
+                            {/* Activity Types */}
+                            <div className="lg:col-span-2 xl:col-span-3">
+                              <div className="flex flex-wrap gap-1">
+                                {entry.session_activity_types.map((type, typeIndex) => (
+                                  <Badge key={typeIndex} variant="outline" className="text-xs">
+                                    {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            {/* Location */}
+                            <div className="lg:col-span-1">
+                              <span className="text-sm text-gray-600 break-words">{entry.place_of_practice}</span>
+                            </div>
+                            
+                            {/* Reflections */}
+                            {entry.reflections_on_experience && (
+                              <div className="lg:col-span-2">
+                                <p className="text-sm text-gray-700 break-words line-clamp-2">
+                                  {truncateText(entry.reflections_on_experience, 120)}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )
+      })()}
+
       {/* CRA Form Modal */}
       {showCRAForm && selectedEntry && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1130,6 +1367,56 @@ export default function SectionADashboard() {
               title={selectedEntry?.parent_dcc_entry ? "Edit Client Related Activity (CRA)" : "Add Client Related Activity (CRA)"}
               showClientIdInput={true}
               isEditing={!!selectedEntry?.parent_dcc_entry}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ICRA Form Modal */}
+      {showICRAForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <CRAForm
+              onSubmit={handleICRAFormSubmit}
+              onCancel={() => {
+                setShowICRAForm(false)
+                setIcraFormData({
+                  client_id: '',
+                  client_pseudonym: '',
+                  session_date: new Date().toISOString().split('T')[0],
+                  place_of_practice: '',
+                  presenting_issues: '',
+                  session_activity_types: [],
+                  duration_minutes: '50',
+                  reflections_on_experience: '',
+                  simulated: false
+                })
+              }}
+              saving={loading}
+              entryForm={icraFormData}
+              setEntryForm={setIcraFormData}
+              handleActivityTypeToggle={(type: string) => {
+                const currentTypes = icraFormData.session_activity_types
+                const updatedTypes = currentTypes.includes(type)
+                  ? currentTypes.filter(t => t !== type)
+                  : [...currentTypes, type]
+                setIcraFormData({ ...icraFormData, session_activity_types: updatedTypes })
+              }}
+              handleAddCustomActivityType={() => {}}
+              newCustomActivityType=""
+              setNewCustomActivityType={() => {}}
+              customActivityTypes={[]}
+              handleDeleteCustomActivityType={() => {}}
+              calculateWeekStarting={(date: string) => {
+                const d = new Date(date)
+                const day = d.getDay()
+                const diff = d.getDate() - day
+                const weekStart = new Date(d.setDate(diff))
+                return weekStart.toISOString().split('T')[0]
+              }}
+              title="Add Independent Client Related Activity (ICRA)"
+              showClientIdInput={true}
+              isEditing={false}
             />
           </div>
         </div>
