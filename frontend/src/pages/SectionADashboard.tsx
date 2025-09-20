@@ -162,6 +162,8 @@ export default function SectionADashboard() {
   }
 
   const handleEdit = (entry: DCCEntry) => {
+    console.log('Edit button clicked for entry:', entry.id)
+    console.log('Navigating to:', `/section-a/edit/${entry.id}`)
     navigate(`/section-a/edit/${entry.id}`)
   }
 
