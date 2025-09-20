@@ -1,0 +1,242 @@
+import React, { useState, useEffect } from 'react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Calendar, Clock, FileText } from 'lucide-react'
+import { toast } from 'sonner'
+import { apiFetch } from '@/lib/api'
+
+interface EligibleWeek {
+  week_start: string
+  week_end: string
+  week_display: string
+  section_a_count: number
+  section_b_count: number
+  section_c_count: number
+  total_entries: number
+}
+
+interface LogbookCreationModalProps {
+  onClose: () => void
+  onLogbookCreated: () => void
+}
+
+export default function LogbookCreationModal({ onClose, onLogbookCreated }: LogbookCreationModalProps) {
+  const [eligibleWeeks, setEligibleWeeks] = useState<EligibleWeek[]>([])
+  const [selectedWeek, setSelectedWeek] = useState<EligibleWeek | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    fetchEligibleWeeks()
+  }, [])
+
+  const fetchEligibleWeeks = async () => {
+    try {
+      const response = await apiFetch('/api/logbook/eligible-weeks/')
+      if (response.ok) {
+        const data = await response.json()
+        setEligibleWeeks(data)
+      } else {
+        toast.error('Failed to fetch eligible weeks')
+      }
+    } catch (error) {
+      console.error('Error fetching eligible weeks:', error)
+      toast.error('Error fetching eligible weeks')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleWeekSelect = (week: EligibleWeek) => {
+    setSelectedWeek(week)
+  }
+
+  const handleCreateLogbook = async () => {
+    if (!selectedWeek) return
+
+    setSubmitting(true)
+    try {
+      // First create a draft to preview the logbook
+      const draftResponse = await apiFetch('/api/logbook/draft/', {
+        method: 'POST',
+        body: JSON.stringify({
+          week_start: selectedWeek.week_start
+        })
+      })
+
+      if (!draftResponse.ok) {
+        throw new Error('Failed to create logbook draft')
+      }
+
+      const draftData = await draftResponse.json()
+
+      // Now submit the logbook
+      const submitResponse = await apiFetch('/api/logbook/submit/', {
+        method: 'POST',
+        body: JSON.stringify({
+          week_start: selectedWeek.week_start,
+          week_end: selectedWeek.week_end,
+          section_a_entry_ids: draftData.section_a_entries.map((entry: any) => entry.id),
+          section_b_entry_ids: draftData.section_b_entries.map((entry: any) => entry.id),
+          section_c_entry_ids: draftData.section_c_entries.map((entry: any) => entry.id)
+        })
+      })
+
+      if (submitResponse.ok) {
+        toast.success('Logbook submitted successfully!')
+        onLogbookCreated()
+      } else {
+        const errorData = await submitResponse.json()
+        toast.error(errorData.error || 'Failed to submit logbook')
+      }
+    } catch (error) {
+      console.error('Error creating logbook:', error)
+      toast.error('Error creating logbook')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-md bg-white text-gray-900">
+          <DialogHeader>
+            <DialogTitle className="text-gray-900">Create New Logbook</DialogTitle>
+            <DialogDescription className="text-gray-600">
+              Loading eligible weeks...
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-center py-4">
+            <Clock className="h-8 w-8 mx-auto mb-2 text-gray-400 animate-spin" />
+            <p className="text-sm text-gray-600">Please wait...</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  if (eligibleWeeks.length === 0) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-md bg-white text-gray-900">
+          <DialogHeader>
+            <DialogTitle className="text-gray-900">No Eligible Weeks</DialogTitle>
+            <DialogDescription className="text-gray-600">
+              You don't have any weeks with unlinked entries that can be submitted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-center py-6">
+            <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+            <p className="text-sm text-gray-600 mb-4">
+              Make sure you have created entries in Sections A, B, and C for past weeks.
+              Only completed weeks (not the current week) can be submitted.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-2xl bg-white text-gray-900">
+        <DialogHeader>
+          <DialogTitle className="text-gray-900">Create New Logbook</DialogTitle>
+          <DialogDescription className="text-gray-600">
+            Select a week to compile into a logbook for supervisor review. Only past weeks with entries are available.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="text-sm font-medium text-gray-700">
+            Available Weeks ({eligibleWeeks.length}):
+          </div>
+          
+          <div className="max-h-96 overflow-y-auto space-y-2">
+            {eligibleWeeks.map((week) => (
+              <div
+                key={week.week_start}
+                className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                  selectedWeek?.week_start === week.week_start
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+                onClick={() => handleWeekSelect(week)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-5 w-5 text-gray-400" />
+                    <div>
+                      <div className="font-medium">{week.week_display}</div>
+                      <div className="text-sm text-gray-600">
+                        {week.total_entries} total entries
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      A: {week.section_a_count}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      B: {week.section_b_count}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      C: {week.section_c_count}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {selectedWeek && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h4 className="font-medium text-blue-900 mb-2">Selected Week</h4>
+              <p className="text-sm text-blue-800">
+                {selectedWeek.week_display} - {selectedWeek.total_entries} entries will be compiled into your logbook.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateLogbook}
+            disabled={!selectedWeek || submitting}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            {submitting ? (
+              <>
+                <Clock className="h-4 w-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <FileText className="h-4 w-4 mr-2" />
+                Create & Submit Logbook
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
