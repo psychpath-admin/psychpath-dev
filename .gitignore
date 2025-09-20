@@ -149,3 +149,6 @@ temp/
 # Local development
 local/
 locals/
+*.pyc
+__pycache__/
+*.out
