@@ -300,6 +300,8 @@ export default function SectionA() {
   const handleSaveEntry = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    console.log('Form submission started', { entryForm, validationErrors, isValidating })
+    
     if (entryForm.session_activity_types.length === 0) {
       alert('Please select at least one session activity type')
       return
@@ -326,10 +328,13 @@ export default function SectionA() {
       })
 
       if (!validationResult.isValid) {
+        console.log('Validation failed:', validationResult.errors)
         setValidationErrors(validationResult.errors)
         setIsValidating(false)
         return
       }
+      
+      console.log('Validation passed, proceeding with save')
 
       if (editingEntry) {
         if (showCRAForm && editingCRAId) {

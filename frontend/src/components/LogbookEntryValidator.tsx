@@ -51,8 +51,10 @@ export function LogbookEntryValidator({
       }
     }
 
-    performValidation()
-  }, [entryData, validateEntry, onValidationChange])
+    // Debounce validation to avoid excessive API calls
+    const timeoutId = setTimeout(performValidation, 500)
+    return () => clearTimeout(timeoutId)
+  }, [entryData.entry_type, entryData.duration_minutes, entryData.simulated, validateEntry, onValidationChange])
 
   if (!validationResult) {
     return (
