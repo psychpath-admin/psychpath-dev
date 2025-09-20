@@ -918,7 +918,7 @@ export default function SectionA() {
                   <div className="space-y-2">
                     {/* Standard activity types */}
                     <div className="flex flex-wrap gap-2">
-                      {['evaluation', 'intervention', 'assessment', 'consultation', 'supervision', 'other'].map((type) => (
+                      {['psychological_assessment', 'intervention', 'prevention', 'evaluation'].map((type) => (
                         <button
                           key={type}
                           type="button"
@@ -929,35 +929,7 @@ export default function SectionA() {
                               : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                           }`}
                         >
-                          {type.charAt(0).toUpperCase() + type.slice(1)}
-                        </button>
-                      ))}
-                      {['report_writing', 'case_formulation', 'test_scoring', 'documentation', 'file_review', 'other'].map((type) => (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => handleActivityTypeToggle(type)}
-                          className={`px-3 py-1 text-sm rounded-full border ${
-                            entryForm.session_activity_types.includes(type)
-                              ? 'bg-primaryBlue text-white border-primaryBlue'
-                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          {type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}
-                        </button>
-                      ))}
-                      {['report_writing', 'case_formulation', 'test_scoring', 'documentation', 'file_review', 'other'].map((type) => (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => handleActivityTypeToggle(type)}
-                          className={`px-3 py-1 text-sm rounded-full border ${
-                            entryForm.session_activity_types.includes(type)
-                              ? 'bg-primaryBlue text-white border-primaryBlue'
-                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          {type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}
+                          {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                         </button>
                       ))}
                     </div>
