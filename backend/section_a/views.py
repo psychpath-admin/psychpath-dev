@@ -36,6 +36,18 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
+    def logbook_eligibility(self, request):
+        """Check if user can submit their logbook"""
+        eligibility = SectionAEntry.can_submit_logbook(request.user)
+        return Response(eligibility)
+    
+    @action(detail=False, methods=['get'])
+    def sdcc_summary(self, request):
+        """Get SDCC hours summary for the current user"""
+        summary = SectionAEntry.get_sdcc_summary(request.user)
+        return Response(summary)
+    
+    @action(detail=False, methods=['get'])
     def client_autocomplete(self, request):
         """Get unique client pseudonyms for autocomplete"""
         query = request.query_params.get('q', '')

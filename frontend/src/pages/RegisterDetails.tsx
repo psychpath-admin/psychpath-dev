@@ -51,7 +51,9 @@ export default function RegisterDetails() {
     if (!formData.password) newErrors.password = 'Password is required'
     if (!formData.ahpra_registration_number.trim()) newErrors.ahpra_registration_number = 'AHPRA registration number is required'
     if (!formData.designation) newErrors.designation = 'Designation is required'
-    if (!formData.provisional_start_date) newErrors.provisional_start_date = 'Program start date is required'
+    if (formData.designation === 'PROVISIONAL' && !formData.provisional_start_date) {
+      newErrors.provisional_start_date = 'Program start date is required'
+    }
     if (!formData.city.trim()) newErrors.city = 'City is required'
     
     // Email validation
@@ -74,8 +76,8 @@ export default function RegisterDetails() {
       newErrors.ahpra_registration_number = 'AHPRA registration number must be 3-15 alphanumeric characters'
     }
     
-    // Program start date validation (must be in the past and less than 5 years ago)
-    if (formData.provisional_start_date) {
+    // Program start date validation (only for provisional psychologists)
+    if (formData.designation === 'PROVISIONAL' && formData.provisional_start_date) {
       const now = new Date()
       const fiveYearsAgo = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
       
@@ -118,6 +120,10 @@ export default function RegisterDetails() {
       if (response.ok) {
         // Store form data for later use
         localStorage.setItem('registrationData', JSON.stringify(formData))
+        // Store verification code for demo purposes
+        if (data.verification_code) {
+          localStorage.setItem('verification_code', data.verification_code)
+        }
         window.location.href = '/register/verify'
       } else {
         setErrors({ submit: data.error || 'Registration failed' })
@@ -135,6 +141,15 @@ export default function RegisterDetails() {
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }))
+    }
+    
+    // Clear start date when supervisor is selected
+    if (field === 'designation' && value === 'SUPERVISOR') {
+      setFormData(prev => ({ ...prev, provisional_start_date: null }))
+      // Clear start date error
+      if (errors.provisional_start_date) {
+        setErrors(prev => ({ ...prev, provisional_start_date: '' }))
+      }
     }
   }
 
@@ -269,22 +284,30 @@ export default function RegisterDetails() {
               </div>
               
               <div className="space-y-2">
-                <Label>Internship Start Date *</Label>
+                <Label>
+                  {formData.designation === 'REGISTRAR' ? 'Endorsement Registrar Start Date *' : 
+                   formData.designation === 'SUPERVISOR' ? 'Start Date' :
+                   'Internship Start Date *'}
+                </Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
+                      disabled={formData.designation === 'SUPERVISOR'}
                       className={cn(
                         "w-full justify-start text-left font-normal",
                         !formData.provisional_start_date && "text-muted-foreground",
-                        errors.provisional_start_date && "border-red-500"
+                        errors.provisional_start_date && "border-red-500",
+                        formData.designation === 'SUPERVISOR' && "bg-gray-100 text-gray-400 cursor-not-allowed"
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {formData.provisional_start_date ? (
                         format(formData.provisional_start_date, "PPP")
                       ) : (
-                        <span>Pick a date</span>
+                        <span>
+                          {formData.designation === 'SUPERVISOR' ? 'Not applicable for supervisors' : 'Pick a date'}
+                        </span>
                       )}
                     </Button>
                   </PopoverTrigger>
@@ -299,7 +322,11 @@ export default function RegisterDetails() {
                   </PopoverContent>
                 </Popover>
                 {errors.provisional_start_date && <p className="text-sm text-red-500">{errors.provisional_start_date}</p>}
-                <p className="text-xs text-gray-500">Must be in the past and less than 5 years ago</p>
+                {formData.designation === 'SUPERVISOR' ? (
+                  <p className="text-xs text-gray-500">Start date is not required for supervisors</p>
+                ) : (
+                  <p className="text-xs text-gray-500">Must be in the past and less than 5 years ago</p>
+                )}
               </div>
               
             </div>

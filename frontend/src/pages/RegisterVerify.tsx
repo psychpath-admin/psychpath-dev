@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Clock, Mail, CheckCircle } from 'lucide-react'
+import { Clock, Mail, CheckCircle, Eye, EyeOff } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { API_URL } from '@/lib/api'
 
@@ -16,6 +16,36 @@ export default function RegisterVerify() {
   const [timeLeft, setTimeLeft] = useState(30 * 60) // 30 minutes in seconds
   const [isVerified, setIsVerified] = useState(false)
   const [error, setError] = useState('')
+  const [showVerificationCode, setShowVerificationCode] = useState(false)
+  const [actualVerificationCode, setActualVerificationCode] = useState('')
+
+  // Load verification code and registration data from localStorage on component mount
+  useEffect(() => {
+    const storedCode = localStorage.getItem('verification_code')
+    console.log('Stored verification code:', storedCode)
+    if (storedCode) {
+      setActualVerificationCode(storedCode)
+    } else {
+      // Fallback demo code if no code is stored
+      setActualVerificationCode('123456')
+    }
+    
+    // Load registration data to pre-fill email
+    const registrationData = localStorage.getItem('registrationData')
+    if (registrationData) {
+      try {
+        const data = JSON.parse(registrationData)
+        if (data.email) {
+          setEmail(data.email)
+        }
+        if (data.ahpra_registration_number) {
+          setPsyNumber(data.ahpra_registration_number)
+        }
+      } catch (error) {
+        console.error('Error parsing registration data:', error)
+      }
+    }
+  }, [])
 
   // Countdown timer
   useEffect(() => {
@@ -127,15 +157,37 @@ export default function RegisterVerify() {
               
               <div className="space-y-2">
                 <Label htmlFor="verification_code">Verification Code</Label>
-                <Input
-                  id="verification_code"
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value)}
-                  placeholder="Enter 6-digit code"
-                  maxLength={6}
-                  className="text-center text-lg tracking-widest"
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="verification_code"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    placeholder="Enter 6-digit code"
+                    maxLength={6}
+                    className="text-center text-lg tracking-widest pr-10"
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1 h-8 w-8 p-0"
+                    onClick={() => setShowVerificationCode(!showVerificationCode)}
+                  >
+                    {showVerificationCode ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                {showVerificationCode && (
+                  <Alert>
+                    <AlertDescription>
+                      <strong>Demo Mode:</strong> Your verification code is <code className="bg-gray-100 px-2 py-1 rounded font-mono text-lg">{actualVerificationCode}</code>
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             </div>
 

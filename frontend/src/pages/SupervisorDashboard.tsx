@@ -46,52 +46,96 @@ interface DashboardStats {
 export default function SupervisorDashboard() {
   const [selectedSupervisee, setSelectedSupervisee] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [stats, setStats] = useState<DashboardStats>({
+    totalSupervisees: 0,
+    pendingReviews: 0,
+    overdueLogbooks: 0,
+    onTrack: 0
+  })
+  const [supervisees, setSupervisees] = useState<Supervisee[]>([])
+  const [loading, setLoading] = useState(true)
 
   // Function to trigger dashboard refresh
   const handleSupervisionUpdate = () => {
     setRefreshKey(prev => prev + 1)
+    fetchSupervisorData()
   }
 
-  // Dummy data
-  const stats: DashboardStats = {
-    totalSupervisees: 2,
-    pendingReviews: 0,
-    overdueLogbooks: 0,
-    onTrack: 2
-  }
-
-  const supervisees: Supervisee[] = [
-    {
-      id: '1',
-      name: 'Provisional Demo1',
-      status: 'overdue',
-      role: 'Provisional Psychologist',
-      progress: {
-        directClient: { current: 19.83, target: 15.16 },
-        clientRelated: { current: 24.33, target: 41.21 },
-        supervision: { current: 6.25, target: 2.42 },
-        pd: { current: 14.75, target: 1.81 },
-        individualSupervision: { current: 3.75 }
-      },
-      overdueDates: ['2025-08-04', '2025-08-11', '2025-08-18', '2025-08-25'],
-      lastSubmission: '2025-08-01'
-    },
-    {
-      id: '2',
-      name: 'Provisional Demo2',
-      status: 'on-track',
-      role: 'Provisional Psychologist',
-      progress: {
-        directClient: { current: 12.5, target: 15.16 },
-        clientRelated: { current: 18.2, target: 41.21 },
-        supervision: { current: 3.0, target: 2.42 },
-        pd: { current: 8.5, target: 1.81 },
-        individualSupervision: { current: 2.0 }
-      },
-      overdueDates: [],
-      lastSubmission: '2025-08-15'
+  // Fetch real supervisor data from API
+  const fetchSupervisorData = async () => {
+    try {
+      setLoading(true)
+      
+      // Fetch supervisees/supervision requests
+      const superviseesResponse = await fetch('/api/supervisor-requests/', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      if (superviseesResponse.ok) {
+        const superviseesData = await superviseesResponse.json()
+        // Transform API data to match Supervisee interface
+        const transformedSupervisees = superviseesData.map((item: any, index: number) => ({
+          id: item.id?.toString() || index.toString(),
+          name: `${item.trainee?.first_name || 'Unknown'} ${item.trainee?.last_name || 'User'}`,
+          status: item.status === 'ACCEPTED' ? 'on-track' : 'pending',
+          role: 'Provisional Psychologist',
+          progress: {
+            directClient: { current: 0, target: 15.16 },
+            clientRelated: { current: 0, target: 41.21 },
+            supervision: { current: 0, target: 2.42 },
+            pd: { current: 0, target: 1.81 },
+            individualSupervision: { current: 0 }
+          },
+          overdueDates: [],
+          lastSubmission: 'Never'
+        }))
+        
+        setSupervisees(transformedSupervisees)
+        
+        // Update stats based on actual data
+        const totalSupervisees = transformedSupervisees.length
+        const pendingReviews = transformedSupervisees.filter(s => s.status === 'pending').length
+        const onTrack = transformedSupervisees.filter(s => s.status === 'on-track').length
+        const overdueLogbooks = transformedSupervisees.filter(s => s.status === 'overdue').length
+        
+        setStats({
+          totalSupervisees,
+          pendingReviews,
+          overdueLogbooks,
+          onTrack
+        })
+      } else {
+        // If no supervisees, show empty state
+        setSupervisees([])
+        setStats({
+          totalSupervisees: 0,
+          pendingReviews: 0,
+          overdueLogbooks: 0,
+          onTrack: 0
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching supervisor data:', error)
+      // Show empty state on error
+      setSupervisees([])
+      setStats({
+        totalSupervisees: 0,
+        pendingReviews: 0,
+        overdueLogbooks: 0,
+        onTrack: 0
+      })
+    } finally {
+      setLoading(false)
     }
-  ]
+  }
+
+  // Fetch data on component mount
+  useEffect(() => {
+    fetchSupervisorData()
+  }, [])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -123,6 +167,17 @@ export default function SupervisorDashboard() {
     ? supervisees.find(s => s.id === selectedSupervisee)
     : supervisees[0]
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading supervisor data...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Clean Header Section */}
@@ -131,7 +186,9 @@ export default function SupervisorDashboard() {
           <div className="flex justify-between items-center py-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Supervisor Dashboard</h1>
-              <p className="text-gray-600 mt-1">Demo Supervisor | THEPPL+ Supervisor</p>
+              <p className="text-gray-600 mt-1">
+                {supervisees.length > 0 ? `${supervisees.length} supervisee${supervisees.length === 1 ? '' : 's'}` : 'No supervisees yet'}
+              </p>
             </div>
             <div className="flex items-center gap-3">
               <Button variant="outline" size="sm">
@@ -198,33 +255,41 @@ export default function SupervisorDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {supervisees.map((supervisee) => (
-                  <div 
-                    key={supervisee.id} 
-                    className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                      selectedSupervisee === supervisee.id 
-                        ? 'border-blue-300 bg-blue-50' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                    onClick={() => setSelectedSupervisee(supervisee.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Users className="h-5 w-5 text-blue-600" />
+                {supervisees.length > 0 ? (
+                  supervisees.map((supervisee) => (
+                    <div 
+                      key={supervisee.id} 
+                      className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
+                        selectedSupervisee === supervisee.id 
+                          ? 'border-blue-300 bg-blue-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => setSelectedSupervisee(supervisee.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <Users className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{supervisee.name}</p>
+                            <p className="text-xs text-gray-500">{supervisee.role}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">{supervisee.name}</p>
-                          <p className="text-xs text-gray-500">{supervisee.role}</p>
-                        </div>
+                        <Badge className={getStatusColor(supervisee.status)}>
+                          {getStatusIcon(supervisee.status)}
+                          <span className="ml-1 capitalize">{supervisee.status.replace('-', ' ')}</span>
+                        </Badge>
                       </div>
-                      <Badge className={getStatusColor(supervisee.status)}>
-                        {getStatusIcon(supervisee.status)}
-                        <span className="ml-1 capitalize">{supervisee.status.replace('-', ' ')}</span>
-                      </Badge>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500 mb-2">No supervisees yet</p>
+                    <p className="text-sm text-gray-400">Supervisees will appear here once they request supervision</p>
                   </div>
-                ))}
+                )}
               </CardContent>
             </Card>
 

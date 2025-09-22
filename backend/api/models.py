@@ -59,9 +59,19 @@ class UserProfile(models.Model):
     
     # Signature (store data URL or relative path)
     signature_url = models.TextField(blank=True, help_text="Signature image (data URL or path)")
+    initials_url = models.TextField(blank=True, help_text="Initials image (data URL or path)")
     
     # Prior Hours (for provisionals/registrars who started logging elsewhere)
     prior_hours = models.JSONField(default=dict, blank=True, help_text="Prior hours completed before using PsychPATH")
+    prior_hours_declined = models.BooleanField(default=False, help_text="Whether the user declined to enter prior hours")
+    prior_hours_submitted = models.BooleanField(default=False, help_text="Whether prior hours have been submitted and locked")
+    
+    # Provisional psychologist-specific fields
+    provisional_registration_date = models.DateField(null=True, blank=True, help_text="Date when provisional registration was received from AHPRA")
+    internship_start_date = models.DateField(null=True, blank=True, help_text="Official start date of 5+1 internship")
+    is_full_time = models.BooleanField(default=True, help_text="Whether the internship is full-time or part-time")
+    estimated_completion_weeks = models.IntegerField(null=True, blank=True, help_text="Estimated completion time in weeks (minimum 44)")
+    weekly_commitment_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Weekly commitment in hours")
     
     # Registrar-specific fields
     AOPE_CHOICES = [
@@ -88,10 +98,21 @@ class UserProfile(models.Model):
     program_type = models.CharField(max_length=50, blank=True, null=True) # '5+1' or 'registrar'
     start_date = models.DateField(null=True, blank=True) # Program start date
     target_weeks = models.IntegerField(null=True, blank=True) # For planning, not strict enforcement
-    weekly_commitment = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True) # For estimated pace
+    weekly_commitment = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True) # For estimated pace
     
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    
+    # Track if profile setup is complete
+    profile_completed = models.BooleanField(default=False, help_text="Whether the user has completed their profile setup")
+    first_login_completed = models.BooleanField(default=False, help_text="Whether the user has completed their first login")
+    
+    # Supervisor-specific fields
+    is_board_approved_supervisor = models.BooleanField(default=False, help_text="Whether the user is a board-approved supervisor")
+    supervisor_registration_date = models.DateField(null=True, blank=True, help_text="Date when the user was approved as a supervisor by the Psychology Board")
+    can_supervise_provisionals = models.BooleanField(default=False, help_text="Whether the supervisor can supervise provisional psychologists")
+    can_supervise_registrars = models.BooleanField(default=False, help_text="Whether the supervisor can supervise psychology registrars")
+    supervisor_welcome_seen = models.BooleanField(default=False, help_text="Whether the supervisor has seen the welcome overlay")
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.user.get_username()} ({self.role})"
@@ -158,6 +179,7 @@ class EmailVerificationCode(models.Model):
     email = models.EmailField()
     code = models.CharField(max_length=6)
     psy_number = models.CharField(max_length=20, blank=True)
+    registration_data = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
@@ -391,6 +413,36 @@ class SupervisionNotification(models.Model):
     
     def __str__(self):
         return f"{self.supervision} - {self.notification_type}"
+
+
+class SupervisionAssignment(models.Model):
+    """Supervision assignments made at logbook submission time"""
+    ASSIGNMENT_ROLES = [
+        ('PRIMARY', 'Primary Supervisor'),
+        ('SECONDARY', 'Secondary Supervisor'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('ACCEPTED', 'Accepted'),
+        ('REJECTED', 'Rejected'),
+        ('EXPIRED', 'Expired'),
+    ]
+    
+    provisional = models.ForeignKey(User, on_delete=models.CASCADE, related_name='supervision_assignments')
+    supervisor_name = models.CharField(max_length=255)
+    supervisor_email = models.EmailField()
+    role = models.CharField(max_length=20, choices=ASSIGNMENT_ROLES)
+    supervisor_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_supervisions')
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    class Meta:
+        unique_together = ['provisional', 'role']
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.provisional.profile.first_name} {self.provisional.profile.last_name} → {self.supervisor_name} ({self.role})"
 
 
 # Create your models here.

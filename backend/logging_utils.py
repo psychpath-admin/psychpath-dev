@@ -1,5 +1,6 @@
 import logging
 import traceback
+from datetime import datetime
 from functools import wraps
 from django.http import JsonResponse
 from django.contrib.auth.models import User
@@ -167,3 +168,59 @@ class DataAccessLogger:
             result=result,
             details={'duration_seconds': duration, 'exception': str(exc_val) if exc_val else None}
         )
+
+
+def log_logbook_action(user, action, entry_id=None, details=None):
+    """
+    Log logbook-related actions for audit purposes
+    """
+    audit_logger = get_audit_logger()
+    
+    context = {
+        'user': user.email if user else 'Anonymous',
+        'action': action,
+        'resource': 'LOGBOOK',
+        'entry_id': entry_id,
+        'timestamp': datetime.now().isoformat(),
+        'details': details or {}
+    }
+    
+    audit_logger.info(f'Logbook action: {action}', extra=context)
+
+
+def log_supervision_action(user, action, supervisor_email=None, provisional_email=None, details=None):
+    """
+    Log supervision-related actions for audit purposes
+    """
+    audit_logger = get_audit_logger()
+    
+    context = {
+        'user': user.email if user else 'Anonymous',
+        'action': action,
+        'resource': 'SUPERVISION',
+        'supervisor_email': supervisor_email,
+        'provisional_email': provisional_email,
+        'timestamp': datetime.now().isoformat(),
+        'details': details or {}
+    }
+    
+    audit_logger.info(f'Supervision action: {action}', extra=context)
+
+
+def log_sdcc_violation(user, current_hours, attempted_hours, details=None):
+    """
+    Log SDCC hour limit violations for audit purposes
+    """
+    audit_logger = get_audit_logger()
+    
+    context = {
+        'user': user.email if user else 'Anonymous',
+        'action': 'SDCC_LIMIT_VIOLATION',
+        'resource': 'LOGBOOK_SDCC',
+        'current_hours': current_hours,
+        'attempted_hours': attempted_hours,
+        'timestamp': datetime.now().isoformat(),
+        'details': details or {}
+    }
+    
+    audit_logger.warning(f'SDCC limit violation attempted', extra=context)

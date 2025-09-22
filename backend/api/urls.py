@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import health, user_profile, me, password_reset_request, password_reset_confirm, register_terms_agree, register_details_submit, register_verify_code, register_complete, program_summary, messages, message_detail, supervisor_requests, supervisor_request_response, supervisor_invitation_detail, supervisor_invitation_accept, supervisor_invitations, supervisor_endorsements, supervisor_endorsement_detail, available_supervisors, supervision_invite, supervision_list, supervision_respond, supervision_pending_requests, supervision_cancel, supervision_stats
+from .views import health, user_profile, me, password_reset_request, password_reset_confirm, register_terms_agree, register_details_submit, register_verify_code, register_complete, program_summary, messages, message_detail, supervisor_requests, supervisor_request_response, supervisor_invitation_detail, supervisor_invitation_accept, supervisor_invitations, supervisor_endorsements, supervisor_endorsement_detail, available_supervisors, supervision_invite, supervision_list, supervision_respond, supervision_pending_requests, supervision_cancel, supervision_stats, supervision_assignments
 
 urlpatterns = [
     path('health/', health, name='health'),
@@ -32,5 +32,7 @@ urlpatterns = [
     path('supervisions/pending/', supervision_pending_requests, name='supervision-pending-requests'),
     path('supervisions/<int:supervision_id>/cancel/', supervision_cancel, name='supervision-cancel'),
     path('supervisions/stats/', supervision_stats, name='supervision-stats'),
+    # Supervision assignments for provisional psychologists
+    path('supervision-assignments/', supervision_assignments, name='supervision-assignments'),
 ]
 

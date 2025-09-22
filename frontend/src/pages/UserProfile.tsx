@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { apiFetch } from '@/lib/api'
 import CitySelect from '@/components/CitySelect'
 import EndorsementManagementModal from '@/components/EndorsementManagementModal'
+import SupervisorWelcomeOverlay from '@/components/SupervisorWelcomeOverlay'
+import ProvisionalPsychologistWelcomeOverlay from '@/components/ProvisionalPsychologistWelcomeOverlay'
 import { getCityInfo } from '@/lib/cityMapping'
 
 interface UserProfile {
@@ -29,12 +32,15 @@ interface UserProfile {
   supervisor_emails?: string
   role: 'PROVISIONAL' | 'REGISTRAR' | 'SUPERVISOR' | 'ORG_ADMIN'
   signature_url?: string
+  initials_url?: string
   prior_hours?: {
     section_a_direct_client: number
     section_a_client_related: number
     section_b_professional_development: number
     section_c_supervision: number
   }
+  prior_hours_declined?: boolean
+  prior_hours_submitted?: boolean
   // Location & Contact Information
   city?: string
   state?: string
@@ -47,9 +53,25 @@ interface UserProfile {
   weekly_commitment?: number
   aope?: string
   qualification_level?: string
+  // Supervisor-specific fields
+  is_board_approved_supervisor?: boolean
+  supervisor_registration_date?: string
+  can_supervise_provisionals?: boolean
+  can_supervise_registrars?: boolean
+  supervisor_welcome_seen?: boolean
+  // Provisional psychologist-specific fields
+  provisional_registration_date?: string
+  internship_start_date?: string
+  is_full_time?: boolean
+  estimated_completion_weeks?: number
+  weekly_commitment_hours?: number
+  first_login_completed?: boolean
 }
 
 const UserProfile: React.FC = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
+  
   const [profile, setProfile] = useState<UserProfile>({
     first_name: '',
     middle_name: '',
@@ -69,6 +91,8 @@ const UserProfile: React.FC = () => {
       section_b_professional_development: 0,
       section_c_supervision: 0
     },
+    prior_hours_declined: false,
+    prior_hours_submitted: false,
     // Location & Contact Information
     city: '',
     state: '',
@@ -80,14 +104,36 @@ const UserProfile: React.FC = () => {
     target_weeks: 44, // Default to minimum weeks for interns
     weekly_commitment: 17.5, // Default to full-time hours for interns
     aope: '',
-    qualification_level: ''
+    qualification_level: '',
+    // Supervisor-specific fields
+    is_board_approved_supervisor: false,
+    supervisor_registration_date: '',
+    can_supervise_provisionals: false,
+    can_supervise_registrars: false,
+    supervisor_welcome_seen: false,
+    // Provisional psychologist-specific fields
+    provisional_registration_date: '',
+    internship_start_date: '',
+    is_full_time: true,
+    estimated_completion_weeks: 44,
+    weekly_commitment_hours: 17.5,
+    first_login_completed: false
   })
   const [loading, setLoading] = useState(true)
   const [isAuthed, setIsAuthed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [signatureFile, setSignatureFile] = useState<File | null>(null)
   const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
+  const [initialsFile, setInitialsFile] = useState<File | null>(null)
+  const [initialsPreview, setInitialsPreview] = useState<string | null>(null)
   const [endorsements, setEndorsements] = useState<any[]>([])
+  const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false)
+  const [overlayJustAcknowledged, setOverlayJustAcknowledged] = useState(false)
+  const [showProvisionalWelcomeOverlay, setShowProvisionalWelcomeOverlay] = useState(false)
+  const [showPriorHoursConfirmation, setShowPriorHoursConfirmation] = useState(false)
+  const [priorHoursToSubmit, setPriorHoursToSubmit] = useState<any>(null)
+  const [showPriorHoursAcknowledgment, setShowPriorHoursAcknowledgment] = useState(false)
+  const [hasPriorHoursDecision, setHasPriorHoursDecision] = useState(false)
 
   const roles = [
     { value: 'INTERN', label: 'Intern' },
@@ -127,6 +173,77 @@ const UserProfile: React.FC = () => {
   useEffect(() => {
     loadProfile()
   }, [])
+
+  // Handle navigation prevention for users who haven't made prior hours decision
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Only prevent navigation for provisional psychologists and registrars who haven't made prior hours decision
+      if ((profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision) {
+        e.preventDefault()
+        e.returnValue = 'You must make a decision about your prior hours before leaving this page.'
+        return 'You must make a decision about your prior hours before leaving this page.'
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      // Show acknowledgment dialog when user tries to navigate away
+      if ((profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision && document.hidden) {
+        setShowPriorHoursAcknowledgment(true)
+      }
+    }
+
+    const handleClick = (e: MouseEvent) => {
+      // Check if user is clicking on navigation links
+      const target = e.target as HTMLElement
+      const link = target.closest('a')
+      const button = target.closest('button')
+      
+      // Check for navigation links
+      if (link && link.href && !link.href.includes('javascript:') && 
+          (profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision) {
+        e.preventDefault()
+        e.stopPropagation()
+        setShowPriorHoursAcknowledgment(true)
+        return
+      }
+      
+      // Check for navigation buttons (like in navbar)
+      if (button && button.dataset.nav && 
+          (profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision) {
+        e.preventDefault()
+        e.stopPropagation()
+        setShowPriorHoursAcknowledgment(true)
+        return
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    document.addEventListener('click', handleClick)
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      document.removeEventListener('click', handleClick)
+    }
+  }, [profile.role, hasPriorHoursDecision])
+
+  // Intercept React Router navigation attempts
+  useEffect(() => {
+    const handleRouteChange = (e: PopStateEvent) => {
+      if ((profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision) {
+        // Prevent the route change
+        window.history.pushState(null, '', location.pathname)
+        setShowPriorHoursAcknowledgment(true)
+      }
+    }
+
+    window.addEventListener('popstate', handleRouteChange)
+    
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange)
+    }
+  }, [profile.role, hasPriorHoursDecision, location.pathname])
 
   // Fetch endorsements when profile role changes to SUPERVISOR
   useEffect(() => {
@@ -171,23 +288,49 @@ const UserProfile: React.FC = () => {
         if (data.signature_url) {
           setSignaturePreview(data.signature_url)
         }
+        if (data.initials_url) {
+          setInitialsPreview(data.initials_url)
+        }
         setIsAuthed(true)
+        
+        // Show welcome overlay for supervisors who haven't seen it yet
+        // Only show if they haven't seen it in the database
+        if (data.role === 'SUPERVISOR' && !data.supervisor_welcome_seen) {
+          setShowWelcomeOverlay(true)
+        }
+        
+        // Show welcome overlay for provisional psychologists on first login
+        if (data.role === 'PROVISIONAL' && !data.first_login_completed) {
+          setShowProvisionalWelcomeOverlay(true)
+        }
+        
+        // Check if user has made prior hours decision
+        const hasDecision = data.prior_hours_submitted || data.prior_hours_declined
+        setHasPriorHoursDecision(hasDecision)
+        
+        // Show prior hours acknowledgment dialog if user hasn't made a decision
+        if ((data.role === 'PROVISIONAL' || data.role === 'REGISTRAR') && !hasDecision) {
+          setShowPriorHoursAcknowledgment(true)
+        }
+        
+        // Reset overlay acknowledgment state when profile loads
+        setOverlayJustAcknowledged(false)
         
         // Fetch endorsements if user is a supervisor
         if (data.role === 'SUPERVISOR') {
           fetchEndorsements(data.role)
         }
       } else if (response.status === 401) {
-        console.log('User not authenticated - showing demo data')
-        // User not authenticated - show demo data
+        console.log('User not authenticated - clearing profile data')
+        // User not authenticated - clear profile data instead of showing demo data
         setProfile({
-          first_name: 'Intern',
+          first_name: '',
           middle_name: '',
-          last_name: 'Demo1',
-          ahpra_registration_number: 'PSY0002268200',
-          email: 'intern@demo.test',
-          provisional_start_date: '2025-08-04',
-          principal_supervisor: 'Demo Supervisor',
+          last_name: '',
+          ahpra_registration_number: '',
+          email: '',
+          provisional_start_date: '',
+          principal_supervisor: '',
           secondary_supervisor: '',
           supervisor_emails: '',
           role: 'PROVISIONAL',
@@ -197,13 +340,17 @@ const UserProfile: React.FC = () => {
             section_b_professional_development: 0,
             section_c_supervision: 0
           },
-    // Demo data for new fields
-    program_type: '5+1',
-    start_date: new Date(Date.now() - 23 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 23 days ago
-    target_weeks: 44,
-    weekly_commitment: 17.5,
-    aope: '',
-    qualification_level: ''
+          // Clear new fields instead of demo data
+          program_type: '',
+          start_date: '',
+          target_weeks: 0,
+          weekly_commitment: 0,
+          aope: '',
+          qualification_level: '',
+          city: '',
+          state: '',
+          timezone: '',
+          mobile: ''
         })
         setIsAuthed(false)
       } else {
@@ -287,23 +434,73 @@ const UserProfile: React.FC = () => {
   }
 
   const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('handleSignatureUpload called')
+    console.log('e.target.files:', e.target.files)
     const file = e.target.files?.[0]
     if (file) {
+      console.log('Signature file selected:', file.name, file.size)
+      
+      // Validate file size (max 2MB)
+      const maxSize = 2 * 1024 * 1024 // 2MB
+      if (file.size > maxSize) {
+        alert(`File is too large. Maximum size is 2MB. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB`)
+        return
+      }
+      
+      console.log('Setting signatureFile state to:', file)
       setSignatureFile(file)
       const reader = new FileReader()
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string
         setSignaturePreview(dataUrl)
-        // Persist the data URL so it survives reloads (demo storage)
-        setProfile(prev => ({ ...prev, signature_url: dataUrl }))
+        // Don't set signature_url in profile state - let backend handle it
+        console.log('Signature preview generated, length:', dataUrl.length)
       }
       reader.readAsDataURL(file)
+    } else {
+      console.log('No file selected')
     }
   }
 
   const removeSignature = () => {
     setSignatureFile(null)
     setSignaturePreview(null)
+    setProfile(prev => ({ ...prev, signature_url: '' }))
+  }
+
+  const handleInitialsUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('handleInitialsUpload called')
+    console.log('e.target.files:', e.target.files)
+    const file = e.target.files?.[0]
+    if (file) {
+      console.log('Initials file selected:', file.name, file.size)
+      
+      // Validate file size (max 2MB)
+      const maxSize = 2 * 1024 * 1024 // 2MB
+      if (file.size > maxSize) {
+        alert(`File is too large. Maximum size is 2MB. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB`)
+        return
+      }
+      
+      console.log('Setting initialsFile state to:', file)
+      setInitialsFile(file)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string
+        setInitialsPreview(dataUrl)
+        // Don't set initials_url in profile state - let backend handle it
+        console.log('Initials preview generated, length:', dataUrl.length)
+      }
+      reader.readAsDataURL(file)
+    } else {
+      console.log('No file selected')
+    }
+  }
+
+  const removeInitials = () => {
+    setInitialsFile(null)
+    setInitialsPreview(null)
+    setProfile(prev => ({ ...prev, initials_url: '' }))
   }
 
   const handleCityChange = (city: string) => {
@@ -316,7 +513,270 @@ const UserProfile: React.FC = () => {
     }))
   }
 
+  // Validation function for mobile number
+  const validateMobileNumber = (mobile: string) => {
+    if (!mobile || mobile.trim() === '') return true // Mobile is optional
+    
+    // Strip spaces and dashes
+    const cleanMobile = mobile.replace(/[\s\-]/g, '')
+    
+    // Validate format: (+61|0)4xxxxxxxx
+    const mobileRegex = /^(\+61|0)4\d{8}$/
+    
+    if (!mobileRegex.test(cleanMobile)) {
+      alert('Mobile number must be in format: 04xx xxx xxx or +61 4xx xxx xxx')
+      return false
+    }
+    
+    return true
+  }
+
+  // Validation function for supervisor requirements
+  const validateSupervisorProfile = () => {
+    if (profile.role !== 'SUPERVISOR') return true
+
+    // If user is board-approved supervisor, validate required fields
+    if (profile.is_board_approved_supervisor) {
+      // Supervisor registration date is required if board-approved
+      if (!profile.supervisor_registration_date) {
+        alert('Supervisor registration date is required for board-approved supervisors.')
+        return false
+      }
+
+      // Must select at least one supervision scope
+      if (!profile.can_supervise_provisionals && !profile.can_supervise_registrars) {
+        alert('Please select at least one supervision scope (provisionals or registrars).')
+        return false
+      }
+    }
+
+    return true
+  }
+
+  // Handle supervisor welcome overlay
+  const handleWelcomeOverlayClose = () => {
+    setShowWelcomeOverlay(false)
+  }
+
+  const handleWelcomeOverlayAcknowledge = async () => {
+    try {
+      // Update the profile to mark welcome as seen
+      const response = await apiFetch('/api/user-profile/', {
+        method: 'PATCH',
+        body: JSON.stringify({ supervisor_welcome_seen: true })
+      })
+
+      if (response.ok) {
+        // Update local state
+        setProfile(prev => ({ ...prev, supervisor_welcome_seen: true }))
+        setShowWelcomeOverlay(false)
+        setOverlayJustAcknowledged(true) // Prevent overlay from showing again in this session
+        console.log('Supervisor welcome acknowledged')
+      } else {
+        console.error('Failed to acknowledge supervisor welcome')
+      }
+    } catch (error) {
+      console.error('Error acknowledging supervisor welcome:', error)
+    }
+  }
+
+  const handleProvisionalWelcomeOverlayClose = () => {
+    setShowProvisionalWelcomeOverlay(false)
+  }
+
+  const handleProvisionalWelcomeOverlayContinue = async () => {
+    console.log('Continue button clicked - starting process...')
+    try {
+      // Update the profile to mark first login as completed
+      console.log('Sending PATCH request to /api/user-profile/')
+      const response = await apiFetch('/api/user-profile/', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ first_login_completed: true })
+      })
+
+      console.log('Response received:', response.status, response.ok)
+      
+      if (response.ok) {
+        // Update local state
+        setProfile(prev => ({ ...prev, first_login_completed: true }))
+        setShowProvisionalWelcomeOverlay(false)
+        console.log('Provisional psychologist welcome acknowledged - staying on profile page')
+        
+        // Stay on profile page to complete profile information
+        // No redirect - user should complete their profile first
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to acknowledge provisional psychologist welcome:', errorData)
+        alert('Failed to acknowledge welcome. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error acknowledging provisional psychologist welcome:', error)
+      alert('Error acknowledging welcome. Please try again.')
+    }
+  }
+
+  const handleWelcomeOverlay = () => {
+    setShowWelcomeOverlay(true)
+  }
+
+  // Prior hours processing functions
+  const handleDeclinePriorHours = async () => {
+    try {
+      const response = await apiFetch('/api/user-profile/', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          prior_hours_declined: true,
+          prior_hours_submitted: true 
+        })
+      })
+
+      if (response.ok) {
+        setProfile(prev => ({ 
+          ...prev, 
+          prior_hours_declined: true,
+          prior_hours_submitted: true 
+        }))
+        setHasPriorHoursDecision(true)
+        console.log('Prior hours declined and locked')
+      } else {
+        console.error('Failed to decline prior hours')
+        alert('Failed to decline prior hours. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error declining prior hours:', error)
+      alert('Error declining prior hours. Please try again.')
+    }
+  }
+
+  const handleSubmitPriorHours = () => {
+    // Show confirmation dialog
+    setPriorHoursToSubmit(profile.prior_hours)
+    setShowPriorHoursConfirmation(true)
+  }
+
+  const handleConfirmPriorHoursSubmission = async () => {
+    try {
+      const response = await apiFetch('/api/user-profile/', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          prior_hours: priorHoursToSubmit,
+          prior_hours_submitted: true 
+        })
+      })
+
+      if (response.ok) {
+        setProfile(prev => ({ 
+          ...prev, 
+          prior_hours: priorHoursToSubmit,
+          prior_hours_submitted: true 
+        }))
+        setHasPriorHoursDecision(true)
+        setShowPriorHoursConfirmation(false)
+        setPriorHoursToSubmit(null)
+        console.log('Prior hours submitted and locked')
+        
+        // Navigate to dashboard after decision is made
+        navigate('/')
+      } else {
+        console.error('Failed to submit prior hours')
+        alert('Failed to submit prior hours. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error submitting prior hours:', error)
+      alert('Error submitting prior hours. Please try again.')
+    }
+  }
+
+  const handleCancelPriorHoursSubmission = () => {
+    setShowPriorHoursConfirmation(false)
+    setPriorHoursToSubmit(null)
+  }
+
+  const handlePriorHoursAcknowledgmentDecline = async () => {
+    try {
+      const response = await apiFetch('/api/user-profile/', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          prior_hours_declined: true,
+          prior_hours_submitted: true 
+        })
+      })
+
+      if (response.ok) {
+        setProfile(prev => ({ 
+          ...prev, 
+          prior_hours_declined: true,
+          prior_hours_submitted: true 
+        }))
+        setHasPriorHoursDecision(true)
+        setShowPriorHoursAcknowledgment(false)
+        console.log('Prior hours declined and locked')
+        
+        // Navigate to dashboard after decision is made
+        navigate('/')
+      } else {
+        console.error('Failed to decline prior hours')
+        alert('Failed to decline prior hours. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error declining prior hours:', error)
+      alert('Error declining prior hours. Please try again.')
+    }
+  }
+
+  const handlePriorHoursAcknowledgmentSubmit = () => {
+    // Show the confirmation dialog with current prior hours values
+    setPriorHoursToSubmit(profile.prior_hours)
+    setShowPriorHoursConfirmation(true)
+    setShowPriorHoursAcknowledgment(false)
+  }
+
+  const handleCancelPriorHoursAcknowledgment = () => {
+    setShowPriorHoursAcknowledgment(false)
+  }
+
+  // Function to check if user should see prior hours acknowledgment
+  const checkPriorHoursRequirement = () => {
+    if ((profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision) {
+      setShowPriorHoursAcknowledgment(true)
+      return true
+    }
+    return false
+  }
+
+  // Custom navigation function that checks prior hours requirements
+  const navigateWithPriorHoursCheck = (path: string) => {
+    if ((profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision) {
+      setShowPriorHoursAcknowledgment(true)
+      return false // Prevent navigation
+    }
+    navigate(path)
+    return true
+  }
+
   const handleSave = async () => {
+    // Validate mobile number
+    if (!validateMobileNumber(profile.mobile || '')) {
+      return
+    }
+
+    // Validate supervisor requirements
+    if (!validateSupervisorProfile()) {
+      return
+    }
+
     try {
       setSaving(true)
       const formData = new FormData()
@@ -332,38 +792,94 @@ const UserProfile: React.FC = () => {
           Object.entries(value as any).forEach(([subKey, subValue]) => {
             formData.append(`prior_hours.${subKey}`, subValue.toString())
           })
-        } else if (value !== null && value !== undefined && value !== '' && key !== 'role') {
-          formData.append(key, value.toString())
-          console.log(`Adding field ${key}: ${value}`)
+        } else if (value !== null && value !== undefined) {
+          // Handle different data types properly
+          if (typeof value === 'boolean') {
+            // Convert boolean to string properly for FormData
+            formData.append(key, value ? 'true' : 'false')
+          } else if (typeof value === 'number') {
+            formData.append(key, value.toString())
+          } else if (typeof value === 'string' && value !== '') {
+            // Clean mobile number before sending
+            if (key === 'mobile') {
+              const cleanMobile = value.replace(/[\s\-]/g, '')
+              formData.append(key, cleanMobile)
+            } else {
+              formData.append(key, value)
+            }
+          } else if (typeof value === 'object' && value !== null) {
+            formData.append(key, JSON.stringify(value))
+          }
+          console.log(`Adding field ${key}: ${value} (type: ${typeof value})`)
         }
       })
 
       // Add signature file if selected
+      console.log('signatureFile state:', signatureFile)
+      console.log('initialsFile state:', initialsFile)
+      
       if (signatureFile) {
+        console.log('Adding signature file to FormData:', signatureFile.name, signatureFile.size)
         formData.append('signature', signatureFile)
+      } else {
+        console.log('No signature file to add')
+      }
+
+      // Add initials file if selected
+      if (initialsFile) {
+        console.log('Adding initials file to FormData:', initialsFile.name, initialsFile.size)
+        formData.append('initials', initialsFile)
+      } else {
+        console.log('No initials file to add')
       }
 
       console.log('Sending profile update request...')
-      const response = await apiFetch('/api/user-profile/', {
-        method: 'PATCH',
-        body: formData
-      })
+      console.log('FormData contents:')
+      for (let [key, value] of formData.entries()) {
+        console.log(`  ${key}:`, value)
+      }
+      
+      // Add timeout handling for large file uploads
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      
+      try {
+        const response = await apiFetch('/api/user-profile/', {
+          method: 'PATCH',
+          body: formData,
+          signal: controller.signal
+        })
+        
+        clearTimeout(timeoutId)
+        console.log('Response status:', response.status)
+        console.log('Response ok:', response.ok)
+      
+        if (!response.ok) {
+          const errorData = await response.json()
+          console.error('Profile update failed:', errorData)
+          throw new Error(errorData.error || 'Failed to update profile')
+        }
 
-      console.log('Response status:', response.status)
-      console.log('Response ok:', response.ok)
-
-      if (response.ok) {
-        alert('Profile updated successfully!')
+        // Show success message with role-specific text
+        const successMessage = profile.role === 'SUPERVISOR' 
+          ? 'Supervisor profile updated successfully!' 
+          : 'Profile updated successfully!'
+        alert(successMessage)
+        
         // Reload profile to get updated data from server
         await loadProfile()
-      } else if (response.status === 401) {
-        alert('Please log in to save your profile. Demo data is shown for preview.')
-      } else {
-        let details: any = null
-        try { details = await response.json() } catch {}
-        console.log('Error details:', details)
-        const message = details ? `Save failed: ${JSON.stringify(details)}` : 'Failed to update profile'
-        throw new Error(message)
+        
+        // Check if prior hours decision was made during this save
+        if (profile.prior_hours_submitted || profile.prior_hours_declined) {
+          setHasPriorHoursDecision(true)
+        }
+        
+      } catch (error) {
+        clearTimeout(timeoutId)
+        if (error.name === 'AbortError') {
+          throw new Error('Upload timed out. Please try with a smaller file (max 2MB) or check your connection.')
+        }
+        throw error
       }
     } catch (error) {
       console.error('Error saving profile:', error)
@@ -616,6 +1132,75 @@ const UserProfile: React.FC = () => {
               </div>
             )}
 
+            {/* Provisional Psychologist Specific Fields */}
+            {profile.role === 'PROVISIONAL' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <Label htmlFor="provisional_registration_date">Provisional Registration Date</Label>
+                  <Input
+                    id="provisional_registration_date"
+                    name="provisional_registration_date"
+                    type="date"
+                    value={profile.provisional_registration_date || ''}
+                    onChange={(e) => setProfile(prev => ({ ...prev, provisional_registration_date: e.target.value }))}
+                    max={new Date().toISOString().split('T')[0]} // Cannot be future date
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Date when you received provisional registration from AHPRA
+                  </p>
+                </div>
+                
+                <div>
+                  <Label htmlFor="internship_start_date">Internship Start Date</Label>
+                  <Input
+                    id="internship_start_date"
+                    name="internship_start_date"
+                    type="date"
+                    value={profile.internship_start_date || profile.provisional_start_date || ''}
+                    onChange={(e) => setProfile(prev => ({ ...prev, internship_start_date: e.target.value }))}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    When you officially started your 5+1 internship
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="estimated_completion_weeks">Estimated Completion (Weeks)</Label>
+                  <Input
+                    id="estimated_completion_weeks"
+                    name="estimated_completion_weeks"
+                    type="number"
+                    min="44"
+                    value={profile.estimated_completion_weeks || profile.target_weeks || ''}
+                    onChange={(e) => setProfile(prev => ({ ...prev, estimated_completion_weeks: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Minimum 44 weeks for full-time internship
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="weekly_commitment_hours">Weekly Commitment (Hours)</Label>
+                  <Input
+                    id="weekly_commitment_hours"
+                    name="weekly_commitment_hours"
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    max="40"
+                    value={profile.weekly_commitment_hours || profile.weekly_commitment || ''}
+                    onChange={(e) => setProfile(prev => ({ ...prev, weekly_commitment_hours: e.target.value ? Math.round(parseFloat(e.target.value) * 10) / 10 : undefined }))}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Optional: Helps track your internship pace
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* For Registrars: Show calculated fields */}
             {profile.role === 'REGISTRAR' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -641,7 +1226,7 @@ const UserProfile: React.FC = () => {
                     type="number"
                     step="0.1"
                     value={profile.weekly_commitment || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, weekly_commitment: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    onChange={(e) => setProfile(prev => ({ ...prev, weekly_commitment: e.target.value ? Math.round(parseFloat(e.target.value) * 10) / 10 : undefined }))}
                     placeholder="Auto-calculated based on qualification"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -745,22 +1330,140 @@ const UserProfile: React.FC = () => {
               </>
             )}
 
-            {/* Supervisor-specific fields */}
-            {profile.role === 'SUPERVISOR' && (
-              <>
-                <div className="mb-4">
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-green-800 mb-2">Supervisor Status</h4>
-                    <p className="text-sm text-green-700">
-                      You are registered as a Board-Approved Supervisor and can provide supervision to provisional psychologists and registrars.
-                    </p>
-                  </div>
+            {/* Supervisor Status Banner - Only show if attested to being board-approved */}
+            {profile.role === 'SUPERVISOR' && profile.is_board_approved_supervisor && (
+              <div className="mb-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-green-800 mb-2">Supervisor Status</h4>
+                  <p className="text-sm text-green-700">
+                    You are registered as a Board-Approved Supervisor and can provide supervision to provisional psychologists and registrars.
+                  </p>
                 </div>
-              </>
+              </div>
             )}
         </CardContent>
       </Card>
 
+
+      {/* Supervisor Profile Section - Only for supervisors */}
+      {profile.role === 'SUPERVISOR' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xl font-semibold text-textDark">Supervisor Profile</CardTitle>
+              {profile.supervisor_welcome_seen && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleWelcomeOverlay}
+                  className="text-blue-600 hover:text-blue-700"
+                >
+                  View Welcome Message
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Board Approval Status */}
+            <div className="space-y-4">
+              <Label className="text-base font-medium">Are you a Board-approved supervisor? *</Label>
+              <RadioGroup 
+                value={profile.is_board_approved_supervisor ? 'yes' : 'no'} 
+                onValueChange={(value) => {
+                  const isApproved = value === 'yes'
+                  setProfile(prev => ({ 
+                    ...prev, 
+                    is_board_approved_supervisor: isApproved,
+                    // Clear supervision scope if not approved
+                    can_supervise_provisionals: isApproved ? prev.can_supervise_provisionals : false,
+                    can_supervise_registrars: isApproved ? prev.can_supervise_registrars : false
+                  }))
+                }}
+                className="flex gap-6"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="yes" id="board-approved-yes" />
+                  <Label htmlFor="board-approved-yes">Yes</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="no" id="board-approved-no" />
+                  <Label htmlFor="board-approved-no">No</Label>
+                </div>
+              </RadioGroup>
+              
+              {/* Supervisor Registration Date - Only show if approved */}
+              {profile.is_board_approved_supervisor && (
+                <div>
+                  <Label htmlFor="supervisor_registration_date">Supervisor Registration Date *</Label>
+                  <Input
+                    id="supervisor_registration_date"
+                    type="date"
+                    value={profile.supervisor_registration_date || ''}
+                    onChange={(e) => setProfile(prev => ({ ...prev, supervisor_registration_date: e.target.value }))}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Date when you were approved as a supervisor by the Psychology Board</p>
+                </div>
+              )}
+              
+              {!profile.is_board_approved_supervisor && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-yellow-800 text-sm">
+                    <strong>Warning:</strong> You must be a Board-approved supervisor to access supervisor features. 
+                    Please contact the Psychology Board to obtain approval before proceeding.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Supervision Scope */}
+            {profile.is_board_approved_supervisor && (
+              <div className="space-y-4">
+                <Label className="text-base font-medium">Supervision Scope *</Label>
+                <p className="text-sm text-gray-600">Select which types of psychologists you can supervise:</p>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="can-supervise-provisionals"
+                      checked={profile.can_supervise_provisionals}
+                      onChange={(e) => setProfile(prev => ({ ...prev, can_supervise_provisionals: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor="can-supervise-provisionals">Supervise provisionals</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="can-supervise-registrars"
+                      checked={profile.can_supervise_registrars}
+                      onChange={(e) => setProfile(prev => ({ ...prev, can_supervise_registrars: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor="can-supervise-registrars">Supervise registrars</Label>
+                  </div>
+                </div>
+                {!profile.can_supervise_provisionals && !profile.can_supervise_registrars && (
+                  <p className="text-red-600 text-sm">Please select at least one supervision scope.</p>
+                )}
+              </div>
+            )}
+
+            {/* Note about endorsements for registrar supervision */}
+            {profile.is_board_approved_supervisor && profile.can_supervise_registrars && (
+              <div className="space-y-4 border-t pt-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-blue-800 mb-2">Registrar Supervision</h4>
+                  <p className="text-sm text-blue-700">
+                    To supervise registrars, you must add valid endorsements through the <strong>Manage Endorsements</strong> section above. 
+                    You will not be able to supervise registrars until you have logged valid endorsements.
+                  </p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Supervision Details Section - Only for non-supervisors */}
       {profile.role !== 'SUPERVISOR' && (
@@ -958,46 +1661,92 @@ const UserProfile: React.FC = () => {
       {/* Signatures Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl font-semibold text-textDark">Signatures</CardTitle>
+          <CardTitle className="text-xl font-semibold text-textDark">Signatures & Initials</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <input
-              type="file"
-              id="signature-upload"
-              accept="image/*"
-              onChange={handleSignatureUpload}
-              className="hidden"
-            />
-            <Button
-              onClick={() => document.getElementById('signature-upload')?.click()}
-              className="bg-yellow-500 hover:bg-yellow-600 text-white"
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Upload Signatures
-            </Button>
+        <CardContent className="space-y-6">
+          {/* Signature Upload */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-medium">Signature</h4>
+            <div className="flex items-center gap-4">
+              <input
+                type="file"
+                id="signature-upload"
+                accept="image/*"
+                onChange={handleSignatureUpload}
+                className="hidden"
+              />
+              <Button
+                onClick={() => document.getElementById('signature-upload')?.click()}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Signature
+              </Button>
+            </div>
+
+            {signaturePreview || profile.signature_url ? (
+              <div className="border rounded-lg p-4 bg-white">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Current Signature</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={removeSignature}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <img
+                  src={signaturePreview || (profile.signature_url as string)}
+                  alt="Signature preview"
+                  className="max-w-xs max-h-32 object-contain border rounded"
+                />
+              </div>
+            ) : null}
           </div>
 
-          {signaturePreview || profile.signature_url ? (
-            <div className="border rounded-lg p-4 bg-white">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Current Signature</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={removeSignature}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <img
-                src={signaturePreview || (profile.signature_url as string)}
-                alt="Signature preview"
-                className="max-w-xs max-h-32 object-contain border rounded"
+          {/* Initials Upload */}
+          <div className="space-y-4 border-t pt-6">
+            <h4 className="text-lg font-medium">Initials</h4>
+            <div className="flex items-center gap-4">
+              <input
+                type="file"
+                id="initials-upload"
+                accept="image/*"
+                onChange={handleInitialsUpload}
+                className="hidden"
               />
+              <Button
+                onClick={() => document.getElementById('initials-upload')?.click()}
+                className="bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Initials
+              </Button>
             </div>
-          ) : null}
+
+            {initialsPreview || profile.initials_url ? (
+              <div className="border rounded-lg p-4 bg-white">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Current Initials</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={removeInitials}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <img
+                  src={initialsPreview || (profile.initials_url as string)}
+                  alt="Initials preview"
+                  className="max-w-xs max-h-32 object-contain border rounded"
+                />
+              </div>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -1011,66 +1760,291 @@ const UserProfile: React.FC = () => {
             </p>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="text-center p-4 border rounded-lg bg-gray-50">
-                <div className="text-2xl font-bold text-textDark mb-2">
-                  {profile.prior_hours?.section_a_direct_client || 0}
+            {profile.prior_hours_submitted ? (
+              // Show locked state
+              <div className="text-center p-6 bg-gray-50 rounded-lg">
+                <div className="text-lg font-semibold text-textDark mb-2">
+                  {profile.prior_hours_declined ? 'Prior Hours Declined' : 'Prior Hours Submitted'}
                 </div>
-                <div className="text-sm text-textLight mb-2">Section A - Direct Client</div>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={profile.prior_hours?.section_a_direct_client || 0}
-                  onChange={(e) => handlePriorHoursChange('section_a_direct_client', e.target.value)}
-                  className="text-center"
-                />
+                <p className="text-sm text-textLight mb-4">
+                  {profile.prior_hours_declined 
+                    ? 'You have chosen not to enter prior hours. This decision cannot be changed.'
+                    : 'Your prior hours have been submitted and locked. They cannot be modified.'
+                  }
+                </p>
+                {!profile.prior_hours_declined && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                    <div className="text-center p-3 border rounded-lg bg-white">
+                      <div className="text-xl font-bold text-textDark">
+                        {profile.prior_hours?.section_a_direct_client || 0}
+                      </div>
+                      <div className="text-xs text-textLight">Section A - Direct Client</div>
+                    </div>
+                    <div className="text-center p-3 border rounded-lg bg-white">
+                      <div className="text-xl font-bold text-textDark">
+                        {profile.prior_hours?.section_a_client_related || 0}
+                      </div>
+                      <div className="text-xs text-textLight">Section A - Client Related</div>
+                    </div>
+                    <div className="text-center p-3 border rounded-lg bg-white">
+                      <div className="text-xl font-bold text-textDark">
+                        {profile.prior_hours?.section_b_professional_development || 0}
+                      </div>
+                      <div className="text-xs text-textLight">Section B - Professional Development</div>
+                    </div>
+                    <div className="text-center p-3 border rounded-lg bg-white">
+                      <div className="text-xl font-bold text-textDark">
+                        {profile.prior_hours?.section_c_supervision || 0}
+                      </div>
+                      <div className="text-xs text-textLight">Section C - Supervision</div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="text-center p-4 border rounded-lg bg-gray-50">
-                <div className="text-2xl font-bold text-textDark mb-2">
-                  {profile.prior_hours?.section_a_client_related || 0}
+            ) : (
+              // Show editable state
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <div className="text-center p-4 border rounded-lg bg-gray-50">
+                    <div className="text-2xl font-bold text-textDark mb-2">
+                      {profile.prior_hours?.section_a_direct_client || 0}
+                    </div>
+                    <div className="text-sm text-textLight mb-2">Section A - Direct Client</div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={profile.prior_hours?.section_a_direct_client || 0}
+                      onChange={(e) => handlePriorHoursChange('section_a_direct_client', e.target.value)}
+                      className="text-center"
+                    />
+                  </div>
+                  <div className="text-center p-4 border rounded-lg bg-gray-50">
+                    <div className="text-2xl font-bold text-textDark mb-2">
+                      {profile.prior_hours?.section_a_client_related || 0}
+                    </div>
+                    <div className="text-sm text-textLight mb-2">Section A - Client Related</div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={profile.prior_hours?.section_a_client_related || 0}
+                      onChange={(e) => handlePriorHoursChange('section_a_client_related', e.target.value)}
+                      className="text-center"
+                    />
+                  </div>
+                  <div className="text-center p-4 border rounded-lg bg-gray-50">
+                    <div className="text-2xl font-bold text-textDark mb-2">
+                      {profile.prior_hours?.section_b_professional_development || 0}
+                    </div>
+                    <div className="text-sm text-textLight mb-2">Section B - Professional Development</div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={profile.prior_hours?.section_b_professional_development || 0}
+                      onChange={(e) => handlePriorHoursChange('section_b_professional_development', e.target.value)}
+                      className="text-center"
+                    />
+                  </div>
+                  <div className="text-center p-4 border rounded-lg bg-gray-50">
+                    <div className="text-2xl font-bold text-textDark mb-2">
+                      {profile.prior_hours?.section_c_supervision || 0}
+                    </div>
+                    <div className="text-sm text-textLight mb-2">Section C - Supervision</div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={profile.prior_hours?.section_c_supervision || 0}
+                      onChange={(e) => handlePriorHoursChange('section_c_supervision', e.target.value)}
+                      className="text-center"
+                    />
+                  </div>
                 </div>
-                <div className="text-sm text-textLight mb-2">Section A - Client Related</div>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={profile.prior_hours?.section_a_client_related || 0}
-                  onChange={(e) => handlePriorHoursChange('section_a_client_related', e.target.value)}
-                  className="text-center"
-                />
-              </div>
-              <div className="text-center p-4 border rounded-lg bg-gray-50">
-                <div className="text-2xl font-bold text-textDark mb-2">
-                  {profile.prior_hours?.section_b_professional_development || 0}
+                
+                <div className="flex justify-center space-x-4">
+                  <Button
+                    onClick={handleSubmitPriorHours}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    Submit Prior Hours
+                  </Button>
+                  <Button
+                    onClick={handleDeclinePriorHours}
+                    variant="outline"
+                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                  >
+                    Decline to Enter Prior Hours
+                  </Button>
                 </div>
-                <div className="text-sm text-textLight mb-2">Section B - Professional Development</div>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={profile.prior_hours?.section_b_professional_development || 0}
-                  onChange={(e) => handlePriorHoursChange('section_b_professional_development', e.target.value)}
-                  className="text-center"
-                />
               </div>
-              <div className="text-center p-4 border rounded-lg bg-gray-50">
-                <div className="text-2xl font-bold text-textDark mb-2">
-                  {profile.prior_hours?.section_c_supervision || 0}
-                </div>
-                <div className="text-sm text-textLight mb-2">Section C - Supervision</div>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={profile.prior_hours?.section_c_supervision || 0}
-                  onChange={(e) => handlePriorHoursChange('section_c_supervision', e.target.value)}
-                  className="text-center"
-                />
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Supervisor Welcome Overlay */}
+      <SupervisorWelcomeOverlay
+        isOpen={showWelcomeOverlay}
+        onClose={handleWelcomeOverlayClose}
+        onAcknowledge={handleWelcomeOverlayAcknowledge}
+      />
+
+      {/* Provisional Psychologist Welcome Overlay */}
+      <ProvisionalPsychologistWelcomeOverlay
+        isOpen={showProvisionalWelcomeOverlay}
+        onClose={handleProvisionalWelcomeOverlayClose}
+        onContinue={handleProvisionalWelcomeOverlayContinue}
+      />
+
+      {/* Prior Hours Confirmation Dialog */}
+      {showPriorHoursConfirmation && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-lg">
+            <CardHeader className="text-center pb-4">
+              <CardTitle className="text-2xl font-bold text-textDark">Confirm Prior Hours Submission</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="text-center">
+                <p className="text-base text-textLight leading-relaxed">
+                  You are about to submit your prior hours. Once submitted, these hours cannot be changed.
+                </p>
+              </div>
+              
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">⚠️</span>
+                  <span className="text-sm font-semibold text-yellow-800">Important Warning</span>
+                </div>
+                <p className="text-sm text-yellow-700">
+                  This action will lock your prior hours permanently. Please ensure all values are correct before proceeding.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
+                  <div className="text-3xl font-bold text-textDark mb-1">
+                    {priorHoursToSubmit?.section_a_direct_client || 0}
+                  </div>
+                  <div className="text-xs text-textLight font-medium">Section A - Direct Client</div>
+                </div>
+                <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
+                  <div className="text-3xl font-bold text-textDark mb-1">
+                    {priorHoursToSubmit?.section_a_client_related || 0}
+                  </div>
+                  <div className="text-xs text-textLight font-medium">Section A - Client Related</div>
+                </div>
+                <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
+                  <div className="text-3xl font-bold text-textDark mb-1">
+                    {priorHoursToSubmit?.section_b_professional_development || 0}
+                  </div>
+                  <div className="text-xs text-textLight font-medium">Section B - Professional Development</div>
+                </div>
+                <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
+                  <div className="text-3xl font-bold text-textDark mb-1">
+                    {priorHoursToSubmit?.section_c_supervision || 0}
+                  </div>
+                  <div className="text-xs text-textLight font-medium">Section C - Supervision</div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <Button
+                  onClick={handleCancelPriorHoursSubmission}
+                  variant="outline"
+                  className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 py-3"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmPriorHoursSubmission}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3"
+                >
+                  Submit & Lock Hours
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Prior Hours Acknowledgment Dialog */}
+      {showPriorHoursAcknowledgment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-lg">
+            <CardHeader className="text-center pb-4">
+              <CardTitle className="text-2xl font-bold text-textDark">Prior Hours Required</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="text-center">
+                <p className="text-base text-textLight leading-relaxed">
+                  You must make a decision about your prior hours before you can continue using the system.
+                </p>
+              </div>
+              
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">⚠️</span>
+                  <span className="text-sm font-semibold text-yellow-800">Important</span>
+                </div>
+                <p className="text-sm text-yellow-700">
+                  This decision is mandatory and cannot be changed once made. Please choose one of the options below.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
+                  <div className="text-3xl font-bold text-textDark mb-1">
+                    {profile.prior_hours?.section_a_direct_client || 0}
+                  </div>
+                  <div className="text-xs text-textLight font-medium">Section A - Direct Client</div>
+                </div>
+                <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
+                  <div className="text-3xl font-bold text-textDark mb-1">
+                    {profile.prior_hours?.section_a_client_related || 0}
+                  </div>
+                  <div className="text-xs text-textLight font-medium">Section A - Client Related</div>
+                </div>
+                <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
+                  <div className="text-3xl font-bold text-textDark mb-1">
+                    {profile.prior_hours?.section_b_professional_development || 0}
+                  </div>
+                  <div className="text-xs text-textLight font-medium">Section B - Professional Development</div>
+                </div>
+                <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
+                  <div className="text-3xl font-bold text-textDark mb-1">
+                    {profile.prior_hours?.section_c_supervision || 0}
+                  </div>
+                  <div className="text-xs text-textLight font-medium">Section C - Supervision</div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <Button
+                  onClick={handleCancelPriorHoursAcknowledgment}
+                  variant="outline"
+                  className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 py-3"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handlePriorHoursAcknowledgmentDecline}
+                  variant="outline"
+                  className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 py-3"
+                >
+                  Decline to Enter Prior Hours
+                </Button>
+                <Button
+                  onClick={handlePriorHoursAcknowledgmentSubmit}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3"
+                >
+                  Submit Current Hours
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   )

@@ -10,24 +10,34 @@ export default function RegisterTerms() {
   const [isLoading, setIsLoading] = useState(false)
 
   const handleAgree = async () => {
-    if (!agreed) return
+    console.log('handleAgree called, agreed:', agreed)
+    if (!agreed) {
+      console.log('Button clicked but not agreed, returning early')
+      return
+    }
     
+    console.log('Starting terms agreement process...')
     setIsLoading(true)
     try {
+      console.log('Making request to:', `${API_URL}/api/auth/register/terms/`)
       const response = await fetch(`${API_URL}/api/auth/register/terms/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agreed: true })
       })
       
+      console.log('Response received:', response.status, response.ok)
       if (response.ok) {
+        console.log('Terms agreed successfully, redirecting to details page')
         window.location.href = '/register/details'
       } else {
         const error = await response.json()
         console.error('Error agreeing to terms:', error)
+        alert('Error agreeing to terms. Please try again.')
       }
     } catch (error) {
       console.error('Error agreeing to terms:', error)
+      alert('Error agreeing to terms. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -92,7 +102,10 @@ export default function RegisterTerms() {
               <Checkbox 
                 id="agree-terms" 
                 checked={agreed}
-                onCheckedChange={(checked) => setAgreed(checked as boolean)}
+                onCheckedChange={(checked) => {
+                  console.log('Checkbox changed, new value:', checked)
+                  setAgreed(checked as boolean)
+                }}
               />
               <label 
                 htmlFor="agree-terms" 
@@ -104,7 +117,10 @@ export default function RegisterTerms() {
             
             <div className="flex justify-center">
               <Button 
-                onClick={handleAgree}
+                onClick={() => {
+                  console.log('Button clicked, agreed:', agreed, 'isLoading:', isLoading)
+                  handleAgree()
+                }}
                 disabled={!agreed || isLoading}
                 className="bg-primary text-white hover:bg-primary/90"
               >

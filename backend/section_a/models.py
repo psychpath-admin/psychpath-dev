@@ -156,3 +156,69 @@ class SectionAEntry(models.Model):
         if self.session_date and not self.week_starting:
             self.week_starting = self.calculate_week_starting(self.session_date)
         super().save(*args, **kwargs)
+    
+    @classmethod
+    def can_submit_logbook(cls, trainee):
+        """
+        Check if a trainee can submit their logbook based on supervision assignments
+        and entry requirements
+        """
+        from api.models import SupervisionAssignment
+        
+        # Check if supervision assignments exist
+        assignments = SupervisionAssignment.objects.filter(
+            provisional=trainee,
+            status='ACCEPTED'
+        )
+        
+        if assignments.count() < 2:
+            return {
+                'can_submit': False,
+                'reason': 'Missing supervisor assignments',
+                'details': 'You must have both Primary and Secondary supervisors assigned and accepted before submitting your logbook.'
+            }
+        
+        # Check if all required sections have entries
+        section_a_count = cls.objects.filter(trainee=trainee).count()
+        if section_a_count == 0:
+            return {
+                'can_submit': False,
+                'reason': 'No Section A entries',
+                'details': 'You must complete at least one Section A entry before submitting your logbook.'
+            }
+        
+        # Check Section B entries
+        from section_b.models import SectionBEntry
+        section_b_count = SectionBEntry.objects.filter(trainee=trainee).count()
+        if section_b_count == 0:
+            return {
+                'can_submit': False,
+                'reason': 'No Section B entries',
+                'details': 'You must complete at least one Section B (Professional Development) entry before submitting your logbook.'
+            }
+        
+        # Check Section C entries
+        from section_c.models import SectionCEntry
+        section_c_count = SectionCEntry.objects.filter(trainee=trainee).count()
+        if section_c_count == 0:
+            return {
+                'can_submit': False,
+                'reason': 'No Section C entries',
+                'details': 'You must complete at least one Section C (Supervision) entry before submitting your logbook.'
+            }
+        
+        # Check if logbook is already locked/submitted
+        from logbook_app.models import LogbookEntry
+        existing_logbook = LogbookEntry.objects.filter(user=trainee, locked=True).exists()
+        if existing_logbook:
+            return {
+                'can_submit': False,
+                'reason': 'Logbook already submitted',
+                'details': 'Your logbook has already been submitted and is locked. Contact your supervisor if you need to make changes.'
+            }
+        
+        return {
+            'can_submit': True,
+            'reason': 'All requirements met',
+            'details': 'You can proceed with logbook submission.'
+        }

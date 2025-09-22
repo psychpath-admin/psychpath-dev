@@ -4,8 +4,8 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification
-from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer
+from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment
+from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer
 from .email_service import send_supervision_invite_email, send_supervision_response_email, send_supervision_reminder_email, send_supervision_expired_email
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 import base64
@@ -17,7 +17,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.utils import timezone
 import json
-from logging_utils import support_error_handler, audit_data_access, log_data_access
+from logging_utils import support_error_handler, audit_data_access, log_data_access, log_supervision_action
 from django.conf import settings
 from django.db.models import Sum
 from datetime import date, timedelta
@@ -35,27 +35,82 @@ def user_profile(request):
     Get or update user profile
     """
     try:
+        print(f"=== USER PROFILE VIEW STARTED ===")
+        print(f"Request user: {request.user.email if request.user else 'Anonymous'}")
         user_profile = UserProfile.objects.get(user=request.user)
+        print(f"User profile found: {user_profile.role}")
     except UserProfile.DoesNotExist:
         return Response({'error': 'User profile not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(f"Error in user_profile view: {e}")
+        return JsonResponse({'error': f'Unexpected error: {str(e)}'}, status=500)
     
     if request.method == 'GET':
         serializer = UserProfileSerializer(user_profile)
         return Response(serializer.data)
     
     elif request.method in ['PUT', 'PATCH']:
-        # Handle file uploads for signature
-        data = request.data.copy()
+        try:
+            # Handle file uploads for signature
+            print(f"=== REQUEST DEBUG ===")
+            print(f"Content type: {request.content_type}")
+            print(f"Method: {request.method}")
+            print(f"FILES keys: {list(request.FILES.keys())}")
+            
+            data = request.data.copy()
+            print(f"Data keys: {list(data.keys())}")
+            print(f"Raw data: {data}")
+        except Exception as e:
+            print(f"Error accessing request.data: {e}")
+            return JsonResponse({'error': f'Error parsing request data: {str(e)}'}, status=400)
 
         # Handle signature file upload (demo: store filename)
         if 'signature' in request.FILES:
-            signature_file = request.FILES['signature']
-            # Convert to data URL so it renders without a media server
-            content = signature_file.read()
-            mime, _ = mimetypes.guess_type(signature_file.name)
-            mime = mime or 'image/png'
-            b64 = base64.b64encode(content).decode('ascii')
-            data['signature_url'] = f"data:{mime};base64,{b64}"
+            try:
+                signature_file = request.FILES['signature']
+                print(f"Processing signature file: {signature_file.name}, size: {signature_file.size}")
+                
+                # Check file size limit (2MB)
+                if signature_file.size > 2 * 1024 * 1024:
+                    print(f"File too large: {signature_file.size} bytes")
+                    return JsonResponse({'error': 'File too large. Maximum size is 2MB.'}, status=400)
+                
+                # Convert to data URL so it renders without a media server
+                content = signature_file.read()
+                mime, _ = mimetypes.guess_type(signature_file.name)
+                mime = mime or 'image/png'
+                b64 = base64.b64encode(content).decode('ascii')
+                data['signature_url'] = f"data:{mime};base64,{b64}"
+                print(f"Generated signature_url with length: {len(data['signature_url'])}")
+            except Exception as e:
+                print(f"Error processing signature file: {e}")
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({'error': f'Error processing signature file: {str(e)}'}, status=400)
+
+        # Handle initials file upload
+        if 'initials' in request.FILES:
+            try:
+                initials_file = request.FILES['initials']
+                print(f"Processing initials file: {initials_file.name}, size: {initials_file.size}")
+                
+                # Check file size limit (2MB)
+                if initials_file.size > 2 * 1024 * 1024:
+                    print(f"File too large: {initials_file.size} bytes")
+                    return JsonResponse({'error': 'File too large. Maximum size is 2MB.'}, status=400)
+                
+                # Convert to data URL so it renders without a media server
+                content = initials_file.read()
+                mime, _ = mimetypes.guess_type(initials_file.name)
+                mime = mime or 'image/png'
+                b64 = base64.b64encode(content).decode('ascii')
+                data['initials_url'] = f"data:{mime};base64,{b64}"
+                print(f"Generated initials_url with length: {len(data['initials_url'])}")
+            except Exception as e:
+                print(f"Error processing initials file: {e}")
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({'error': f'Error processing initials file: {str(e)}'}, status=400)
 
         # Flattened prior_hours fields from multipart -> build a dict
         prior_hours: dict[str, float] = {}
@@ -72,72 +127,111 @@ def user_profile(request):
             # Provide as dict to JSONField, not a JSON string
             data['prior_hours'] = prior_hours
 
+        print(f"Data after processing: {data}")
+
         # Only pass fields that the serializer accepts
         allowed_fields = {
             'organization', 'first_name', 'middle_name', 'last_name',
             'principal_supervisor', 'secondary_supervisor', 'supervisor_emails',
             'principal_supervisor_email', 'secondary_supervisor_email',
-            'signature_url', 'prior_hours',
+            'signature_url', 'initials_url', 'prior_hours',
             # Location & Contact Information
             'city', 'state', 'timezone', 'mobile',
             # Role-specific program fields (registration-locked fields removed)
             'aope', 'qualification_level', 'program_type',
-            'target_weeks', 'weekly_commitment'
+            'target_weeks', 'weekly_commitment',
+            # Supervisor-specific fields
+            'is_board_approved_supervisor', 'supervisor_registration_date', 
+            'can_supervise_provisionals', 'can_supervise_registrars', 'supervisor_welcome_seen',
+            # Provisional psychologist-specific fields
+            'provisional_registration_date', 'internship_start_date', 'is_full_time',
+            'estimated_completion_weeks', 'weekly_commitment_hours',
+            # First login tracking
+            'first_login_completed',
+            # Prior hours processing
+            'prior_hours_declined', 'prior_hours_submitted'
         }
         cleaned = {k: v for k, v in data.items() if k in allowed_fields}
+        print(f"Cleaned data after filtering: {cleaned}")
+        print(f"first_login_completed in cleaned: {'first_login_completed' in cleaned}")
 
         # Check for supervisor email changes before saving
         old_principal_email = user_profile.principal_supervisor_email
         old_secondary_email = user_profile.secondary_supervisor_email
         
-        serializer = UserProfileSerializer(user_profile, data=cleaned, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            
-            # Check if supervisor emails changed and send notifications
-            new_principal_email = cleaned.get('principal_supervisor_email')
-            new_secondary_email = cleaned.get('secondary_supervisor_email')
-            
-            # Only send notifications for supervisees (provisional/registrar)
-            if hasattr(request.user, 'profile') and request.user.profile.role in ['PROVISIONAL', 'REGISTRAR']:
-                # Check principal supervisor email change
-                if (new_principal_email and 
-                    new_principal_email != old_principal_email and 
-                    new_principal_email.strip()):
-                    supervisor_email = new_principal_email.strip()
-                    # Check if supervisor is registered
-                    try:
-                        supervisor_user = User.objects.get(email__iexact=supervisor_email)
-                        if hasattr(supervisor_user, 'profile') and supervisor_user.profile.role == 'SUPERVISOR':
-                            # Supervisor is registered, send direct request
-                            create_supervisor_request_message(request.user, supervisor_email, 'PRINCIPAL')
-                        else:
-                            # User exists but is not a supervisor, send invitation
-                            create_supervisor_invitation_message(request.user, supervisor_email, supervisor_user.get_full_name(), 'PRINCIPAL')
-                    except User.DoesNotExist:
-                        # Supervisor not registered, send invitation
-                        create_supervisor_invitation_message(request.user, supervisor_email, '', 'PRINCIPAL')
+        try:
+            serializer = UserProfileSerializer(user_profile, data=cleaned, partial=True)
+            print(f"Serializer data being saved: {cleaned}")
+            print(f"Serializer is valid: {serializer.is_valid()}")
+            if serializer.is_valid():
+                print("Serializer is valid, saving...")
+                # Mark profile as completed when user saves it
+                if not user_profile.profile_completed:
+                    user_profile.profile_completed = True
+                    user_profile.save()
                 
-                # Check secondary supervisor email change
-                if (new_secondary_email and 
-                    new_secondary_email != old_secondary_email and 
-                    new_secondary_email.strip()):
-                    supervisor_email = new_secondary_email.strip()
-                    # Check if supervisor is registered
-                    try:
-                        supervisor_user = User.objects.get(email__iexact=supervisor_email)
-                        if hasattr(supervisor_user, 'profile') and supervisor_user.profile.role == 'SUPERVISOR':
-                            # Supervisor is registered, send direct request
-                            create_supervisor_request_message(request.user, supervisor_email, 'SECONDARY')
-                        else:
-                            # User exists but is not a supervisor, send invitation
-                            create_supervisor_invitation_message(request.user, supervisor_email, supervisor_user.get_full_name(), 'SECONDARY')
-                    except User.DoesNotExist:
-                        # Supervisor not registered, send invitation
-                        create_supervisor_invitation_message(request.user, supervisor_email, '', 'SECONDARY')
+                # Mark first login as completed when user saves their profile
+                if not user_profile.first_login_completed:
+                    user_profile.first_login_completed = True
+                    user_profile.save()
+                
+                saved_profile = serializer.save()
+                print(f"Profile saved successfully")
+                print(f"Profile saved. Signature URL length: {len(saved_profile.signature_url) if saved_profile.signature_url else 0}")
+                print(f"Profile saved. Initials URL length: {len(saved_profile.initials_url) if saved_profile.initials_url else 0}")
+            else:
+                print(f"Serializer validation failed: {serializer.errors}")
+                print(f"Field errors: {serializer.errors}")
+                return JsonResponse({'error': f'Validation failed: {serializer.errors}'}, status=400)
+        except Exception as e:
+            print(f"Error in serializer processing: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'error': f'Error in serializer processing: {str(e)}'}, status=400)
+        
+        # Check if supervisor emails changed and send notifications
+        new_principal_email = cleaned.get('principal_supervisor_email')
+        new_secondary_email = cleaned.get('secondary_supervisor_email')
+        
+        # Only send notifications for supervisees (provisional/registrar)
+        if hasattr(request.user, 'profile') and request.user.profile.role in ['PROVISIONAL', 'REGISTRAR']:
+            # Check principal supervisor email change
+            if (new_principal_email and 
+                new_principal_email != old_principal_email and 
+                new_principal_email.strip()):
+                supervisor_email = new_principal_email.strip()
+                # Check if supervisor is registered
+                try:
+                    supervisor_user = User.objects.get(email__iexact=supervisor_email)
+                    if hasattr(supervisor_user, 'profile') and supervisor_user.profile.role == 'SUPERVISOR':
+                        # Supervisor is registered, send direct request
+                        create_supervisor_request_message(request.user, supervisor_email, 'PRINCIPAL')
+                    else:
+                        # User exists but is not a supervisor, send invitation
+                        create_supervisor_invitation_message(request.user, supervisor_email, supervisor_user.get_full_name(), 'PRINCIPAL')
+                except User.DoesNotExist:
+                    # Supervisor not registered, send invitation
+                    create_supervisor_invitation_message(request.user, supervisor_email, '', 'PRINCIPAL')
             
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # Check secondary supervisor email change
+            if (new_secondary_email and 
+                new_secondary_email != old_secondary_email and 
+                new_secondary_email.strip()):
+                supervisor_email = new_secondary_email.strip()
+                # Check if supervisor is registered
+                try:
+                    supervisor_user = User.objects.get(email__iexact=supervisor_email)
+                    if hasattr(supervisor_user, 'profile') and supervisor_user.profile.role == 'SUPERVISOR':
+                        # Supervisor is registered, send direct request
+                        create_supervisor_request_message(request.user, supervisor_email, 'SECONDARY')
+                    else:
+                        # User exists but is not a supervisor, send invitation
+                        create_supervisor_invitation_message(request.user, supervisor_email, supervisor_user.get_full_name(), 'SECONDARY')
+                except User.DoesNotExist:
+                    # Supervisor not registered, send invitation
+                    create_supervisor_invitation_message(request.user, supervisor_email, '', 'SECONDARY')
+        
+        return Response(serializer.data)
 
 @api_view(['POST'])
 def password_reset_request(request):
@@ -186,13 +280,17 @@ def me(request):
     """
     try:
         user_profile = UserProfile.objects.get(user=request.user)
+        
         return Response({
             'id': request.user.id,
             'email': request.user.email,
             'role': user_profile.role,
             'first_name': user_profile.first_name,
             'last_name': user_profile.last_name,
-            'organization': user_profile.organization.name if user_profile.organization else None
+            'organization': user_profile.organization.name if user_profile.organization else None,
+            'profile_completed': user_profile.profile_completed,
+            'first_login_completed': user_profile.first_login_completed,
+            'supervisor_welcome_seen': user_profile.supervisor_welcome_seen
         })
     except UserProfile.DoesNotExist:
         return Response({'error': 'User profile not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -215,10 +313,14 @@ def register_details_submit(request):
         data = request.data
         
         # Validate required fields
-        required_fields = ['first_name', 'last_name', 'email', 'password', 'ahpra_registration_number', 'designation', 'provisional_start_date']
+        required_fields = ['first_name', 'last_name', 'email', 'password', 'ahpra_registration_number', 'designation']
         for field in required_fields:
             if not data.get(field):
                 return Response({'error': f'{field} is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Provisional start date is only required for provisional psychologists
+        if data.get('designation') == 'PROVISIONAL' and not data.get('provisional_start_date'):
+            return Response({'error': 'provisional_start_date is required for provisional psychologists'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Check if email already exists
         if User.objects.filter(email__iexact=data['email']).exists():
@@ -232,10 +334,12 @@ def register_details_submit(request):
         if data['designation'] not in [choice[0] for choice in UserRole.choices]:
             return Response({'error': 'Invalid designation'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Create verification code
+        # Create verification code and store registration data
         verification_code = EmailVerificationCode.objects.create(
             email=data['email'],
-            psy_number=data.get('psy_number', '')
+            psy_number=data.get('ahpra_registration_number', ''),
+            # Store registration data as JSON in a temporary field
+            registration_data=data  # This will be stored as JSON
         )
         
         # TODO: Send verification email
@@ -291,9 +395,97 @@ def register_verify_code(request):
         verification.is_used = True
         verification.save()
         
-        # Get registration data from session or request
-        # For now, we'll need to store this data temporarily
-        # TODO: Implement proper session storage for registration data
+        # Get registration data from the verification code
+        registration_data = verification.registration_data
+        print(f"Registration data: {registration_data}")
+        
+        try:
+            # Create user account with registration data
+            from django.contrib.auth.models import User
+            from .models import UserProfile, UserRole
+            from django.db import transaction
+            from django.utils.dateparse import parse_date
+            from datetime import datetime
+            import logging
+            
+            logger = logging.getLogger(__name__)
+            
+            # Check if user already exists
+            if User.objects.filter(email=email).exists():
+                # User already exists, mark verification as used and return success
+                verification.is_used = True
+                verification.save()
+                logger.info(f"User {email} already exists, marking verification as used")
+                return Response({
+                    'ok': True,
+                    'message': 'Email verified successfully',
+                    'next_step': 'subscription'
+                })
+            
+            # Use database transaction to ensure atomicity
+            with transaction.atomic():
+                # Create user with registration data
+                user = User.objects.create_user(
+                    username=email,
+                    email=email,
+                    password=registration_data.get('password', 'demo_password_123'),
+                    first_name=registration_data.get('first_name', ''),
+                    last_name=registration_data.get('last_name', '')
+                )
+                
+                # Process provisional_start_date if provided
+                provisional_start_date = None
+                if registration_data.get('provisional_start_date'):
+                    start_date_str = registration_data.get('provisional_start_date')
+                    try:
+                        # Handle ISO format dates from frontend
+                        if 'T' in start_date_str:
+                            # Parse ISO format and convert to date
+                            dt = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                            provisional_start_date = dt.date()
+                        else:
+                            # Parse standard date format
+                            provisional_start_date = parse_date(start_date_str)
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Invalid date format for {email}: {start_date_str} - {e}")
+                        raise ValueError(f"Invalid date format: {start_date_str}. Must be in YYYY-MM-DD format.")
+                
+                # Create user profile with registration data
+                profile = UserProfile.objects.create(
+                    user=user,
+                    role=registration_data.get('designation', UserRole.SUPERVISOR),
+                    first_name=registration_data.get('first_name', ''),
+                    middle_name=registration_data.get('middle_name', ''),
+                    last_name=registration_data.get('last_name', ''),
+                    ahpra_registration_number=registration_data.get('ahpra_registration_number', psy_number or 'PSY0000000000'),
+                    city=registration_data.get('city', ''),
+                    state=registration_data.get('state', ''),
+                    timezone=registration_data.get('timezone', ''),
+                    mobile=registration_data.get('mobile', ''),
+                    provisional_start_date=provisional_start_date,
+                    profile_completed=False,
+                    first_login_completed=False,
+                )
+                
+                # Mark verification as used only after successful creation
+                verification.is_used = True
+                verification.save()
+                
+                logger.info(f"Successfully created user: {user.email} with profile ID: {profile.id}")
+                print(f"Created user: {user.email} with profile ID: {profile.id}")
+                print(f"Profile data: city={profile.city}, state={profile.state}, timezone={profile.timezone}, mobile={profile.mobile}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create user account for {email}: {str(e)}")
+            print(f"Error creating user: {str(e)}")
+            
+            # Log the failure for audit purposes
+            logger.error(f"VERIFICATION_FAILED: Email={email}, Error={str(e)}, RegistrationData={registration_data}")
+            
+            # Don't mark verification as used since creation failed
+            return Response({
+                'error': f'Failed to create user account: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         return Response({
             'ok': True,
@@ -323,50 +515,75 @@ def register_complete(request):
         provisional_start_date = data.get('provisional_start_date')
         subscription_plan = data.get('subscription_plan')
         
-        # Convert ISO date string to YYYY-MM-DD format
+        # Convert ISO date string to date object
         if provisional_start_date:
-            from datetime import datetime
             try:
-                # Parse ISO format and convert to date
+                from datetime import datetime
+                # Parse ISO format and convert to date object
                 if 'T' in str(provisional_start_date):
                     # Extract just the date part (YYYY-MM-DD)
-                    provisional_start_date = str(provisional_start_date).split('T')[0]
+                    date_str = str(provisional_start_date).split('T')[0]
+                    provisional_start_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                 else:
-                    # Already in correct format
-                    provisional_start_date = str(provisional_start_date)
-            except (ValueError, AttributeError):
-                # If parsing fails, try to extract just the date part
-                if 'T' in str(provisional_start_date):
-                    provisional_start_date = str(provisional_start_date).split('T')[0]
+                    # Already in correct format, convert to date object
+                    provisional_start_date = datetime.strptime(str(provisional_start_date), '%Y-%m-%d').date()
+            except (ValueError, AttributeError) as e:
+                print(f"Error parsing date {provisional_start_date}: {e}")
+                provisional_start_date = None
         
         print(f"Extracted data - Email: {email}, Designation: {designation}, AHPRA: {ahpra_registration_number}")
         
         if not all([email, password, first_name, last_name, designation, ahpra_registration_number]):
             return Response({'error': 'Missing required registration data'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Create user
-        print(f"Creating user with email: {email}")
-        user = User.objects.create_user(
-            username=email,
-            email=email,
-            password=password,
-            first_name=first_name,
-            last_name=last_name
-        )
-        print(f"User created with ID: {user.id}")
-        
-        # Create user profile
-        print(f"Creating user profile with role: {designation}")
-        profile = UserProfile.objects.create(
-            user=user,
-            role=designation,
-            first_name=first_name,
-            middle_name=middle_name,
-            last_name=last_name,
-            ahpra_registration_number=ahpra_registration_number,
-            provisional_start_date=provisional_start_date,
-        )
-        print(f"User profile created with ID: {profile.id}")
+        # Check if user already exists (from verification step)
+        user = User.objects.filter(email=email).first()
+        if user:
+            print(f"User already exists: {email}")
+            try:
+                profile = user.profile
+                print(f"Using existing profile with ID: {profile.id}")
+            except:
+                # User exists but no profile - create profile
+                print(f"Creating profile for existing user: {email}")
+                profile = UserProfile.objects.create(
+                    user=user,
+                    role=designation,
+                    first_name=first_name,
+                    middle_name=middle_name,
+                    last_name=last_name,
+                    ahpra_registration_number=ahpra_registration_number,
+                    provisional_start_date=provisional_start_date,
+                    profile_completed=False,
+                    first_login_completed=False,
+                )
+                print(f"User profile created with ID: {profile.id}")
+        else:
+            # Create user (this should not happen in normal flow)
+            print(f"Creating user with email: {email}")
+            user = User.objects.create_user(
+                username=email,
+                email=email,
+                password=password,
+                first_name=first_name,
+                last_name=last_name
+            )
+            print(f"User created with ID: {user.id}")
+            
+            # Create user profile
+            print(f"Creating user profile with role: {designation}")
+            profile = UserProfile.objects.create(
+                user=user,
+                role=designation,
+                first_name=first_name,
+                middle_name=middle_name,
+                last_name=last_name,
+                ahpra_registration_number=ahpra_registration_number,
+                provisional_start_date=provisional_start_date,
+                profile_completed=False,
+                first_login_completed=False,
+            )
+            print(f"User profile created with ID: {profile.id}")
         
         return Response({
             'ok': True,
@@ -1302,6 +1519,96 @@ def supervision_stats(request):
     }
     
     return Response(stats)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+@audit_data_access('SUPERVISION_ASSIGNMENT', 'SupervisionAssignment')
+def supervision_assignments(request):
+    """
+    Get or create supervision assignments for provisional psychologists
+    """
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        return Response({'error': 'User profile not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    if request.method == 'GET':
+        # Get existing supervision assignments for the user
+        assignments = SupervisionAssignment.objects.filter(provisional=request.user)
+        serializer = SupervisionAssignmentSerializer(assignments, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        # Only provisional psychologists can create supervision assignments
+        if user_profile.role != UserRole.PROVISIONAL:
+            return Response({'error': 'Only provisional psychologists can assign supervisors'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Validate the request data
+        serializer = SupervisionAssignmentCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if assignments already exist
+        existing_assignments = SupervisionAssignment.objects.filter(provisional=request.user)
+        if existing_assignments.exists():
+            return Response({'error': 'Supervision assignments already exist for this user'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create the supervision assignments
+        try:
+            # Create primary supervisor assignment
+            primary_assignment = SupervisionAssignment.objects.create(
+                provisional=request.user,
+                supervisor_name=serializer.validated_data['primary_supervisor_name'],
+                supervisor_email=serializer.validated_data['primary_supervisor_email'],
+                role='PRIMARY'
+            )
+            
+            # Check if primary supervisor exists in the system
+            try:
+                primary_supervisor_user = User.objects.get(email=serializer.validated_data['primary_supervisor_email'])
+                primary_assignment.supervisor_user = primary_supervisor_user
+                primary_assignment.save()
+            except User.DoesNotExist:
+                pass  # Supervisor not in system yet
+            
+            # Create secondary supervisor assignment
+            secondary_assignment = SupervisionAssignment.objects.create(
+                provisional=request.user,
+                supervisor_name=serializer.validated_data['secondary_supervisor_name'],
+                supervisor_email=serializer.validated_data['secondary_supervisor_email'],
+                role='SECONDARY'
+            )
+            
+            # Check if secondary supervisor exists in the system
+            try:
+                secondary_supervisor_user = User.objects.get(email=serializer.validated_data['secondary_supervisor_email'])
+                secondary_assignment.supervisor_user = secondary_supervisor_user
+                secondary_assignment.save()
+            except User.DoesNotExist:
+                pass  # Supervisor not in system yet
+            
+            # Log the supervision assignment creation
+            log_supervision_action(
+                user=request.user,
+                action='SUPERVISION_ASSIGNMENT_CREATED',
+                provisional_email=request.user.email,
+                details={
+                    'primary_supervisor': serializer.validated_data['primary_supervisor_name'],
+                    'primary_supervisor_email': serializer.validated_data['primary_supervisor_email'],
+                    'secondary_supervisor': serializer.validated_data['secondary_supervisor_name'],
+                    'secondary_supervisor_email': serializer.validated_data['secondary_supervisor_email']
+                }
+            )
+            
+            # Return the created assignments
+            assignments = SupervisionAssignment.objects.filter(provisional=request.user)
+            response_serializer = SupervisionAssignmentSerializer(assignments, many=True)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response({'error': f'Failed to create supervision assignments: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # Create your views here.

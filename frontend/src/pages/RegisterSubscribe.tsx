@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { CheckCircle, Star } from 'lucide-react'
+import { CheckCircle, Star, UserCheck, ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { API_URL } from '@/lib/api'
 
@@ -59,6 +59,8 @@ const subscriptionPlans = [
 export default function RegisterSubscribe() {
   const [selectedPlan, setSelectedPlan] = useState('professional')
   const [isLoading, setIsLoading] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
 
   const handleSubscribe = async () => {
     setIsLoading(true)
@@ -86,26 +88,34 @@ export default function RegisterSubscribe() {
       const data = await response.json()
       
       if (response.ok) {
+        // Store user email for success message
+        setUserEmail(formData.email)
+        
         // Clear registration data
         localStorage.removeItem('registrationData')
         
-        // Auto-login the user
-        const loginResponse = await fetch(`${API_URL}/api/auth/token/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: formData.email,
-            password: formData.password
-          })
-        })
+        // Show success message first
+        setShowSuccess(true)
         
-        if (loginResponse.ok) {
-          const loginData = await loginResponse.json()
-          localStorage.setItem('accessToken', loginData.access)
-          window.location.href = '/profile'
-        } else {
-          window.location.href = '/login'
-        }
+        // Wait 3 seconds then auto-login the user
+        setTimeout(async () => {
+          const loginResponse = await fetch(`${API_URL}/api/auth/token/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: formData.email,
+              password: formData.password
+            })
+          })
+          
+          if (loginResponse.ok) {
+            const loginData = await loginResponse.json()
+            localStorage.setItem('accessToken', loginData.access)
+            window.location.href = '/profile'
+          } else {
+            window.location.href = '/login'
+          }
+        }, 3000)
       } else {
         console.error('Registration completion failed:', data.error)
         alert('Registration failed. Please try again.')
@@ -116,6 +126,54 @@ export default function RegisterSubscribe() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Show success message
+  if (showSuccess) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-2xl w-full">
+          <Card className="text-center">
+            <CardHeader>
+              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <UserCheck className="w-8 h-8 text-green-600" />
+              </div>
+              <CardTitle className="text-2xl font-bold text-green-600 mb-2">
+                Account Created Successfully!
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-gray-700 text-lg">
+                Welcome to PsychPATH! Your account has been created for <strong>{userEmail}</strong>.
+              </p>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
+                <h3 className="font-semibold text-blue-900 mb-2">What happens next?</h3>
+                <div className="space-y-2 text-blue-800">
+                  <div className="flex items-center gap-2">
+                    <ArrowRight className="w-4 h-4" />
+                    <span>You will be automatically logged in</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ArrowRight className="w-4 h-4" />
+                    <span>You'll be directed to your profile page</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ArrowRight className="w-4 h-4" />
+                    <span>Complete your personal information to start using PsychPATH</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-center gap-2 text-gray-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <span>Redirecting you now...</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
   return (
