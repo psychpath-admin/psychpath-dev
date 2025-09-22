@@ -284,6 +284,17 @@ const UserProfile: React.FC = () => {
         }
         
         console.log('Profile data loaded:', data)
+        
+        // Handle null prior_hours from backend
+        if (data.prior_hours === null) {
+          data.prior_hours = {
+            section_a_direct_client: 0,
+            section_a_client_related: 0,
+            section_b_professional_development: 0,
+            section_c_supervision: 0
+          }
+        }
+        
         setProfile(data)
         if (data.signature_url) {
           setSignaturePreview(data.signature_url)
@@ -306,11 +317,23 @@ const UserProfile: React.FC = () => {
         
         // Check if user has made prior hours decision
         const hasDecision = data.prior_hours_submitted || data.prior_hours_declined
+        console.log('Prior hours decision check:', {
+          prior_hours_submitted: data.prior_hours_submitted,
+          prior_hours_declined: data.prior_hours_declined,
+          hasDecision,
+          role: data.role,
+          currentHasPriorHoursDecision: hasPriorHoursDecision
+        })
         setHasPriorHoursDecision(hasDecision)
         
         // Show prior hours acknowledgment dialog if user hasn't made a decision
+        // Only show if not already shown and user hasn't made a decision
         if ((data.role === 'PROVISIONAL' || data.role === 'REGISTRAR') && !hasDecision) {
+          console.log('Showing prior hours acknowledgment dialog')
           setShowPriorHoursAcknowledgment(true)
+        } else if (hasDecision) {
+          console.log('User has already made prior hours decision, not showing dialog')
+          setShowPriorHoursAcknowledgment(false)
         }
         
         // Reset overlay acknowledgment state when profile loads
@@ -674,6 +697,7 @@ const UserProfile: React.FC = () => {
       })
 
       if (response.ok) {
+        // Update local state immediately
         setProfile(prev => ({ 
           ...prev, 
           prior_hours: priorHoursToSubmit,
@@ -715,6 +739,7 @@ const UserProfile: React.FC = () => {
       })
 
       if (response.ok) {
+        // Update local state immediately
         setProfile(prev => ({ 
           ...prev, 
           prior_hours_declined: true,
@@ -722,6 +747,7 @@ const UserProfile: React.FC = () => {
         }))
         setHasPriorHoursDecision(true)
         setShowPriorHoursAcknowledgment(false)
+        
         console.log('Prior hours declined and locked')
         
         // Navigate to dashboard after decision is made
@@ -2020,24 +2046,26 @@ const UserProfile: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                <Button
-                  onClick={handleCancelPriorHoursAcknowledgment}
-                  variant="outline"
-                  className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 py-3"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handlePriorHoursAcknowledgmentDecline}
-                  variant="outline"
-                  className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 py-3"
-                >
-                  Decline to Enter Prior Hours
-                </Button>
+              <div className="flex flex-col gap-3 pt-2">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    onClick={handleCancelPriorHoursAcknowledgment}
+                    variant="outline"
+                    className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 py-3"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handlePriorHoursAcknowledgmentDecline}
+                    variant="outline"
+                    className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 py-3"
+                  >
+                    Decline to Enter Prior Hours
+                  </Button>
+                </div>
                 <Button
                   onClick={handlePriorHoursAcknowledgmentSubmit}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3"
                 >
                   Submit Current Hours
                 </Button>

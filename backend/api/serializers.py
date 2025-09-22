@@ -67,12 +67,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """
-        Validate supervisor-specific requirements
+        Validate role-specific requirements only when relevant fields are being updated
         """
         # Get role from data or instance
         role = data.get('role')
         if not role and self.instance:
             role = self.instance.role
+        
+        # Check if this is just a prior hours update (skip role validation)
+        prior_hours_fields = {'prior_hours_declined', 'prior_hours_submitted', 'prior_hours'}
+        if set(data.keys()).issubset(prior_hours_fields):
+            return data
         
         # Only validate supervisor requirements if the user is actually a SUPERVISOR
         # Don't apply supervisor validation to provisional psychologists or registrars
