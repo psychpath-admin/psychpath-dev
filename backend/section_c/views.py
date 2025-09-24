@@ -6,13 +6,13 @@ from datetime import timedelta, datetime
 from .models import SupervisionEntry, SupervisionWeeklySummary
 from api.models import UserProfile
 from .serializers import SupervisionEntrySerializer, SupervisionWeeklySummarySerializer
-from permissions import TenantPermissionMixin, RoleBasedPermission
+from permissions import TenantPermissionMixin, RoleBasedPermission, DenyOrgAdmin
 from logging_utils import support_error_handler, audit_data_access, log_data_access
 
 class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
     queryset = SupervisionEntry.objects.all()
     serializer_class = SupervisionEntrySerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [RoleBasedPermission, DenyOrgAdmin]
 
     def get_queryset(self):
         user = self.request.user

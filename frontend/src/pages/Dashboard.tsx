@@ -58,6 +58,49 @@ export default function Dashboard({ userRole }: DashboardProps) {
   const [cardOrder, setCardOrder] = useState<string[]>([])
   const [refreshKey, setRefreshKey] = useState(0) // For triggering refreshes
 
+  // Centralized data fetcher so children can trigger a refresh safely
+  const fetchData = () => {
+    setLoading(true)
+
+    // Load Section A entries
+    getSectionAEntries()
+      .then((data) => {
+        setEntries(Array.isArray(data) ? data : [])
+      })
+      .catch(() => {
+        // Show empty data when not authenticated - no demo data
+        setEntries([])
+      })
+
+    // Load PD metrics
+    getPDMetrics()
+      .then((data) => {
+        setPdMetrics(data)
+      })
+      .catch(() => {
+        setPdMetrics(null)
+      })
+      .finally(() => setLoading(false))
+
+    // Load Supervision metrics
+    getSupervisionMetrics()
+      .then((data) => {
+        setSupervisionMetrics(data)
+      })
+      .catch(() => {
+        setSupervisionMetrics(null)
+      })
+
+    // Load Program Summary
+    getProgramSummary()
+      .then((data) => {
+        setProgramSummary(data)
+      })
+      .catch(() => {
+        setProgramSummary(null)
+      })
+  }
+
   // Function to trigger dashboard refresh (called by child components)
   const handleSupervisionUpdate = () => {
     setRefreshKey(prev => prev + 1)

@@ -2,6 +2,7 @@ from rest_framework import permissions
 from django.contrib.auth.models import User
 from api.models import UserProfile
 from logging_utils import log_data_access
+from api.models import UserRole
 
 class TenantPermissionMixin:
     """
@@ -161,6 +162,27 @@ class RoleBasedPermission(permissions.BasePermission):
         )
         
         return has_permission
+
+
+class DenyOrgAdmin(permissions.BasePermission):
+    """
+    Deny access to endpoints for Organization Admins (for clinical data endpoints).
+    """
+    def has_permission(self, request, view):
+        try:
+            role = getattr(getattr(request.user, 'profile', None), 'role', None)
+        except Exception:
+            role = None
+        if role == UserRole.ORG_ADMIN:
+            log_data_access(
+                user=request.user,
+                action='PERMISSION_CHECK',
+                resource=view.__class__.__name__,
+                result='DENIED',
+                details={'reason': 'ORG_ADMIN denied for clinical endpoints'}
+            )
+            return False
+        return True
 
 def require_role(roles):
     """

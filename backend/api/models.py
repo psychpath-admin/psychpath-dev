@@ -445,4 +445,119 @@ class SupervisionAssignment(models.Model):
         return f"{self.provisional.profile.first_name} {self.provisional.profile.last_name} → {self.supervisor_name} ({self.role})"
 
 
+class Meeting(models.Model):
+    """Meeting model for scheduling supervision meetings"""
+    
+    RECURRENCE_CHOICES = [
+        ('NONE', 'No Recurrence'),
+        ('DAILY', 'Daily'),
+        ('WEEKLY', 'Weekly'),
+        ('BIWEEKLY', 'Bi-weekly'),
+        ('MONTHLY', 'Monthly'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('SCHEDULED', 'Scheduled'),
+        ('CONFIRMED', 'Confirmed'),
+        ('CANCELLED', 'Cancelled'),
+        ('COMPLETED', 'Completed'),
+    ]
+    
+    # Basic meeting info
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    location = models.CharField(max_length=255, blank=True, null=True)
+    meeting_url = models.URLField(blank=True, null=True)  # For virtual meetings
+    
+    # Scheduling
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    duration_minutes = models.PositiveIntegerField(default=60)
+    
+    # Recurrence
+    is_recurring = models.BooleanField(default=False)
+    recurrence_type = models.CharField(max_length=20, choices=RECURRENCE_CHOICES, default='NONE')
+    recurrence_end_date = models.DateTimeField(blank=True, null=True)
+    recurrence_count = models.PositiveIntegerField(blank=True, null=True)  # Number of occurrences
+    
+    # Participants
+    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organized_meetings')
+    attendees = models.ManyToManyField(User, through='MeetingInvite', related_name='meetings')
+    
+    # Status and metadata
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='SCHEDULED')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Supervision context
+    supervision = models.ForeignKey(Supervision, on_delete=models.CASCADE, null=True, blank=True, related_name='meetings')
+    
+    class Meta:
+        ordering = ['start_time']
+        indexes = [
+            models.Index(fields=['organizer', 'start_time']),
+            models.Index(fields=['start_time', 'end_time']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} - {self.start_time.strftime('%Y-%m-%d %H:%M')}"
+    
+    def get_attendee_count(self):
+        return self.attendees.count()
+    
+    def is_past(self):
+        return timezone.now() > self.end_time
+    
+    def is_upcoming(self):
+        return timezone.now() < self.start_time
+    
+    def is_current(self):
+        now = timezone.now()
+        return self.start_time <= now <= self.end_time
+
+
+class MeetingInvite(models.Model):
+    """Meeting invitation model for tracking attendee responses"""
+    
+    RESPONSE_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('ACCEPTED', 'Accepted'),
+        ('DECLINED', 'Declined'),
+        ('TENTATIVE', 'Tentative'),
+    ]
+    
+    meeting = models.ForeignKey(Meeting, on_delete=models.CASCADE, related_name='invites')
+    attendee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='meeting_invites')
+    response = models.CharField(max_length=20, choices=RESPONSE_CHOICES, default='PENDING')
+    response_notes = models.TextField(blank=True, null=True)
+    responded_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['meeting', 'attendee']
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.attendee.email} - {self.meeting.title} ({self.response})"
+    
+    def accept(self, notes=None):
+        self.response = 'ACCEPTED'
+        self.response_notes = notes
+        self.responded_at = timezone.now()
+        self.save()
+    
+    def decline(self, notes=None):
+        self.response = 'DECLINED'
+        self.response_notes = notes
+        self.responded_at = timezone.now()
+        self.save()
+    
+    def set_tentative(self, notes=None):
+        self.response = 'TENTATIVE'
+        self.response_notes = notes
+        self.responded_at = timezone.now()
+        self.save()
+
+
 # Create your models here.

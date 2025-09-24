@@ -1,6 +1,7 @@
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from permissions import DenyOrgAdmin
 from rest_framework.response import Response
 from django.db.models import Sum, Q
 from django.utils import timezone
@@ -20,7 +21,7 @@ from .serializers import (
 class ProfessionalDevelopmentEntryListCreateView(generics.ListCreateAPIView):
     """List and create PD entries for the authenticated user"""
     serializer_class = ProfessionalDevelopmentEntrySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DenyOrgAdmin]
     
     def get_queryset(self):
         return ProfessionalDevelopmentEntry.objects.filter(
@@ -40,7 +41,7 @@ class ProfessionalDevelopmentEntryListCreateView(generics.ListCreateAPIView):
 class ProfessionalDevelopmentEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update, or delete a PD entry"""
     serializer_class = ProfessionalDevelopmentEntrySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DenyOrgAdmin]
     
     def get_queryset(self):
         return ProfessionalDevelopmentEntry.objects.filter(trainee=self.request.user)
@@ -99,11 +100,11 @@ class PDCompetencyListView(generics.ListAPIView):
     """List all available PD competencies"""
     queryset = PDCompetency.objects.filter(is_active=True)
     serializer_class = PDCompetencySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DenyOrgAdmin]
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DenyOrgAdmin])
 def pd_entries_grouped_by_week(request):
     """Get PD entries grouped by week with summary data"""
     entries = ProfessionalDevelopmentEntry.objects.filter(
@@ -165,7 +166,7 @@ def pd_entries_grouped_by_week(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DenyOrgAdmin])
 def pd_summary_metrics(request):
     """Get PD summary metrics for dashboard"""
     # Get current week starting date

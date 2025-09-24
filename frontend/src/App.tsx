@@ -28,6 +28,7 @@ import RegisterVerify from '@/pages/RegisterVerify'
 import RegisterSubscribe from '@/pages/RegisterSubscribe'
 import SupervisorDashboard from '@/pages/SupervisorDashboard'
 import NotificationCenter from '@/pages/NotificationCenter'
+import CalendarPage from '@/pages/CalendarPage'
 import { Toaster } from 'sonner'
 
 function App() {
@@ -113,6 +114,7 @@ function App() {
           <Route path="/logbook/:id/edit" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
           <Route path="/section-a/cra-edit" element={<RequireAuth><CRAEdit /></RequireAuth>} />
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
+          <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
           {me?.role === 'ORG_ADMIN' && <Route path="/org" element={<RequireAuth><OrgDashboard /></RequireAuth>} />}

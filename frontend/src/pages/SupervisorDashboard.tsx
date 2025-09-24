@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import SupervisionManagement from '@/components/SupervisionManagement'
+import { useNotifications } from '@/hooks/useNotifications'
 import { 
   Users, 
   FileText, 
@@ -44,8 +45,8 @@ interface DashboardStats {
 }
 
 export default function SupervisorDashboard() {
+  console.log('SupervisorDashboard: Component starting')
   const [selectedSupervisee, setSelectedSupervisee] = useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0)
   const [stats, setStats] = useState<DashboardStats>({
     totalSupervisees: 0,
     pendingReviews: 0,
@@ -54,10 +55,12 @@ export default function SupervisorDashboard() {
   })
   const [supervisees, setSupervisees] = useState<Supervisee[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Notification data
+  const { notifications, stats: notificationStats, loading: notificationsLoading, markAsRead } = useNotifications(5)
 
   // Function to trigger dashboard refresh
   const handleSupervisionUpdate = () => {
-    setRefreshKey(prev => prev + 1)
     fetchSupervisorData()
   }
 
@@ -66,8 +69,8 @@ export default function SupervisorDashboard() {
     try {
       setLoading(true)
       
-      // Fetch supervisees/supervision requests
-      const superviseesResponse = await fetch('/api/supervisor-requests/', {
+      // Fetch supervision relationships (both pending and accepted)
+      const superviseesResponse = await fetch('/api/supervisions/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json',
@@ -76,37 +79,61 @@ export default function SupervisorDashboard() {
       
       if (superviseesResponse.ok) {
         const superviseesData = await superviseesResponse.json()
-        // Transform API data to match Supervisee interface
-        const transformedSupervisees = superviseesData.map((item: any, index: number) => ({
-          id: item.id?.toString() || index.toString(),
-          name: `${item.trainee?.first_name || 'Unknown'} ${item.trainee?.last_name || 'User'}`,
-          status: item.status === 'ACCEPTED' ? 'on-track' : 'pending',
-          role: 'Provisional Psychologist',
-          progress: {
-            directClient: { current: 0, target: 15.16 },
-            clientRelated: { current: 0, target: 41.21 },
-            supervision: { current: 0, target: 2.42 },
-            pd: { current: 0, target: 1.81 },
-            individualSupervision: { current: 0 }
-          },
-          overdueDates: [],
-          lastSubmission: 'Never'
-        }))
-        
-        setSupervisees(transformedSupervisees)
-        
-        // Update stats based on actual data
-        const totalSupervisees = transformedSupervisees.length
-        const pendingReviews = transformedSupervisees.filter(s => s.status === 'pending').length
-        const onTrack = transformedSupervisees.filter(s => s.status === 'on-track').length
-        const overdueLogbooks = transformedSupervisees.filter(s => s.status === 'overdue').length
-        
-        setStats({
-          totalSupervisees,
-          pendingReviews,
-          overdueLogbooks,
-          onTrack
+        console.log('SupervisorDashboard: /api/supervisions payload:', superviseesData)
+        // Transform API data to match Supervisee interface (use Supervision serializer fields)
+        const transformed = superviseesData.map((item: any, index: number) => {
+          const isPrimaryAccepted = (item?.status === 'ACCEPTED') && (item?.role === 'PRIMARY')
+          return {
+            id: (item.id ?? index).toString(),
+            name: item.supervisee_name || item.supervisee_email || 'Unknown User',
+            status: isPrimaryAccepted ? 'on-track' : 'pending',
+            role: 'Provisional Psychologist',
+            progress: {
+              directClient: { current: 0, target: 15.16 },
+              clientRelated: { current: 0, target: 41.21 },
+              supervision: { current: 0, target: 2.42 },
+              pd: { current: 0, target: 1.81 },
+              individualSupervision: { current: 0 }
+            },
+            overdueDates: [],
+            lastSubmission: 'Never'
+          }
         })
+
+        // Only accepted PRIMARY supervisions are active
+        const active = transformed.filter((s: any) => s.status === 'on-track')
+        console.log('SupervisorDashboard: transformed items:', transformed)
+        console.log('SupervisorDashboard: active items:', active)
+        setSupervisees(active)
+
+        // Update stats based on active supervisions
+        const totalSupervisees = active.length
+        const pendingReviews = 0
+        const onTrack = active.length
+        const overdueLogbooks = 0
+        
+        // Prefer backend stats so header matches Supervision Management
+        try {
+          const statsRes = await fetch('/api/supervisions/stats/', {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+              'Content-Type': 'application/json',
+            },
+          })
+          if (statsRes.ok) {
+            const s = await statsRes.json()
+            setStats({
+              totalSupervisees: (s.primary_supervisions || 0),
+              pendingReviews,
+              overdueLogbooks,
+              onTrack: (s.primary_supervisions || 0)
+            })
+          } else {
+            setStats({ totalSupervisees, pendingReviews, overdueLogbooks, onTrack })
+          }
+        } catch {
+          setStats({ totalSupervisees, pendingReviews, overdueLogbooks, onTrack })
+        }
       } else {
         // If no supervisees, show empty state
         setSupervisees([])
@@ -327,24 +354,117 @@ export default function SupervisorDashboard() {
                 <CardTitle className="flex items-center gap-2">
                   <Bell className="h-5 w-5" />
                   Notifications
+                  {notificationStats.unread > 0 && (
+                    <Badge variant="destructive" className="ml-2">
+                      {notificationStats.unread}
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertTriangle className="h-4 w-4 text-red-600" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-red-800">Overdue Logbooks</p>
-                      <p className="text-xs text-red-600">4 entries need attention</p>
+                {notificationsLoading ? (
+                  <div className="space-y-3">
+                    <div className="animate-pulse">
+                      <div className="h-16 bg-gray-200 rounded-lg"></div>
+                      <div className="h-16 bg-gray-200 rounded-lg mt-3"></div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <Clock className="h-4 w-4 text-blue-600" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-blue-800">Upcoming Meeting</p>
-                      <p className="text-xs text-blue-600">Tomorrow at 2:00 PM</p>
-                    </div>
+                ) : notifications.length === 0 ? (
+                  <div className="text-center py-6 text-gray-500">
+                    <Bell className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                    <p className="text-sm">No notifications</p>
                   </div>
+                ) : (
+                  <div className="space-y-3">
+                    {notifications.slice(0, 3).map((notification) => {
+                      const isUrgent = notification.notification_type.includes('overdue') || 
+                                      notification.notification_type.includes('expiry') ||
+                                      notification.notification_type.includes('denied')
+                      const isInfo = notification.notification_type.includes('approved') ||
+                                   notification.notification_type.includes('meeting') ||
+                                   notification.notification_type.includes('submitted')
+                      
+                      return (
+                        <div
+                          key={notification.id}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:shadow-sm transition-shadow ${
+                            isUrgent 
+                              ? 'bg-red-50 border-red-200' 
+                              : isInfo 
+                                ? 'bg-blue-50 border-blue-200' 
+                                : 'bg-gray-50 border-gray-200'
+                          } ${!notification.read ? 'ring-2 ring-blue-200' : ''}`}
+                          onClick={() => {
+                            if (notification.action_url) {
+                              window.location.href = notification.action_url
+                            }
+                            if (!notification.read) {
+                              markAsRead(notification.id)
+                            }
+                          }}
+                        >
+                          {isUrgent ? (
+                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                          ) : isInfo ? (
+                            <Clock className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <Bell className="h-4 w-4 text-gray-600" />
+                          )}
+                          <div className="flex-1">
+                            <p className={`text-sm font-medium ${
+                              isUrgent ? 'text-red-800' : isInfo ? 'text-blue-800' : 'text-gray-800'
+                            }`}>
+                              {notification.type_display}
+                            </p>
+                            <p className={`text-xs ${
+                              isUrgent ? 'text-red-600' : isInfo ? 'text-blue-600' : 'text-gray-600'
+                            }`}>
+                              {notification.message}
+                            </p>
+                          </div>
+                          {!notification.read && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {notifications.length > 3 && (
+                      <div className="text-center pt-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => window.location.href = '/notifications'}
+                        >
+                          View all notifications ({notifications.length})
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Upcoming Meetings */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Upcoming Meetings
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-6 text-gray-500">
+                  <Calendar className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                  <p className="text-sm">No upcoming meetings</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => window.location.href = '/calendar'}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Schedule Meeting
+                  </Button>
                 </div>
               </CardContent>
             </Card>

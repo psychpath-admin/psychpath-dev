@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { Link } from 'react-router-dom'
 import HeaderNotificationBell from '@/components/HeaderNotificationBell'
-import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList } from 'lucide-react'
+import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar } from 'lucide-react'
 // Logo is served from public folder
 
 export function Navbar() {
@@ -35,6 +35,14 @@ export function Navbar() {
               <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue flex items-center gap-2" to="/">
                 <BarChart3 className="h-4 w-4" />
                 Dashboard
+              </Link>
+            </NavigationMenuItem>
+
+            {/* Calendar - Always visible */}
+            <NavigationMenuItem>
+              <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue flex items-center gap-2" to="/calendar">
+                <Calendar className="h-4 w-4" />
+                Calendar
               </Link>
             </NavigationMenuItem>
 

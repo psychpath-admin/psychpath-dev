@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import health, user_profile, me, password_reset_request, password_reset_confirm, register_terms_agree, register_details_submit, register_verify_code, register_complete, program_summary, messages, message_detail, supervisor_requests, supervisor_request_response, supervisor_invitation_detail, supervisor_invitation_accept, supervisor_invitations, supervisor_endorsements, supervisor_endorsement_detail, available_supervisors, supervision_invite, supervision_list, supervision_respond, supervision_pending_requests, supervision_cancel, supervision_stats, supervision_assignments
+from .views import health, user_profile, me, password_reset_request, password_reset_confirm, register_terms_agree, register_details_submit, register_verify_code, register_complete, program_summary, messages, message_detail, supervisor_requests, supervisor_request_response, supervisor_invitation_detail, supervisor_invitation_accept, supervisor_invitations, supervisor_endorsements, supervisor_endorsement_detail, available_supervisors, supervision_invite, supervision_list, supervision_respond, supervision_pending_requests, supervision_cancel, supervision_stats, supervision_assignments, meeting_list, meeting_detail, meeting_invites, meeting_invite_response, meeting_stats
 
 urlpatterns = [
     path('health/', health, name='health'),
@@ -34,5 +34,11 @@ urlpatterns = [
     path('supervisions/stats/', supervision_stats, name='supervision-stats'),
     # Supervision assignments for provisional psychologists
     path('supervision-assignments/', supervision_assignments, name='supervision-assignments'),
+    # Meeting management
+    path('meetings/', meeting_list, name='meeting-list'),
+    path('meetings/<int:meeting_id>/', meeting_detail, name='meeting-detail'),
+    path('meetings/invites/', meeting_invites, name='meeting-invites'),
+    path('meetings/invites/<int:invite_id>/respond/', meeting_invite_response, name='meeting-invite-response'),
+    path('meetings/stats/', meeting_stats, name='meeting-stats'),
 ]
 

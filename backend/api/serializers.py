@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment
+from django.contrib.auth.models import User
+from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite
 
 class UserProfileSerializer(serializers.ModelSerializer):
     # Ensure prior_hours always a dict
@@ -350,4 +351,181 @@ class SupervisionAssignmentCreateSerializer(serializers.Serializer):
         primary_email = self.initial_data.get('primary_supervisor_email')
         if primary_email and value.lower() == primary_email.lower():
             raise serializers.ValidationError("Primary and secondary supervisor emails must be different")
+        return value
+
+
+class MeetingInviteSerializer(serializers.ModelSerializer):
+    """Serializer for MeetingInvite model"""
+    attendee_name = serializers.SerializerMethodField()
+    attendee_email = serializers.SerializerMethodField()
+    response_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = MeetingInvite
+        fields = [
+            'id', 'attendee', 'attendee_name', 'attendee_email', 'response', 
+            'response_display', 'response_notes', 'responded_at', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'responded_at']
+    
+    def get_attendee_name(self, obj):
+        try:
+            profile = obj.attendee.profile
+            return f"{profile.first_name} {profile.last_name}".strip() or obj.attendee.email
+        except:
+            return obj.attendee.email
+    
+    def get_attendee_email(self, obj):
+        return obj.attendee.email
+    
+    def get_response_display(self, obj):
+        response_map = {
+            'PENDING': 'Pending',
+            'ACCEPTED': 'Accepted',
+            'DECLINED': 'Declined',
+            'TENTATIVE': 'Tentative'
+        }
+        return response_map.get(obj.response, obj.response)
+
+
+class MeetingSerializer(serializers.ModelSerializer):
+    """Serializer for Meeting model"""
+    organizer_name = serializers.SerializerMethodField()
+    organizer_email = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+    recurrence_display = serializers.SerializerMethodField()
+    attendee_count = serializers.SerializerMethodField()
+    invites = MeetingInviteSerializer(many=True, read_only=True)
+    is_past = serializers.SerializerMethodField()
+    is_upcoming = serializers.SerializerMethodField()
+    is_current = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Meeting
+        fields = [
+            'id', 'title', 'description', 'location', 'meeting_url',
+            'start_time', 'end_time', 'duration_minutes',
+            'is_recurring', 'recurrence_type', 'recurrence_display',
+            'recurrence_end_date', 'recurrence_count',
+            'status', 'status_display', 'created_at', 'updated_at',
+            'organizer', 'organizer_name', 'organizer_email',
+            'supervision', 'attendee_count', 'invites',
+            'is_past', 'is_upcoming', 'is_current'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'organizer']
+    
+    def get_organizer_name(self, obj):
+        try:
+            profile = obj.organizer.profile
+            return f"{profile.first_name} {profile.last_name}".strip() or obj.organizer.email
+        except:
+            return obj.organizer.email
+    
+    def get_organizer_email(self, obj):
+        return obj.organizer.email
+    
+    def get_status_display(self, obj):
+        status_map = {
+            'SCHEDULED': 'Scheduled',
+            'CONFIRMED': 'Confirmed',
+            'CANCELLED': 'Cancelled',
+            'COMPLETED': 'Completed'
+        }
+        return status_map.get(obj.status, obj.status)
+    
+    def get_recurrence_display(self, obj):
+        recurrence_map = {
+            'NONE': 'No Recurrence',
+            'DAILY': 'Daily',
+            'WEEKLY': 'Weekly',
+            'BIWEEKLY': 'Bi-weekly',
+            'MONTHLY': 'Monthly'
+        }
+        return recurrence_map.get(obj.recurrence_type, obj.recurrence_type)
+    
+    def get_attendee_count(self, obj):
+        return obj.get_attendee_count()
+    
+    def get_is_past(self, obj):
+        return obj.is_past()
+    
+    def get_is_upcoming(self, obj):
+        return obj.is_upcoming()
+    
+    def get_is_current(self, obj):
+        return obj.is_current()
+
+
+class MeetingCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating meetings"""
+    attendee_emails = serializers.ListField(
+        child=serializers.EmailField(),
+        write_only=True,
+        required=False,
+        help_text="List of email addresses to invite"
+    )
+    # Allow organizer to be set (for org-admin on-behalf scheduling); validated in views
+    
+    class Meta:
+        model = Meeting
+        fields = [
+            'title', 'description', 'location', 'meeting_url',
+            'start_time', 'end_time', 'duration_minutes',
+            'is_recurring', 'recurrence_type',
+            'recurrence_end_date', 'recurrence_count',
+            'supervision', 'attendee_emails', 'organizer'
+        ]
+    
+    def validate(self, data):
+        start_time = data.get('start_time')
+        end_time = data.get('end_time')
+        
+        if start_time and end_time and start_time >= end_time:
+            raise serializers.ValidationError("End time must be after start time")
+        
+        # Validate recurrence settings
+        if data.get('is_recurring'):
+            recurrence_type = data.get('recurrence_type')
+            if recurrence_type == 'NONE':
+                raise serializers.ValidationError("Recurrence type must be specified for recurring meetings")
+            
+            recurrence_end_date = data.get('recurrence_end_date')
+            recurrence_count = data.get('recurrence_count')
+            
+            if not recurrence_end_date and not recurrence_count:
+                raise serializers.ValidationError("Either recurrence end date or count must be specified for recurring meetings")
+        
+        return data
+    
+    def create(self, validated_data):
+        attendee_emails = validated_data.pop('attendee_emails', [])
+        meeting = super().create(validated_data)
+        
+        # Create invites for attendees
+        for email in attendee_emails:
+            try:
+                user = User.objects.get(email=email)
+                MeetingInvite.objects.create(
+                    meeting=meeting,
+                    attendee=user,
+                    response='PENDING'
+                )
+            except User.DoesNotExist:
+                # Skip users that don't exist in the system
+                continue
+        
+        return meeting
+
+
+class MeetingInviteResponseSerializer(serializers.ModelSerializer):
+    """Serializer for responding to meeting invites"""
+    
+    class Meta:
+        model = MeetingInvite
+        fields = ['response', 'response_notes']
+    
+    def validate_response(self, value):
+        valid_responses = ['ACCEPTED', 'DECLINED', 'TENTATIVE']
+        if value not in valid_responses:
+            raise serializers.ValidationError(f"Response must be one of: {', '.join(valid_responses)}")
         return value

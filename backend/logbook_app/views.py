@@ -1,5 +1,6 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from permissions import DenyOrgAdmin
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
@@ -1125,7 +1126,7 @@ def force_relock_unlock_request(request, unlock_request_id):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DenyOrgAdmin])
 @support_error_handler
 def user_notifications(request):
     """Get user's notifications with optional filtering"""
@@ -1160,7 +1161,7 @@ def user_notifications(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DenyOrgAdmin])
 @support_error_handler
 def notification_stats(request):
     """Get notification statistics for the user"""
@@ -1184,7 +1185,7 @@ def notification_stats(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DenyOrgAdmin])
 @support_error_handler
 def mark_notification_read(request, notification_id):
     """Mark a specific notification as read"""
@@ -1202,7 +1203,7 @@ def mark_notification_read(request, notification_id):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DenyOrgAdmin])
 @support_error_handler
 def mark_all_notifications_read(request):
     """Mark all notifications as read for the user"""
@@ -1217,7 +1218,7 @@ def mark_all_notifications_read(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DenyOrgAdmin])
 @support_error_handler
 def create_notification(request):
     """Create a notification (for testing or system use)"""

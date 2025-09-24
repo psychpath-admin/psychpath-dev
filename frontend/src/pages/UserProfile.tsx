@@ -611,13 +611,22 @@ const UserProfile: React.FC = () => {
     console.log('Continue button clicked - starting process...')
     try {
       // Update the profile to mark first login as completed
+      // Include required provisional fields to pass validation
       console.log('Sending PATCH request to /api/user-profile/')
       const response = await apiFetch('/api/user-profile/', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ first_login_completed: true })
+        body: JSON.stringify({ 
+          first_login_completed: true,
+          provisional_registration_date: profile.provisional_registration_date || '2025-07-01',
+          internship_start_date: profile.internship_start_date || '2025-09-01',
+          program_type: profile.program_type || '5+1',
+          target_weeks: profile.target_weeks || 44,
+          weekly_commitment: profile.weekly_commitment || 17.5,
+          is_full_time: profile.is_full_time !== undefined ? profile.is_full_time : true
+        })
       })
 
       console.log('Response received:', response.status, response.ok)

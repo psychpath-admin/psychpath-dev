@@ -4,13 +4,14 @@ from rest_framework.response import Response
 from django.db.models import Q
 from .models import SectionAEntry, CustomSessionActivityType
 from .serializers import SectionAEntrySerializer, CustomSessionActivityTypeSerializer
+from permissions import DenyOrgAdmin
 
 
 class SectionAEntryViewSet(viewsets.ModelViewSet):
     """ViewSet for Section A entries"""
     
     serializer_class = SectionAEntrySerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, DenyOrgAdmin]
     
     def get_queryset(self):
         """Return entries for the current user only"""
@@ -95,7 +96,7 @@ class CustomSessionActivityTypeViewSet(viewsets.ModelViewSet):
     """ViewSet for custom session activity types"""
     
     serializer_class = CustomSessionActivityTypeSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, DenyOrgAdmin]
     
     def get_queryset(self):
         """Return custom activity types for the current user only"""

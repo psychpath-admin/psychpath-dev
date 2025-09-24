@@ -4,8 +4,8 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment
-from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer
+from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite
+from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer, MeetingSerializer, MeetingCreateSerializer, MeetingInviteSerializer, MeetingInviteResponseSerializer
 from .email_service import send_supervision_invite_email, send_supervision_response_email, send_supervision_reminder_email, send_supervision_expired_email
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 import base64
@@ -14,7 +14,7 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, models
 from django.utils import timezone
 import json
 from logging_utils import support_error_handler, audit_data_access, log_data_access, log_supervision_action
@@ -1426,6 +1426,29 @@ def supervision_respond(request):
         supervision.accepted_at = timezone.now()
         supervision.supervisee = request.user
         supervision.save()
+
+        # When a supervisee accepts, update their profile with principal/secondary supervisor
+        try:
+            supervisee_profile = request.user.profile
+            supervisor_user = supervision.supervisor
+            supervisor_profile = getattr(supervisor_user, 'profile', None)
+            supervisor_name = (
+                f"{getattr(supervisor_profile, 'first_name', '')} {getattr(supervisor_profile, 'last_name', '')}"
+            ).strip() or supervisor_user.email
+
+            if supervision.role == 'PRIMARY':
+                supervisee_profile.principal_supervisor = supervisor_name
+                supervisee_profile.principal_supervisor_email = supervisor_user.email
+                update_fields = ['principal_supervisor', 'principal_supervisor_email']
+            else:
+                supervisee_profile.secondary_supervisor = supervisor_name
+                supervisee_profile.secondary_supervisor_email = supervisor_user.email
+                update_fields = ['secondary_supervisor', 'secondary_supervisor_email']
+
+            supervisee_profile.save(update_fields=update_fields)
+        except Exception:
+            # Do not block acceptance if profile update fails; continue with notifications
+            pass
         
         # Create notification
         SupervisionNotification.objects.create(
@@ -1609,6 +1632,254 @@ def supervision_assignments(request):
             
         except Exception as e:
             return Response({'error': f'Failed to create supervision assignments: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Meeting API Views
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def meeting_list(request):
+    """List meetings for the authenticated user or create a new meeting"""
+    if request.method == 'GET':
+        # Org Admins are not permitted to read clinical meeting data
+        try:
+            if hasattr(request.user, 'profile') and request.user.profile.role == UserRole.ORG_ADMIN:
+                return Response({'error': 'Organization admins cannot view meeting data'}, status=status.HTTP_403_FORBIDDEN)
+        except Exception:
+            # If profile lookup fails, fall through to default scoping
+            pass
+        # Get query parameters
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        status_filter = request.GET.get('status')
+        
+        # Base queryset - meetings where user is organizer or attendee
+        meetings = Meeting.objects.filter(
+            models.Q(organizer=request.user) | 
+            models.Q(attendees=request.user)
+        ).distinct().order_by('start_time')
+        
+        # Apply filters
+        if start_date:
+            meetings = meetings.filter(start_time__date__gte=start_date)
+        if end_date:
+            meetings = meetings.filter(start_time__date__lte=end_date)
+        if status_filter:
+            meetings = meetings.filter(status=status_filter)
+        
+        serializer = MeetingSerializer(meetings, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        # Create new meeting
+        data = request.data.copy()
+        organizer_user = request.user
+        # Allow Org Admins to schedule on behalf of supervisors
+        if hasattr(request.user, 'profile') and request.user.profile.role == UserRole.ORG_ADMIN:
+            requested_organizer_id = data.get('organizer')
+            if not requested_organizer_id:
+                return Response({'error': 'Organizer is required when creating meetings as org admin'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                organizer_candidate = User.objects.get(id=requested_organizer_id)
+                organizer_profile = organizer_candidate.profile
+            except Exception:
+                return Response({'error': 'Invalid organizer specified'}, status=status.HTTP_400_BAD_REQUEST)
+            # Must be a supervisor in the same organization
+            if organizer_profile.role != UserRole.SUPERVISOR:
+                return Response({'error': 'Organizer must be a supervisor'}, status=status.HTTP_400_BAD_REQUEST)
+            if (request.user.profile.organization is None or
+                organizer_profile.organization_id != request.user.profile.organization_id):
+                return Response({'error': 'Organizer must belong to the same organization as the org admin'}, status=status.HTTP_403_FORBIDDEN)
+            organizer_user = organizer_candidate
+        
+        # Force the organizer field to the resolved user
+        data['organizer'] = organizer_user.id
+        
+        serializer = MeetingCreateSerializer(data=data)
+        if serializer.is_valid():
+            # Validate attendee relationships when scheduling on behalf of a supervisor
+            attendee_emails = (data.get('attendee_emails') or [])
+            if attendee_emails and organizer_user != request.user:
+                # Check that each attendee is supervised by organizer_user with ACCEPTED status
+                invalid_attendees = []
+                for email in attendee_emails:
+                    try:
+                        attendee_user = User.objects.get(email__iexact=email)
+                    except User.DoesNotExist:
+                        # Skip non-existent users silently; creation will skip invites too
+                        continue
+                    # Only enforce for trainee roles
+                    attendee_role = getattr(getattr(attendee_user, 'profile', None), 'role', None)
+                    if attendee_role in [UserRole.PROVISIONAL, UserRole.REGISTRAR]:
+                        has_link = Supervision.objects.filter(
+                            supervisor=organizer_user,
+                            supervisee=attendee_user,
+                            status='ACCEPTED'
+                        ).exists()
+                        if not has_link:
+                            invalid_attendees.append(email)
+                if invalid_attendees:
+                    return Response({
+                        'error': 'Some attendees are not under accepted supervision with the chosen supervisor',
+                        'invalid_attendees': invalid_attendees
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+            meeting = serializer.save()
+            
+            # Create notifications for attendees
+            for invite in meeting.invites.all():
+                from logbook_app.models import Notification
+                Notification.create_notification(
+                    user=invite.attendee,
+                    notification_type='meeting_invite_pending',
+                    payload={
+                        'meetingId': meeting.id,
+                        'meetingTitle': meeting.title,
+                        'organizerName': meeting.organizer_name,
+                        'startTime': meeting.start_time.isoformat(),
+                        'location': meeting.location or 'Virtual Meeting'
+                    },
+                    actor=request.user
+                )
+            
+            response_serializer = MeetingSerializer(meeting)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def meeting_detail(request, meeting_id):
+    """Get, update, or delete a specific meeting"""
+    try:
+        meeting = Meeting.objects.get(id=meeting_id)
+    except Meeting.DoesNotExist:
+        return Response({'error': 'Meeting not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check if user has permission to access this meeting
+    if meeting.organizer != request.user and request.user not in meeting.attendees.all():
+        return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+    
+    if request.method == 'GET':
+        serializer = MeetingSerializer(meeting)
+        return Response(serializer.data)
+    
+    elif request.method in ['PUT', 'PATCH']:
+        # Only organizer can update meeting
+        if meeting.organizer != request.user:
+            return Response({'error': 'Only the organizer can update this meeting'}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = MeetingSerializer(meeting, data=request.data, partial=request.method == 'PATCH')
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    elif request.method == 'DELETE':
+        # Only organizer can delete meeting
+        if meeting.organizer != request.user:
+            return Response({'error': 'Only the organizer can delete this meeting'}, status=status.HTTP_403_FORBIDDEN)
+        
+        meeting.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def meeting_invites(request):
+    """Get meeting invitations for the authenticated user"""
+    invites = MeetingInvite.objects.filter(attendee=request.user).order_by('-created_at')
+    serializer = MeetingInviteSerializer(invites, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def meeting_invite_response(request, invite_id):
+    """Respond to a meeting invitation"""
+    try:
+        invite = MeetingInvite.objects.get(id=invite_id, attendee=request.user)
+    except MeetingInvite.DoesNotExist:
+        return Response({'error': 'Invitation not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    serializer = MeetingInviteResponseSerializer(invite, data=request.data, partial=True)
+    if serializer.is_valid():
+        # Update the invite using the model methods
+        response = serializer.validated_data.get('response')
+        notes = serializer.validated_data.get('response_notes')
+        
+        if response == 'ACCEPTED':
+            invite.accept(notes)
+        elif response == 'DECLINED':
+            invite.decline(notes)
+        elif response == 'TENTATIVE':
+            invite.set_tentative(notes)
+        
+        # Create notification for organizer
+        from logbook_app.models import Notification
+        Notification.create_notification(
+            user=invite.meeting.organizer,
+            notification_type='meeting_response',
+            payload={
+                'meetingId': invite.meeting.id,
+                'meetingTitle': invite.meeting.title,
+                'attendeeName': invite.attendee_name,
+                'response': response,
+                'responseDisplay': invite.response_display
+            },
+            actor=request.user
+        )
+        
+        response_serializer = MeetingInviteSerializer(invite)
+        return Response(response_serializer.data)
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def meeting_stats(request):
+    """Get meeting statistics for the authenticated user"""
+    user = request.user
+    
+    # Get meetings where user is organizer or attendee
+    meetings = Meeting.objects.filter(
+        models.Q(organizer=user) | 
+        models.Q(attendees=user)
+    ).distinct()
+    
+    # Calculate stats
+    total_meetings = meetings.count()
+    upcoming_meetings = meetings.filter(start_time__gt=timezone.now()).count()
+    past_meetings = meetings.filter(end_time__lt=timezone.now()).count()
+    
+    # Pending invitations
+    pending_invites = MeetingInvite.objects.filter(
+        attendee=user, 
+        response='PENDING'
+    ).count()
+    
+    # Meetings this week
+    week_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    week_end = week_start + timedelta(days=7)
+    this_week = meetings.filter(
+        start_time__gte=week_start,
+        start_time__lt=week_end
+    ).count()
+    
+    return Response({
+        'total_meetings': total_meetings,
+        'upcoming_meetings': upcoming_meetings,
+        'past_meetings': past_meetings,
+        'pending_invites': pending_invites,
+        'this_week': this_week
+    })
 
 
 # Create your views here.
