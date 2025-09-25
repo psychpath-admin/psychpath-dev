@@ -83,20 +83,37 @@ class UserProfileSerializer(serializers.ModelSerializer):
         # Only validate supervisor requirements if the user is actually a SUPERVISOR
         # Don't apply supervisor validation to provisional psychologists or registrars
         if role == 'SUPERVISOR':
+            # Get current values from instance if not in data
+            is_board_approved = data.get('is_board_approved_supervisor')
+            if is_board_approved is None and self.instance:
+                is_board_approved = self.instance.is_board_approved_supervisor
+            
+            supervisor_reg_date = data.get('supervisor_registration_date')
+            if supervisor_reg_date is None and self.instance:
+                supervisor_reg_date = self.instance.supervisor_registration_date
+                
+            can_supervise_provisionals = data.get('can_supervise_provisionals')
+            if can_supervise_provisionals is None and self.instance:
+                can_supervise_provisionals = self.instance.can_supervise_provisionals
+                
+            can_supervise_registrars = data.get('can_supervise_registrars')
+            if can_supervise_registrars is None and self.instance:
+                can_supervise_registrars = self.instance.can_supervise_registrars
+            
             # Must be board-approved supervisor
-            if not data.get('is_board_approved_supervisor'):
+            if not is_board_approved:
                 raise serializers.ValidationError({
                     'is_board_approved_supervisor': 'You must be a Board-approved supervisor to access supervisor features.'
                 })
             
             # If board-approved, supervisor registration date is required
-            if data.get('is_board_approved_supervisor') and not data.get('supervisor_registration_date'):
+            if is_board_approved and not supervisor_reg_date:
                 raise serializers.ValidationError({
                     'supervisor_registration_date': 'Supervisor registration date is required for board-approved supervisors.'
                 })
             
             # Must select at least one supervision scope
-            if not data.get('can_supervise_provisionals') and not data.get('can_supervise_registrars'):
+            if not can_supervise_provisionals and not can_supervise_registrars:
                 raise serializers.ValidationError({
                     'can_supervise_registrars': 'Please select at least one supervision scope (provisionals or registrars).'
                 })
@@ -107,6 +124,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
             
             # Provisional registration date is required and must be less than 5 years ago
             provisional_reg_date = data.get('provisional_registration_date')
+            if provisional_reg_date is None and self.instance:
+                provisional_reg_date = getattr(self.instance, 'provisional_registration_date', None)
+            # Accept legacy/alternate field name from payload or instance
+            if provisional_reg_date is None:
+                alt = data.get('provisional_start_date')
+                if alt is None and self.instance:
+                    alt = getattr(self.instance, 'provisional_start_date', None)
+                provisional_reg_date = alt or provisional_reg_date
             if not provisional_reg_date:
                 raise serializers.ValidationError({
                     'provisional_registration_date': 'Provisional registration date is required for provisional psychologists.'
@@ -119,6 +144,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
                     'provisional_registration_date': 'Provisional registration date must be less than 5 years ago.'
                 })
             
+            # Internship start date must be later than provisional registration date
+            internship_start_date = data.get('internship_start_date')
+            if internship_start_date is None and self.instance:
+                internship_start_date = getattr(self.instance, 'internship_start_date', None)
+            if provisional_reg_date is None and self.instance:
+                provisional_reg_date = getattr(self.instance, 'provisional_registration_date', None)
+            if internship_start_date and provisional_reg_date and internship_start_date <= provisional_reg_date:
+                raise serializers.ValidationError({
+                    'internship_start_date': 'Internship start date must be later than the provisional registration date.'
+                })
+
             # Estimated completion weeks must be at least 44 for full-time
             if data.get('is_full_time', True) and data.get('estimated_completion_weeks'):
                 if data['estimated_completion_weeks'] < 44:

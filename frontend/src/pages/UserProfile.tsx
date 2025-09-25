@@ -122,6 +122,7 @@ const UserProfile: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [isAuthed, setIsAuthed] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
   const [signatureFile, setSignatureFile] = useState<File | null>(null)
   const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
   const [initialsFile, setInitialsFile] = useState<File | null>(null)
@@ -183,6 +184,10 @@ const UserProfile: React.FC = () => {
         e.returnValue = 'You must make a decision about your prior hours before leaving this page.'
         return 'You must make a decision about your prior hours before leaving this page.'
       }
+      if (isDirty) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
     }
 
     const handleVisibilityChange = () => {
@@ -197,6 +202,16 @@ const UserProfile: React.FC = () => {
       const target = e.target as HTMLElement
       const link = target.closest('a')
       const button = target.closest('button')
+      
+      // Confirm leaving if dirty
+      if (isDirty && (link || (button && button.getAttribute('data-nav') !== null))) {
+        const ok = window.confirm('You have unsaved changes. Are you sure you want to leave this page?')
+        if (!ok) {
+          e.preventDefault()
+          e.stopPropagation()
+          return
+        }
+      }
       
       // Check for navigation links
       if (link && link.href && !link.href.includes('javascript:') && 
@@ -217,20 +232,41 @@ const UserProfile: React.FC = () => {
       }
     }
 
+    const markDirtyFromAnyInput = () => setIsDirty(true)
+
     window.addEventListener('beforeunload', handleBeforeUnload)
     document.addEventListener('visibilitychange', handleVisibilityChange)
     document.addEventListener('click', handleClick)
+    document.addEventListener('input', markDirtyFromAnyInput)
+    // Explicit assignment for Safari/iOS
+    const prevBeforeUnload = window.onbeforeunload
+    window.onbeforeunload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+      return null
+    }
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       document.removeEventListener('click', handleClick)
+      document.removeEventListener('input', markDirtyFromAnyInput)
+      window.onbeforeunload = prevBeforeUnload || null
     }
-  }, [profile.role, hasPriorHoursDecision])
+  }, [profile.role, hasPriorHoursDecision, isDirty])
 
   // Intercept React Router navigation attempts
   useEffect(() => {
     const handleRouteChange = (e: PopStateEvent) => {
+      if (isDirty) {
+        const confirmLeave = window.confirm('You have unsaved changes. Are you sure you want to leave this page?')
+        if (!confirmLeave) {
+          window.history.pushState(null, '', location.pathname)
+          return
+        }
+      }
       if ((profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision) {
         // Prevent the route change
         window.history.pushState(null, '', location.pathname)
@@ -243,7 +279,7 @@ const UserProfile: React.FC = () => {
     return () => {
       window.removeEventListener('popstate', handleRouteChange)
     }
-  }, [profile.role, hasPriorHoursDecision, location.pathname])
+  }, [profile.role, hasPriorHoursDecision, location.pathname, isDirty])
 
   // Fetch endorsements when profile role changes to SUPERVISOR
   useEffect(() => {
@@ -295,6 +331,26 @@ const UserProfile: React.FC = () => {
           }
         }
         
+        // Set default study mode values for provisional psychologists
+        if (data.role === 'PROVISIONAL') {
+          // Default to full-time if not set
+          if (data.is_full_time === undefined || data.is_full_time === null) {
+            data.is_full_time = true
+          }
+          
+          // Set default weekly commitment hours if not set
+          if (!data.weekly_commitment_hours && !data.weekly_commitment) {
+            data.weekly_commitment_hours = data.is_full_time ? 17.5 : 8.75
+            data.weekly_commitment = data.is_full_time ? 17.5 : 8.75
+          }
+          
+          // Set default estimated completion weeks if not set
+          if (!data.estimated_completion_weeks && !data.target_weeks) {
+            data.estimated_completion_weeks = data.is_full_time ? 44 : 88
+            data.target_weeks = data.is_full_time ? 44 : 88
+          }
+        }
+        
         setProfile(data)
         if (data.signature_url) {
           setSignaturePreview(data.signature_url)
@@ -327,8 +383,11 @@ const UserProfile: React.FC = () => {
         setHasPriorHoursDecision(hasDecision)
         
         // Show prior hours acknowledgment dialog if user hasn't made a decision
-        // Only show if not already shown and user hasn't made a decision
-        if ((data.role === 'PROVISIONAL' || data.role === 'REGISTRAR') && !hasDecision) {
+        // Only show for PROVISIONAL and REGISTRAR roles, never for SUPERVISOR or ORG_ADMIN
+        if (data.role === 'SUPERVISOR' || data.role === 'ORG_ADMIN') {
+          console.log('User is supervisor or org admin, not showing prior hours dialog')
+          setShowPriorHoursAcknowledgment(false)
+        } else if ((data.role === 'PROVISIONAL' || data.role === 'REGISTRAR') && !hasDecision) {
           console.log('Showing prior hours acknowledgment dialog')
           setShowPriorHoursAcknowledgment(true)
         } else if (hasDecision) {
@@ -437,6 +496,7 @@ const UserProfile: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setProfile(prev => ({ ...prev, [name]: value }))
+    setIsDirty(true)
   }
 
   const handlePriorHoursChange = (field: string, value: string) => {
@@ -448,11 +508,13 @@ const UserProfile: React.FC = () => {
         [field]: numValue
       }
     }))
+    setIsDirty(true)
   }
 
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
       setProfile(prev => ({ ...prev, provisional_start_date: format(date, 'yyyy-MM-dd') }))
+      setIsDirty(true)
     }
   }
 
@@ -623,8 +685,8 @@ const UserProfile: React.FC = () => {
           provisional_registration_date: profile.provisional_registration_date || '2025-07-01',
           internship_start_date: profile.internship_start_date || '2025-09-01',
           program_type: profile.program_type || '5+1',
-          target_weeks: profile.target_weeks || 44,
-          weekly_commitment: profile.weekly_commitment || 17.5,
+          estimated_completion_weeks: profile.estimated_completion_weeks || profile.target_weeks || 44,
+          weekly_commitment_hours: profile.weekly_commitment_hours || profile.weekly_commitment || 17.5,
           is_full_time: profile.is_full_time !== undefined ? profile.is_full_time : true
         })
       })
@@ -717,8 +779,8 @@ const UserProfile: React.FC = () => {
         setPriorHoursToSubmit(null)
         console.log('Prior hours submitted and locked')
         
-        // Navigate to dashboard after decision is made
-        navigate('/')
+        // Remain on profile so first-time users complete their profile
+        navigate('/profile')
       } else {
         console.error('Failed to submit prior hours')
         alert('Failed to submit prior hours. Please try again.')
@@ -759,8 +821,8 @@ const UserProfile: React.FC = () => {
         
         console.log('Prior hours declined and locked')
         
-        // Navigate to dashboard after decision is made
-        navigate('/')
+        // Remain on profile so first-time users complete their profile
+        navigate('/profile')
       } else {
         console.error('Failed to decline prior hours')
         alert('Failed to decline prior hours. Please try again.')
@@ -784,6 +846,10 @@ const UserProfile: React.FC = () => {
 
   // Function to check if user should see prior hours acknowledgment
   const checkPriorHoursRequirement = () => {
+    // Never show prior hours overlay for supervisors or org admins
+    if (profile.role === 'SUPERVISOR' || profile.role === 'ORG_ADMIN') {
+      return false
+    }
     if ((profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision) {
       setShowPriorHoursAcknowledgment(true)
       return true
@@ -793,6 +859,11 @@ const UserProfile: React.FC = () => {
 
   // Custom navigation function that checks prior hours requirements
   const navigateWithPriorHoursCheck = (path: string) => {
+    // Never check prior hours for supervisors or org admins
+    if (profile.role === 'SUPERVISOR' || profile.role === 'ORG_ADMIN') {
+      navigate(path)
+      return true
+    }
     if ((profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && !hasPriorHoursDecision) {
       setShowPriorHoursAcknowledgment(true)
       return false // Prevent navigation
@@ -903,6 +974,7 @@ const UserProfile: React.FC = () => {
         
         // Reload profile to get updated data from server
         await loadProfile()
+        setIsDirty(false)
         
         // Check if prior hours decision was made during this save
         if (profile.prior_hours_submitted || profile.prior_hours_declined) {
@@ -926,6 +998,7 @@ const UserProfile: React.FC = () => {
 
   const handleCancel = () => {
     loadProfile()
+    setIsDirty(false)
   }
 
   if (loading) {
@@ -1137,13 +1210,17 @@ const UserProfile: React.FC = () => {
               <div className="mb-4 text-center">
                 <Label>Study Mode</Label>
                 <RadioGroup
-                  value={profile.weekly_commitment === 17.5 ? 'fulltime' : 'parttime'}
+                  value={profile.weekly_commitment_hours === 17.5 || profile.weekly_commitment === 17.5 ? 'fulltime' : 'parttime'}
                   onValueChange={(value) => {
                     const weeklyHours = value === 'fulltime' ? 17.5 : 8.75
+                    const completionWeeks = value === 'fulltime' ? 44 : 88 // Double the weeks for part-time
                     setProfile(prev => ({ 
                       ...prev, 
-                      weekly_commitment: weeklyHours,
-                      target_weeks: value === 'fulltime' ? 44 : 88 // Double the weeks for part-time
+                      weekly_commitment_hours: weeklyHours,
+                      weekly_commitment: weeklyHours, // Keep both for compatibility
+                      estimated_completion_weeks: completionWeeks,
+                      target_weeks: completionWeeks, // Keep both for compatibility
+                      is_full_time: value === 'fulltime'
                     }))
                   }}
                   className="flex justify-center gap-4 mt-2"
@@ -1208,8 +1285,12 @@ const UserProfile: React.FC = () => {
                     name="estimated_completion_weeks"
                     type="number"
                     min="44"
-                    value={profile.estimated_completion_weeks || profile.target_weeks || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, estimated_completion_weeks: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    value={profile.estimated_completion_weeks || profile.target_weeks || 44}
+                    onChange={(e) => setProfile(prev => ({ 
+                      ...prev, 
+                      estimated_completion_weeks: e.target.value ? parseInt(e.target.value) : 44,
+                      target_weeks: e.target.value ? parseInt(e.target.value) : 44 // Keep both for compatibility
+                    }))}
                     required
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -1226,8 +1307,12 @@ const UserProfile: React.FC = () => {
                     step="0.5"
                     min="1"
                     max="40"
-                    value={profile.weekly_commitment_hours || profile.weekly_commitment || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, weekly_commitment_hours: e.target.value ? Math.round(parseFloat(e.target.value) * 10) / 10 : undefined }))}
+                    value={profile.weekly_commitment_hours || profile.weekly_commitment || 17.5}
+                    onChange={(e) => setProfile(prev => ({ 
+                      ...prev, 
+                      weekly_commitment_hours: e.target.value ? Math.round(parseFloat(e.target.value) * 10) / 10 : 17.5,
+                      weekly_commitment: e.target.value ? Math.round(parseFloat(e.target.value) * 10) / 10 : 17.5 // Keep both for compatibility
+                    }))}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Optional: Helps track your internship pace
@@ -2033,25 +2118,57 @@ const UserProfile: React.FC = () => {
                   <div className="text-3xl font-bold text-textDark mb-1">
                     {profile.prior_hours?.section_a_direct_client || 0}
                   </div>
-                  <div className="text-xs text-textLight font-medium">Section A - Direct Client</div>
+                  <div className="text-xs text-textLight font-medium mb-2">Section A - Direct Client</div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={profile.prior_hours?.section_a_direct_client || 0}
+                    onChange={(e) => handlePriorHoursChange('section_a_direct_client', e.target.value)}
+                    className="text-center"
+                  />
                 </div>
                 <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
                   <div className="text-3xl font-bold text-textDark mb-1">
                     {profile.prior_hours?.section_a_client_related || 0}
                   </div>
-                  <div className="text-xs text-textLight font-medium">Section A - Client Related</div>
+                  <div className="text-xs text-textLight font-medium mb-2">Section A - Client Related</div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={profile.prior_hours?.section_a_client_related || 0}
+                    onChange={(e) => handlePriorHoursChange('section_a_client_related', e.target.value)}
+                    className="text-center"
+                  />
                 </div>
                 <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
                   <div className="text-3xl font-bold text-textDark mb-1">
                     {profile.prior_hours?.section_b_professional_development || 0}
                   </div>
-                  <div className="text-xs text-textLight font-medium">Section B - Professional Development</div>
+                  <div className="text-xs text-textLight font-medium mb-2">Section B - Professional Development</div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={profile.prior_hours?.section_b_professional_development || 0}
+                    onChange={(e) => handlePriorHoursChange('section_b_professional_development', e.target.value)}
+                    className="text-center"
+                  />
                 </div>
                 <div className="text-center p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
                   <div className="text-3xl font-bold text-textDark mb-1">
                     {profile.prior_hours?.section_c_supervision || 0}
                   </div>
-                  <div className="text-xs text-textLight font-medium">Section C - Supervision</div>
+                  <div className="text-xs text-textLight font-medium mb-2">Section C - Supervision</div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={profile.prior_hours?.section_c_supervision || 0}
+                    onChange={(e) => handlePriorHoursChange('section_c_supervision', e.target.value)}
+                    className="text-center"
+                  />
                 </div>
               </div>
 
