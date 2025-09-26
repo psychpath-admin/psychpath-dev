@@ -27,9 +27,31 @@ export const PendingSupervisionRequests: React.FC<PendingSupervisionRequestsProp
   const [responding, setResponding] = useState<number | null>(null)
   const [showAck, setShowAck] = useState(false)
   const [ackSupervisorName, setAckSupervisorName] = useState<string>('')
+  const [pollMs, setPollMs] = useState(5000)
 
   useEffect(() => {
     fetchPendingRequests()
+  }, [])
+
+  // Auto-refresh pending requests every few seconds; backoff on errors
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      fetchPendingRequests()
+    }, pollMs)
+    return () => clearInterval(intervalId)
+  }, [pollMs])
+
+  // Refresh on focus/visibility
+  useEffect(() => {
+    const onFocus = () => fetchPendingRequests()
+    const onVisibility = () => { if (!document.hidden) fetchPendingRequests() }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
 
   const fetchPendingRequests = async () => {
@@ -38,12 +60,15 @@ export const PendingSupervisionRequests: React.FC<PendingSupervisionRequestsProp
       if (response.ok) {
         const data = await response.json()
         setRequests(data)
+        if (pollMs !== 5000) setPollMs(5000)
       } else {
         toast.error('Failed to fetch pending requests')
+        setPollMs(prev => Math.min(prev * 2, 60000))
       }
     } catch (error) {
       console.error('Error fetching pending requests:', error)
       toast.error('Error fetching pending requests')
+      setPollMs(prev => Math.min(prev * 2, 60000))
     } finally {
       setLoading(false)
     }

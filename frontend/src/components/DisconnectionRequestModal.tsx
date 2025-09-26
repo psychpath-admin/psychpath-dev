@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -34,16 +34,15 @@ export default function DisconnectionRequestModal({
 
     setLoading(true)
     try {
-      // First, we need to find the supervisor user by email
-      const supervisorResponse = await apiFetch('/api/available-supervisors/')
+      // Find the supervisor user by email using the user lookup
+      const supervisorResponse = await apiFetch(`/api/users/lookup/?email=${encodeURIComponent(supervisorEmail)}`)
       if (!supervisorResponse.ok) {
-        throw new Error('Failed to fetch supervisors')
+        throw new Error('Failed to find supervisor')
       }
       
-      const supervisors = await supervisorResponse.json()
-      const supervisor = supervisors.find((s: any) => s.email === supervisorEmail)
+      const supervisorData = await supervisorResponse.json()
       
-      if (!supervisor) {
+      if (!supervisorData || !supervisorData.id) {
         toast.error('Supervisor not found in the system')
         return
       }
@@ -52,7 +51,7 @@ export default function DisconnectionRequestModal({
       const response = await apiFetch('/api/disconnection-requests/', {
         method: 'POST',
         body: JSON.stringify({
-          supervisor: supervisor.id,
+          supervisor: supervisorData.id,
           role: role,
           message: message.trim() || undefined
         })
@@ -81,6 +80,9 @@ export default function DisconnectionRequestModal({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Request Supervisor Disconnection</DialogTitle>
+          <DialogDescription>
+            Initiate a formal disconnection request from your current supervisor. They will need to confirm this action.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">

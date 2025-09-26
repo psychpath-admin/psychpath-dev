@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest
 from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer, MeetingSerializer, MeetingCreateSerializer, MeetingInviteSerializer, MeetingInviteResponseSerializer, DisconnectionRequestSerializer, DisconnectionRequestCreateSerializer, DisconnectionRequestResponseSerializer
-from .email_service import send_supervision_invite_email, send_supervision_response_email, send_supervision_reminder_email, send_supervision_expired_email
+from .email_service import send_supervision_invite_email, send_supervision_response_email, send_supervision_reminder_email, send_supervision_expired_email, send_disconnection_request_email, send_disconnection_response_email
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 import base64
 import mimetypes
@@ -1237,6 +1237,27 @@ def supervisor_endorsement_detail(request, endorsement_id):
     elif request.method == 'DELETE':
         endorsement.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def user_lookup(request):
+    """Look up a user by email address"""
+    email = request.GET.get('email')
+    if not email:
+        return Response({'error': 'Email parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        user = User.objects.get(email__iexact=email)
+        return Response({
+            'id': user.id,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name
+        })
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['GET'])

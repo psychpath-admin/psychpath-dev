@@ -23,6 +23,7 @@ export function useNotifications(limit: number = 10) {
   const [stats, setStats] = useState<NotificationStats>({ total: 0, unread: 0, by_type: {} })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pollMs, setPollMs] = useState(5000) // start at 5s and backoff on errors
 
   const fetchNotifications = async () => {
     try {
@@ -33,13 +34,19 @@ export function useNotifications(limit: number = 10) {
       if (response.ok) {
         const data = await response.json()
         setNotifications(data)
+        // reset backoff on success
+        if (pollMs !== 10000) setPollMs(10000)
       } else {
         console.error('Failed to fetch notifications:', response.status)
         setError('Failed to fetch notifications')
+        // backoff on error up to 60s
+        setPollMs(prev => Math.min(prev * 2, 60000))
       }
     } catch (err) {
       console.error('Error fetching notifications:', err)
       setError('Error fetching notifications')
+      // backoff on error up to 60s
+      setPollMs(prev => Math.min(prev * 2, 60000))
     } finally {
       setLoading(false)
     }
@@ -92,10 +99,27 @@ export function useNotifications(limit: number = 10) {
     fetchStats()
   }, [limit])
 
-  // Auto-refresh stats every 30 seconds
+  // Auto-refresh notifications + stats on interval (skip work when tab hidden)
   useEffect(() => {
-    const interval = setInterval(fetchStats, 30000)
-    return () => clearInterval(interval)
+    const intervalId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      refresh()
+    }, pollMs)
+    return () => clearInterval(intervalId)
+  }, [pollMs, limit])
+
+  // Refresh immediately on focus or when tab becomes visible
+  useEffect(() => {
+    const onFocus = () => refresh()
+    const onVisibilityChange = () => {
+      if (!document.hidden) refresh()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [])
 
   return {

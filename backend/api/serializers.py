@@ -109,6 +109,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
         # Only validate supervisor requirements if the user is actually a SUPERVISOR
         # Don't apply supervisor validation to provisional psychologists or registrars
         if role == 'SUPERVISOR':
+            # Allow acknowledging the welcome overlay without enforcing supervisor gates
+            # If the only field being updated is supervisor_welcome_seen, skip further supervisor validation
+            if set(data.keys()).issubset({'supervisor_welcome_seen'}):
+                return data
+
             # Get current values from instance if not in data
             is_board_approved = data.get('is_board_approved_supervisor')
             if is_board_approved is None and self.instance:

@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import health, user_profile, me, password_reset_request, password_reset_confirm, register_terms_agree, register_details_submit, register_verify_code, register_complete, program_summary, messages, message_detail, supervisor_requests, supervisor_request_response, supervisor_invitation_detail, supervisor_invitation_accept, supervisor_invitations, supervisor_endorsements, supervisor_endorsement_detail, available_supervisors, supervision_invite, supervision_list, supervision_respond, supervision_pending_requests, supervision_cancel, supervision_remove, supervision_stats, supervision_assignments, meeting_list, meeting_detail, meeting_invites, meeting_invite_response, meeting_stats, log_error, disconnection_requests, disconnection_request_detail, disconnection_request_cancel
+from .views import health, user_profile, me, password_reset_request, password_reset_confirm, register_terms_agree, register_details_submit, register_verify_code, register_complete, program_summary, messages, message_detail, supervisor_requests, supervisor_request_response, supervisor_invitation_detail, supervisor_invitation_accept, supervisor_invitations, supervisor_endorsements, supervisor_endorsement_detail, available_supervisors, user_lookup, supervision_invite, supervision_list, supervision_respond, supervision_pending_requests, supervision_cancel, supervision_remove, supervision_stats, supervision_assignments, meeting_list, meeting_detail, meeting_invites, meeting_invite_response, meeting_stats, log_error, disconnection_requests, disconnection_request_detail, disconnection_request_cancel
 
 urlpatterns = [
     path('health/', health, name='health'),
@@ -25,6 +25,7 @@ urlpatterns = [
     path('supervisor-endorsements/', supervisor_endorsements, name='supervisor-endorsements'),
     path('supervisor-endorsements/<int:endorsement_id>/', supervisor_endorsement_detail, name='supervisor-endorsement-detail'),
     path('available-supervisors/', available_supervisors, name='available-supervisors'),
+    path('users/lookup/', user_lookup, name='user-lookup'),
     # Supervision management
     path('supervisions/invite/', supervision_invite, name='supervision-invite'),
     path('supervisions/', supervision_list, name='supervision-list'),
