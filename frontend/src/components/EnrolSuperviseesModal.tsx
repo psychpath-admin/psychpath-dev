@@ -61,7 +61,7 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
     
     const validEmails = emails.filter(email => email.trim() !== '')
     if (validEmails.length === 0) {
-      toast.error('Please enter at least one email address')
+      toast.error('Please enter at least one email address to send invitations')
       return
     }
 
@@ -69,7 +69,7 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     const invalidEmails = validEmails.filter(email => !emailRegex.test(email))
     if (invalidEmails.length > 0) {
-      toast.error(`Invalid email addresses: ${invalidEmails.join(', ')}`)
+      toast.error(`The following email addresses are not valid: ${invalidEmails.join(', ')}. Please check the format and try again.`)
       return
     }
 
@@ -100,14 +100,14 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
         const errorText = await response.text()
         try {
           const errorData = JSON.parse(errorText)
-          toast.error(errorData.error || 'Failed to send invitations')
+          toast.error(errorData.error || 'Unable to send invitations. Please check your connection and try again.')
         } catch {
-          toast.error(`Failed to send invitations: ${response.status} ${response.statusText}`)
+          toast.error(`Unable to send invitations due to a server error (${response.status}). Please try again later.`)
         }
       }
     } catch (error) {
       console.error('Error sending invitations:', error)
-      toast.error(`Error sending invitations: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      toast.error(`Unable to send invitations due to a network error. Please check your internet connection and try again.`)
     } finally {
       setLoading(false)
     }

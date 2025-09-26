@@ -26,6 +26,8 @@ interface Supervisee {
   name: string
   status: 'on-track' | 'overdue' | 'at-risk'
   role: string
+  supervisionId?: number
+  email?: string
   progress: {
     directClient: { current: number; target: number }
     clientRelated: { current: number; target: number }
@@ -64,6 +66,36 @@ export default function SupervisorDashboard() {
     fetchSupervisorData()
   }
 
+  // Function to remove a supervisee
+  const removeSupervisee = async (supervisionId: number, superviseeEmail: string) => {
+    if (!confirm(`Are you sure you want to remove ${superviseeEmail} from your supervision stable? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/supervisions/${supervisionId}/remove/`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.ok) {
+        // Refresh the dashboard data
+        await fetchSupervisorData()
+        // Show success message
+        alert('Supervisee removed successfully')
+      } else {
+        const errorData = await response.json()
+        alert(errorData.error || 'Failed to remove supervisee')
+      }
+    } catch (error) {
+      console.error('Error removing supervisee:', error)
+      alert('Error removing supervisee')
+    }
+  }
+
   // Fetch real supervisor data from API
   const fetchSupervisorData = async () => {
     try {
@@ -88,6 +120,8 @@ export default function SupervisorDashboard() {
             name: item.supervisee_name || item.supervisee_email || 'Unknown User',
             status: isPrimaryAccepted ? 'on-track' : 'pending',
             role: 'Provisional Psychologist',
+            supervisionId: item.id,
+            email: item.supervisee_email,
             progress: {
               directClient: { current: 0, target: 15.16 },
               clientRelated: { current: 0, target: 41.21 },
@@ -303,10 +337,24 @@ export default function SupervisorDashboard() {
                             <p className="text-xs text-gray-500">{supervisee.role}</p>
                           </div>
                         </div>
-                        <Badge className={getStatusColor(supervisee.status)}>
-                          {getStatusIcon(supervisee.status)}
-                          <span className="ml-1 capitalize">{supervisee.status.replace('-', ' ')}</span>
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge className={getStatusColor(supervisee.status)}>
+                            {getStatusIcon(supervisee.status)}
+                            <span className="ml-1 capitalize">{supervisee.status.replace('-', ' ')}</span>
+                          </Badge>
+                          {supervisee.supervisionId && supervisee.email && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                removeSupervisee(supervisee.supervisionId!, supervisee.email!)
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))

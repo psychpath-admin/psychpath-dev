@@ -4,8 +4,8 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite
-from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer, MeetingSerializer, MeetingCreateSerializer, MeetingInviteSerializer, MeetingInviteResponseSerializer
+from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest
+from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer, MeetingSerializer, MeetingCreateSerializer, MeetingInviteSerializer, MeetingInviteResponseSerializer, DisconnectionRequestSerializer, DisconnectionRequestCreateSerializer, DisconnectionRequestResponseSerializer
 from .email_service import send_supervision_invite_email, send_supervision_response_email, send_supervision_reminder_email, send_supervision_expired_email
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 import base64
@@ -18,6 +18,9 @@ from django.db import IntegrityError, models
 from django.utils import timezone
 import json
 from logging_utils import support_error_handler, audit_data_access, log_data_access, log_supervision_action
+import logging
+
+logger = logging.getLogger(__name__)
 from django.conf import settings
 from django.db.models import Sum
 from datetime import date, timedelta
@@ -40,10 +43,10 @@ def user_profile(request):
         user_profile = UserProfile.objects.get(user=request.user)
         print(f"User profile found: {user_profile.role}")
     except UserProfile.DoesNotExist:
-        return Response({'error': 'User profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Your user profile could not be found. Please contact support if you continue to experience this issue.'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         print(f"Error in user_profile view: {e}")
-        return JsonResponse({'error': f'Unexpected error: {str(e)}'}, status=500)
+        return JsonResponse({'error': 'An unexpected error occurred while loading your profile. Please try again or contact support if the problem persists.'}, status=500)
     
     if request.method == 'GET':
         serializer = UserProfileSerializer(user_profile)
@@ -293,7 +296,7 @@ def me(request):
             'supervisor_welcome_seen': user_profile.supervisor_welcome_seen
         })
     except UserProfile.DoesNotExist:
-        return Response({'error': 'User profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Your user profile could not be found. Please contact support if you continue to experience this issue.'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['POST'])
 def register_terms_agree(request):
@@ -303,7 +306,7 @@ def register_terms_agree(request):
         # For now, just return success
         return Response({'ok': True, 'message': 'Terms agreed successfully'})
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'An unexpected error occurred. Please try again or contact support if the problem persists.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -316,23 +319,23 @@ def register_details_submit(request):
         required_fields = ['first_name', 'last_name', 'email', 'password', 'ahpra_registration_number', 'designation']
         for field in required_fields:
             if not data.get(field):
-                return Response({'error': f'{field} is required'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': f'The field "{field}" is required to complete your registration. Please provide this information and try again.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Provisional start date is only required for provisional psychologists
         if data.get('designation') == 'PROVISIONAL' and not data.get('provisional_start_date'):
-            return Response({'error': 'provisional_start_date is required for provisional psychologists'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Your provisional registration date is required to complete your registration as a provisional psychologist. Please provide this date and try again.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Check if email already exists
         if User.objects.filter(email__iexact=data['email']).exists():
-            return Response({'error': 'Email already registered'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': f'The email address "{data["email"]}" is already registered in our system. Please use a different email address or contact support if you believe this is an error.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Check if AHPRA number already exists
         if UserProfile.objects.filter(ahpra_registration_number=data['ahpra_registration_number']).exists():
-            return Response({'error': 'AHPRA registration number already exists'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': f'The AHPRA registration number "{data["ahpra_registration_number"]}" is already registered in our system. Please verify your registration number or contact support if you believe this is an error.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Validate designation
         if data['designation'] not in [choice[0] for choice in UserRole.choices]:
-            return Response({'error': 'Invalid designation'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': f'The designation "{data["designation"]}" is not valid. Please select a valid role from the available options.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Create verification code and store registration data
         verification_code = EmailVerificationCode.objects.create(
@@ -353,7 +356,7 @@ def register_details_submit(request):
         })
         
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'An unexpected error occurred. Please try again or contact support if the problem persists.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -370,7 +373,7 @@ def register_verify_code(request):
         
         if not all([email, code]):
             print("Missing email or code")
-            return Response({'error': 'Email and verification code are required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Both email address and verification code are required to verify your account. Please check your email for the verification code and try again.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Find verification code
         try:
@@ -385,11 +388,11 @@ def register_verify_code(request):
             # List all codes for this email for debugging
             all_codes = EmailVerificationCode.objects.filter(email=email)
             print(f"All codes for {email}: {[(c.code, c.is_used, c.is_expired()) for c in all_codes]}")
-            return Response({'error': 'Invalid verification code'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'The verification code you entered is incorrect. Please check your email for the correct code and try again.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Check if code is expired
         if verification.is_expired():
-            return Response({'error': 'Verification code has expired'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Your verification code has expired. Please request a new verification code and try again.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Mark code as used
         verification.is_used = True
@@ -494,7 +497,7 @@ def register_verify_code(request):
         })
         
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'An unexpected error occurred. Please try again or contact support if the problem persists.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -534,7 +537,7 @@ def register_complete(request):
         print(f"Extracted data - Email: {email}, Designation: {designation}, AHPRA: {ahpra_registration_number}")
         
         if not all([email, password, first_name, last_name, designation, ahpra_registration_number]):
-            return Response({'error': 'Missing required registration data'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Some required information is missing from your registration. Please ensure all fields are completed and try again.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Check if user already exists (from verification step)
         user = User.objects.filter(email=email).first()
@@ -593,12 +596,12 @@ def register_complete(request):
         
     except IntegrityError as e:
         print(f"IntegrityError: {e}")
-        return Response({'error': 'User already exists'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'An account with this email address already exists. Please use a different email address or contact support if you believe this is an error.'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         print(f"Exception in register_complete: {e}")
         import traceback
         traceback.print_exc()
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'An unexpected error occurred. Please try again or contact support if the problem persists.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -612,7 +615,7 @@ def program_summary(request):
     try:
         user = request.user
         if not hasattr(user, 'profile'):
-            return Response({'error': 'User profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Your user profile could not be found. Please contact support if you continue to experience this issue.'}, status=status.HTTP_400_BAD_REQUEST)
         
         profile = user.profile
         role = profile.role
@@ -650,7 +653,7 @@ def program_summary(request):
         print(f"Exception in program_summary: {e}")
         import traceback
         traceback.print_exc()
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'An unexpected error occurred. Please try again or contact support if the problem persists.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 def get_program_requirements(profile):
@@ -873,7 +876,7 @@ def supervisor_requests(request):
     elif request.method == 'POST':
         # Create a new supervisor request (only for supervisees)
         if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
-            return Response({'error': 'Only supervisees can send supervisor requests'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'Only provisional psychologists and registrars can send supervisor requests. Your current role does not allow this action.'}, status=status.HTTP_403_FORBIDDEN)
         
         serializer = SupervisorRequestSerializer(data=request.data)
         if serializer.is_valid():
@@ -893,11 +896,11 @@ def supervisor_request_response(request, request_id):
         return Response({'error': 'Supervisor request not found'}, status=status.HTTP_404_NOT_FOUND)
     
     if supervisor_request.status != 'PENDING':
-        return Response({'error': 'Request has already been responded to'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'This supervisor request has already been responded to and cannot be modified.'}, status=status.HTTP_400_BAD_REQUEST)
     
     new_status = request.data.get('status')
     if new_status not in ['ACCEPTED', 'DECLINED']:
-        return Response({'error': 'Status must be ACCEPTED or DECLINED'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'You must respond with either "ACCEPTED" or "DECLINED" to this supervisor request.'}, status=status.HTTP_400_BAD_REQUEST)
     
     from django.utils import timezone
     supervisor_request.status = new_status
@@ -1523,6 +1526,71 @@ def supervision_cancel(request, supervision_id):
     return Response({'message': 'Invitation cancelled successfully'})
 
 
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def supervision_remove(request, supervision_id):
+    """Remove a supervisee from supervisor's stable (supervisor only)"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
+        return Response({'error': 'Only supervisors can remove supervisees'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        supervision = Supervision.objects.get(
+            id=supervision_id,
+            supervisor=request.user,
+            status='ACCEPTED'
+        )
+    except Supervision.DoesNotExist:
+        return Response({'error': 'Supervision relationship not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Store supervisee info for notification
+    supervisee_email = supervision.supervisee_email
+    supervisee_user = supervision.supervisee
+    role = supervision.role
+    
+    # Update supervisee's profile to remove supervisor information
+    if supervisee_user and hasattr(supervisee_user, 'profile'):
+        try:
+            supervisee_profile = supervisee_user.profile
+            if role == 'PRIMARY':
+                supervisee_profile.principal_supervisor = ''
+                supervisee_profile.principal_supervisor_email = ''
+                update_fields = ['principal_supervisor', 'principal_supervisor_email']
+            else:
+                supervisee_profile.secondary_supervisor = ''
+                supervisee_profile.secondary_supervisor_email = ''
+                update_fields = ['secondary_supervisor', 'secondary_supervisor_email']
+            
+            supervisee_profile.save(update_fields=update_fields)
+        except Exception as e:
+            # Log error but don't block the removal
+            logger.error(f"Error updating supervisee profile during removal: {str(e)}")
+    
+    # Change status to REJECTED to effectively remove the relationship
+    supervision.status = 'REJECTED'
+    supervision.rejected_at = timezone.now()
+    supervision.save()
+    
+    # Create notification for the supervisee
+    if supervisee_user:
+        try:
+            SupervisionNotification.objects.create(
+                supervision=supervision,
+                notification_type='REMOVED',
+                in_app_sent=True
+            )
+        except Exception as e:
+            logger.error(f"Error creating removal notification: {str(e)}")
+    
+    # Send email notification to supervisee
+    try:
+        send_supervision_removal_email(supervision, supervisee_email)
+    except Exception as e:
+        logger.error(f"Error sending removal email: {str(e)}")
+    
+    return Response({'message': 'Supervisee removed successfully'})
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @support_error_handler
@@ -1880,6 +1948,164 @@ def meeting_stats(request):
         'pending_invites': pending_invites,
         'this_week': this_week
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def log_error(request):
+    """Log error to audit system"""
+    try:
+        data = request.data
+        
+        # Create error log entry
+        error_log = {
+            'user_id': request.user.id,
+            'user_role': request.user.profile.role if hasattr(request.user, 'profile') else 'UNKNOWN',
+            'page_path': data.get('pagePath', ''),
+            'timestamp': data.get('timestamp', timezone.now().isoformat()),
+            'error_type': data.get('errorType', 'UnknownError'),
+            'error_message': data.get('errorMessage', ''),
+            'stack_trace': data.get('stackTrace', ''),
+            'affected_component': data.get('affectedComponent', ''),
+            'user_agent': data.get('userAgent', ''),
+            'additional_data': data.get('additionalData', {})
+        }
+        
+        # Log to audit system
+        logger.error(f"Frontend Error: {error_log}")
+        
+        # In a production system, you might want to store this in a database
+        # For now, we'll just log it to the audit system
+        
+        return Response({'ok': True, 'message': 'Error logged successfully'})
+        
+    except Exception as e:
+        logger.error(f"Failed to log error: {str(e)}")
+        return Response({'error': 'Failed to log error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def disconnection_requests(request):
+    """Get disconnection requests for the current user or create a new one"""
+    if request.method == 'GET':
+        # Get requests where user is either supervisee or supervisor
+        requests = DisconnectionRequest.objects.filter(
+            models.Q(supervisee=request.user) | models.Q(supervisor=request.user)
+        ).order_by('-requested_at')
+        
+        serializer = DisconnectionRequestSerializer(requests, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        # Create a new disconnection request
+        serializer = DisconnectionRequestCreateSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            disconnection_request = serializer.save(supervisee=request.user)
+            
+            # Create notification for supervisor
+            try:
+                SupervisionNotification.objects.create(
+                    supervision=None,  # We'll handle this differently for disconnection requests
+                    notification_type='DISCONNECTION_REQUEST',
+                    in_app_sent=True
+                )
+            except Exception as e:
+                logger.error(f"Error creating disconnection notification: {str(e)}")
+            
+            # Send email notification to supervisor
+            try:
+                send_disconnection_request_email(disconnection_request)
+            except Exception as e:
+                logger.error(f"Error sending disconnection request email: {str(e)}")
+            
+            return Response(DisconnectionRequestSerializer(disconnection_request).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def disconnection_request_detail(request, request_id):
+    """Get or respond to a specific disconnection request"""
+    try:
+        disconnection_request = DisconnectionRequest.objects.get(
+            id=request_id,
+            supervisor=request.user  # Only supervisors can respond
+        )
+    except DisconnectionRequest.DoesNotExist:
+        return Response({'error': 'Disconnection request not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    if request.method == 'GET':
+        serializer = DisconnectionRequestSerializer(disconnection_request)
+        return Response(serializer.data)
+    
+    elif request.method == 'PATCH':
+        action = request.data.get('action')
+        notes = request.data.get('response_notes', '')
+        
+        if action == 'approve':
+            disconnection_request.approve(notes)
+            
+            # Create notification for supervisee
+            try:
+                SupervisionNotification.objects.create(
+                    supervision=None,
+                    notification_type='DISCONNECTION_APPROVED',
+                    in_app_sent=True
+                )
+            except Exception as e:
+                logger.error(f"Error creating disconnection approval notification: {str(e)}")
+            
+            # Send email notification to supervisee
+            try:
+                send_disconnection_response_email(disconnection_request, 'approved')
+            except Exception as e:
+                logger.error(f"Error sending disconnection approval email: {str(e)}")
+            
+        elif action == 'decline':
+            disconnection_request.decline(notes)
+            
+            # Create notification for supervisee
+            try:
+                SupervisionNotification.objects.create(
+                    supervision=None,
+                    notification_type='DISCONNECTION_DECLINED',
+                    in_app_sent=True
+                )
+            except Exception as e:
+                logger.error(f"Error creating disconnection decline notification: {str(e)}")
+            
+            # Send email notification to supervisee
+            try:
+                send_disconnection_response_email(disconnection_request, 'declined')
+            except Exception as e:
+                logger.error(f"Error sending disconnection decline email: {str(e)}")
+        
+        else:
+            return Response({'error': 'Invalid action. Must be "approve" or "decline"'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = DisconnectionRequestSerializer(disconnection_request)
+        return Response(serializer.data)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def disconnection_request_cancel(request, request_id):
+    """Cancel a disconnection request (supervisee only)"""
+    try:
+        disconnection_request = DisconnectionRequest.objects.get(
+            id=request_id,
+            supervisee=request.user,
+            status='PENDING'
+        )
+    except DisconnectionRequest.DoesNotExist:
+        return Response({'error': 'Disconnection request not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    disconnection_request.cancel()
+    return Response({'message': 'Disconnection request cancelled successfully'})
 
 
 # Create your views here.

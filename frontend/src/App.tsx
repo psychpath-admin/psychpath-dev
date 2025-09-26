@@ -1,3 +1,4 @@
+import React from 'react'
 import './App.css'
 import Navbar from '@/components/Navbar'
 import { AuthProvider } from '@/context/AuthContext'
@@ -29,11 +30,19 @@ import RegisterSubscribe from '@/pages/RegisterSubscribe'
 import SupervisorDashboard from '@/pages/SupervisorDashboard'
 import NotificationCenter from '@/pages/NotificationCenter'
 import CalendarPage from '@/pages/CalendarPage'
+import ErrorHelp from '@/pages/ErrorHelp'
+import ErrorBoundary from '@/components/ErrorBoundary'
+import { setupGlobalErrorHandling } from '@/lib/errorLogger'
 import { Toaster } from 'sonner'
 
 function App() {
   const [me, setMe] = useState<{ role?: string } | null>(null)
   const [loaded, setLoaded] = useState(false)
+
+  // Setup global error handling
+  React.useEffect(() => {
+    setupGlobalErrorHandling()
+  }, [])
 
   useEffect(() => {
     console.log('App: Starting auth check')
@@ -88,10 +97,11 @@ function App() {
   }
 
   return (
-    <AuthProvider>
-      <div className="min-h-screen">
-        {!loaded ? null : (
-        <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <div className="min-h-screen">
+          {!loaded ? null : (
+          <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/register" element={<PublicRoute><RegisterTerms /></PublicRoute>} />
@@ -115,15 +125,17 @@ function App() {
           <Route path="/section-a/cra-edit" element={<RequireAuth><CRAEdit /></RequireAuth>} />
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
+          <Route path="/help/errors" element={<ErrorHelp />} />
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
           {me?.role === 'ORG_ADMIN' && <Route path="/org" element={<RequireAuth><OrgDashboard /></RequireAuth>} />}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-      )}
-      <Toaster position="top-right" richColors />
-    </div>
-    </AuthProvider>
+        )}
+        <Toaster position="top-right" richColors />
+      </div>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 

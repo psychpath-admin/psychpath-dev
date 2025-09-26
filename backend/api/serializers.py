@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite
+from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest
 
 class UserProfileSerializer(serializers.ModelSerializer):
     # Ensure prior_hours always a dict
@@ -51,7 +51,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         
         if not re.match(mobile_regex, clean_mobile):
             raise serializers.ValidationError(
-                'Mobile number must be in format: 04xx xxx xxx or +61 4xx xxx xxx'
+                f'The mobile number "{value}" is not valid. Please enter your Australian mobile number starting with 04 (e.g., 0412 345 678) or +61 4 (e.g., +61 412 345 678).'
             )
         
         # Check uniqueness across all users
@@ -61,7 +61,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         existing_profile = UserProfile.objects.filter(mobile=clean_mobile).exclude(id=self.instance.id if self.instance else None).first()
         if existing_profile:
             raise serializers.ValidationError(
-                'This mobile number is already registered to another user.'
+                f'The mobile number "{value}" is already registered to another user. Please use a different mobile number or contact support if you believe this is an error.'
             )
         
         return clean_mobile
@@ -79,6 +79,32 @@ class UserProfileSerializer(serializers.ModelSerializer):
         prior_hours_fields = {'prior_hours_declined', 'prior_hours_submitted', 'prior_hours'}
         if set(data.keys()).issubset(prior_hours_fields):
             return data
+        
+        # Prevent changes to critical dates once they're set
+        if self.instance:
+            # Provisional registration date cannot be changed once set
+            if 'provisional_registration_date' in data and self.instance.provisional_registration_date:
+                if data['provisional_registration_date'] != self.instance.provisional_registration_date:
+                    current_date = self.instance.provisional_registration_date.strftime("%d %B %Y")
+                    raise serializers.ValidationError({
+                        'provisional_registration_date': f'Your Provisional Registration Date is currently set to {current_date} and cannot be changed. This date is locked once saved to ensure compliance with AHPRA requirements. If you need to correct this date, please contact support.'
+                    })
+            
+            # Internship start date cannot be changed once set
+            if 'internship_start_date' in data and self.instance.internship_start_date:
+                if data['internship_start_date'] != self.instance.internship_start_date:
+                    current_date = self.instance.internship_start_date.strftime("%d %B %Y")
+                    raise serializers.ValidationError({
+                        'internship_start_date': f'Your Internship Start Date is currently set to {current_date} and cannot be changed. This date is locked once saved to ensure compliance with AHPRA requirements. If you need to correct this date, please contact support.'
+                    })
+            
+            # Registrar start date cannot be changed once set
+            if 'start_date' in data and self.instance.start_date:
+                if data['start_date'] != self.instance.start_date:
+                    current_date = self.instance.start_date.strftime("%d %B %Y")
+                    raise serializers.ValidationError({
+                        'start_date': f'Your Program Start Date is currently set to {current_date} and cannot be changed. This date is locked once saved to ensure compliance with AHPRA requirements. If you need to correct this date, please contact support.'
+                    })
         
         # Only validate supervisor requirements if the user is actually a SUPERVISOR
         # Don't apply supervisor validation to provisional psychologists or registrars
@@ -150,9 +176,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
                 internship_start_date = getattr(self.instance, 'internship_start_date', None)
             if provisional_reg_date is None and self.instance:
                 provisional_reg_date = getattr(self.instance, 'provisional_registration_date', None)
-            if internship_start_date and provisional_reg_date and internship_start_date <= provisional_reg_date:
+            if internship_start_date and provisional_reg_date and internship_start_date < provisional_reg_date:
                 raise serializers.ValidationError({
-                    'internship_start_date': 'Internship start date must be later than the provisional registration date.'
+                    'internship_start_date': f'Your Internship Start Date ({internship_start_date.strftime("%d %B %Y")}) cannot be before your Provisional Registration Date ({provisional_reg_date.strftime("%d %B %Y")}). Please set your Internship Start Date to the same day or after {provisional_reg_date.strftime("%d %B %Y")}.'
                 })
 
             # Estimated completion weeks must be at least 44 for full-time
@@ -565,3 +591,79 @@ class MeetingInviteResponseSerializer(serializers.ModelSerializer):
         if value not in valid_responses:
             raise serializers.ValidationError(f"Response must be one of: {', '.join(valid_responses)}")
         return value
+
+
+class DisconnectionRequestSerializer(serializers.ModelSerializer):
+    """Serializer for disconnection requests"""
+    supervisee_name = serializers.SerializerMethodField()
+    supervisor_name = serializers.SerializerMethodField()
+    supervisee_email = serializers.CharField(source='supervisee.email', read_only=True)
+    supervisor_email = serializers.CharField(source='supervisor.email', read_only=True)
+    
+    class Meta:
+        model = DisconnectionRequest
+        fields = [
+            'id', 'supervisee', 'supervisor', 'role', 'status', 'message',
+            'requested_at', 'responded_at', 'response_notes', 'created_at', 'updated_at',
+            'supervisee_name', 'supervisor_name', 'supervisee_email', 'supervisor_email'
+        ]
+        read_only_fields = ['supervisee', 'supervisor', 'requested_at', 'responded_at', 'created_at', 'updated_at']
+    
+    def get_supervisee_name(self, obj):
+        if hasattr(obj.supervisee, 'profile'):
+            return f"{obj.supervisee.profile.first_name} {obj.supervisee.profile.last_name}".strip()
+        return obj.supervisee.email
+    
+    def get_supervisor_name(self, obj):
+        if hasattr(obj.supervisor, 'profile'):
+            return f"{obj.supervisor.profile.first_name} {obj.supervisor.profile.last_name}".strip()
+        return obj.supervisor.email
+
+
+class DisconnectionRequestCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating disconnection requests"""
+    
+    class Meta:
+        model = DisconnectionRequest
+        fields = ['supervisor', 'role', 'message']
+    
+    def validate(self, data):
+        # Check if user has a supervision relationship with the supervisor
+        supervisee = self.context['request'].user
+        supervisor = data['supervisor']
+        role = data['role']
+        
+        try:
+            supervision = Supervision.objects.get(
+                supervisor=supervisor,
+                supervisee=supervisee,
+                role=role,
+                status='ACCEPTED'
+            )
+        except Supervision.DoesNotExist:
+            raise serializers.ValidationError(f"You do not have an active {role.lower()} supervision relationship with this supervisor.")
+        
+        # Check if there's already a pending request
+        existing_request = DisconnectionRequest.objects.filter(
+            supervisee=supervisee,
+            supervisor=supervisor,
+            role=role,
+            status='PENDING'
+        ).exists()
+        
+        if existing_request:
+            raise serializers.ValidationError("You already have a pending disconnection request with this supervisor.")
+        
+        return data
+
+
+class DisconnectionRequestResponseSerializer(serializers.ModelSerializer):
+    """Serializer for responding to disconnection requests"""
+    
+    class Meta:
+        model = DisconnectionRequest
+        fields = ['response_notes']
+    
+    def validate(self, data):
+        # The action (approve/decline) will be handled in the view
+        return data

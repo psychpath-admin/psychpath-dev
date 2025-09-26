@@ -119,6 +119,29 @@ export const SupervisionManagement: React.FC<SupervisionManagementProps> = ({ on
     }
   }
 
+  const removeSupervisee = async (supervisionId: number, superviseeEmail: string) => {
+    if (!confirm(`Are you sure you want to remove ${superviseeEmail} from your supervision stable? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const response = await apiFetch(`/api/supervisions/${supervisionId}/remove/`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        toast.success('Supervisee removed successfully')
+        await fetchData()
+      } else {
+        const errorData = await response.json()
+        toast.error(errorData.error || 'Failed to remove supervisee')
+      }
+    } catch (error) {
+      console.error('Error removing supervisee:', error)
+      toast.error('Error removing supervisee')
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       'PENDING': { variant: 'secondary' as const, label: 'Pending', icon: Clock },
@@ -315,15 +338,26 @@ export const SupervisionManagement: React.FC<SupervisionManagementProps> = ({ on
                       </span>
                     </TableCell>
                     <TableCell>
-                      {supervision.status === 'PENDING' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => cancelInvitation(supervision.id)}
-                        >
-                          Cancel
-                        </Button>
-                      )}
+                      <div className="flex gap-2">
+                        {supervision.status === 'PENDING' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => cancelInvitation(supervision.id)}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                        {supervision.status === 'ACCEPTED' && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => removeSupervisee(supervision.id, supervision.supervisee_email)}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -16,6 +16,9 @@ import EndorsementManagementModal from '@/components/EndorsementManagementModal'
 import SupervisorWelcomeOverlay from '@/components/SupervisorWelcomeOverlay'
 import ProvisionalPsychologistWelcomeOverlay from '@/components/ProvisionalPsychologistWelcomeOverlay'
 import { getCityInfo } from '@/lib/cityMapping'
+import { useErrorHandler } from '@/hooks/useErrorHandler'
+import ErrorOverlay from '@/components/ErrorOverlay'
+import DisconnectionRequestModal from '@/components/DisconnectionRequestModal'
 
 interface UserProfile {
   id?: number
@@ -71,6 +74,7 @@ interface UserProfile {
 const UserProfile: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { showError, showErrorOverlay, currentError, dismissError, retryAction, setRetryAction } = useErrorHandler()
   
   const [profile, setProfile] = useState<UserProfile>({
     first_name: '',
@@ -119,6 +123,13 @@ const UserProfile: React.FC = () => {
     weekly_commitment_hours: 17.5,
     first_login_completed: false
   })
+  
+  // Track which critical dates have been successfully saved
+  const [savedDates, setSavedDates] = useState({
+    provisional_registration_date: false,
+    internship_start_date: false,
+    start_date: false
+  })
   const [loading, setLoading] = useState(true)
   const [isAuthed, setIsAuthed] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -135,6 +146,11 @@ const UserProfile: React.FC = () => {
   const [priorHoursToSubmit, setPriorHoursToSubmit] = useState<any>(null)
   const [showPriorHoursAcknowledgment, setShowPriorHoursAcknowledgment] = useState(false)
   const [hasPriorHoursDecision, setHasPriorHoursDecision] = useState(false)
+  
+  // Disconnection request modal state
+  const [showDisconnectionModal, setShowDisconnectionModal] = useState(false)
+  const [disconnectionRole, setDisconnectionRole] = useState<'PRIMARY' | 'SECONDARY'>('PRIMARY')
+  const [fieldErrors, setFieldErrors] = useState<{[key: string]: string}>({})
 
   const roles = [
     { value: 'INTERN', label: 'Intern' },
@@ -352,6 +368,14 @@ const UserProfile: React.FC = () => {
         }
         
         setProfile(data)
+        
+        // Set saved dates state based on loaded profile
+        setSavedDates({
+          provisional_registration_date: !!data.provisional_registration_date,
+          internship_start_date: !!data.internship_start_date,
+          start_date: !!data.start_date
+        })
+        
         if (data.signature_url) {
           setSignaturePreview(data.signature_url)
         }
@@ -497,6 +521,15 @@ const UserProfile: React.FC = () => {
     const { name, value } = e.target
     setProfile(prev => ({ ...prev, [name]: value }))
     setIsDirty(true)
+    
+    // Clear field error when user starts typing
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[name]
+        return newErrors
+      })
+    }
   }
 
   const handlePriorHoursChange = (field: string, value: string) => {
@@ -873,6 +906,12 @@ const UserProfile: React.FC = () => {
   }
 
   const handleSave = async () => {
+    // Prevent multiple simultaneous submissions
+    if (saving) {
+      console.log('Save already in progress, ignoring duplicate submission')
+      return
+    }
+
     // Validate mobile number
     if (!validateMobileNumber(profile.mobile || '')) {
       return
@@ -905,13 +944,17 @@ const UserProfile: React.FC = () => {
             formData.append(key, value ? 'true' : 'false')
           } else if (typeof value === 'number') {
             formData.append(key, value.toString())
-          } else if (typeof value === 'string' && value !== '') {
-            // Clean mobile number before sending
-            if (key === 'mobile') {
-              const cleanMobile = value.replace(/[\s\-]/g, '')
-              formData.append(key, cleanMobile)
-            } else {
-              formData.append(key, value)
+          } else if (typeof value === 'string') {
+            // Always include critical date fields, even if empty (for validation)
+            const criticalFields = ['provisional_registration_date', 'internship_start_date', 'start_date']
+            if (value !== '' || criticalFields.includes(key)) {
+              // Clean mobile number before sending
+              if (key === 'mobile') {
+                const cleanMobile = value.replace(/[\s\-]/g, '')
+                formData.append(key, cleanMobile)
+              } else {
+                formData.append(key, value)
+              }
             }
           } else if (typeof value === 'object' && value !== null) {
             formData.append(key, JSON.stringify(value))
@@ -963,6 +1006,68 @@ const UserProfile: React.FC = () => {
         if (!response.ok) {
           const errorData = await response.json()
           console.error('Profile update failed:', errorData)
+          
+          // For validation errors, extract the specific error message and field errors
+          if (response.status === 400 && errorData.error) {
+            // Check if it's a string that starts with "Validation failed:"
+            if (typeof errorData.error === 'string' && errorData.error.startsWith('Validation failed: ')) {
+              // Extract the Python dict part after "Validation failed: "
+              const dictPart = errorData.error.substring('Validation failed: '.length)
+              
+              // Extract the error message using regex to find the ErrorDetail string content
+              const errorMatch = dictPart.match(/ErrorDetail\(string='([^']+)', code='invalid'\)/)
+              
+              if (errorMatch) {
+                const cleanMessage = errorMatch[1]
+                
+                // Extract field name from the dict structure
+                const fieldMatch = dictPart.match(/'([^']+)': \[ErrorDetail/)
+                
+                if (fieldMatch) {
+                  const fieldName = fieldMatch[1]
+                  
+                  // Set field errors for highlighting
+                  setFieldErrors({ [fieldName]: cleanMessage })
+                  
+                  // Throw the clean error message
+                  throw new Error(cleanMessage)
+                }
+              }
+              
+              // If regex extraction fails, throw the raw error
+              throw new Error(errorData.error)
+            }
+            // If it's a field-specific error object, extract the actual message and track field errors
+            else if (typeof errorData.error === 'object') {
+              const fieldErrorMessages: {[key: string]: string} = {}
+              let primaryErrorMessage = ''
+              
+              // Extract errors for each field
+              Object.entries(errorData.error).forEach(([fieldName, errors]) => {
+                if (Array.isArray(errors) && errors.length > 0) {
+                  // Handle ErrorDetail objects or direct strings
+                  const errorDetail = errors[0]
+                  const actualMessage = errorDetail.string || errorDetail.message || errorDetail
+                  fieldErrorMessages[fieldName] = actualMessage
+                  if (!primaryErrorMessage) {
+                    primaryErrorMessage = actualMessage
+                  }
+                }
+              })
+              
+              // Set field errors for highlighting
+              setFieldErrors(fieldErrorMessages)
+              
+              // Throw the primary error message
+              if (primaryErrorMessage) {
+                throw new Error(primaryErrorMessage)
+              }
+            }
+            
+            // If none of the above conditions are met, throw the raw error
+            throw new Error(errorData.error)
+          }
+          
           throw new Error(errorData.error || 'Failed to update profile')
         }
 
@@ -975,6 +1080,9 @@ const UserProfile: React.FC = () => {
         // Reload profile to get updated data from server
         await loadProfile()
         setIsDirty(false)
+        
+        // Clear any field errors on successful save
+        setFieldErrors({})
         
         // Check if prior hours decision was made during this save
         if (profile.prior_hours_submitted || profile.prior_hours_declined) {
@@ -990,7 +1098,79 @@ const UserProfile: React.FC = () => {
       }
     } catch (error) {
       console.error('Error saving profile:', error)
-      alert(String(error))
+      
+      // Check if this is a validation error (clean message format or old format)
+      const isValidationError = error.message.includes('Validation failed') ||
+                               error.message.includes('cannot be before') ||
+                               error.message.includes('cannot be changed once set') ||
+                               error.message.includes('mobile number') ||
+                               error.message.includes('Mobile') ||
+                               error.message.includes('already registered') ||
+                               error.message.includes('already exists') ||
+                               error.message.includes('not valid') ||
+                               error.message.includes('required') ||
+                               error.message.includes('invalid') ||
+                               error.message.includes('exceed')
+      
+      // For validation errors, ensure form fields remain editable
+      if (isValidationError) {
+        // Parse the error to determine which fields failed validation
+        const errorMessage = error.message.toLowerCase()
+        
+        // Reset savedDates for fields that failed validation
+        setSavedDates(prev => {
+          const newSavedDates = { ...prev }
+          
+          // If internship_start_date validation failed, make it editable again
+          if (errorMessage.includes('internship_start_date') || errorMessage.includes('internship start date')) {
+            newSavedDates.internship_start_date = false
+          }
+          
+          // If provisional_registration_date validation failed, make it editable again
+          if (errorMessage.includes('provisional_registration_date') || errorMessage.includes('provisional registration date')) {
+            newSavedDates.provisional_registration_date = false
+          }
+          
+          return newSavedDates
+        })
+      }
+      
+      // Only set retry action for non-validation errors
+      if (!isValidationError) {
+        setRetryAction(() => handleSave)
+      }
+      
+      // Determine the specific error ID based on the error message
+      let specificErrorId = 'PROFILE_SAVE_ERROR'
+      if (error.message.includes('Internship Start Date') && error.message.includes('Provisional Registration Date')) {
+        specificErrorId = 'ERR-001'
+      } else if (error.message.includes('cannot be changed once set')) {
+        specificErrorId = 'ERR-002'
+      } else if (error.message.includes('mobile number') || error.message.includes('Mobile')) {
+        specificErrorId = 'ERR-003'
+      } else if (error.message.includes('already registered') && error.message.includes('email')) {
+        specificErrorId = 'ERR-004'
+      } else if (error.message.includes('AHPRA registration number') && error.message.includes('already exists')) {
+        specificErrorId = 'ERR-005'
+      } else if (error.message.includes('verification code') && (error.message.includes('incorrect') || error.message.includes('expired'))) {
+        specificErrorId = 'ERR-006'
+      } else if (error.message.includes('user profile') && error.message.includes('not found')) {
+        specificErrorId = 'ERR-007'
+      } else if (error.message.includes('simulated') && error.message.includes('exceed')) {
+        specificErrorId = 'ERR-008'
+      } else if (error.message.includes('minimum') && error.message.includes('weeks')) {
+        specificErrorId = 'ERR-009'
+      } else if (error.message.includes('email') && error.message.includes('not valid')) {
+        specificErrorId = 'ERR-010'
+      }
+      
+      await showError(error as Error, {
+        title: 'Profile Save Failed',
+        summary: error.message, // Use the actual error message
+        explanation: 'There was an issue saving your profile. This could be due to validation errors or a network problem.',
+        userAction: 'Please check the highlighted fields and correct any errors, then try again.',
+        errorId: specificErrorId
+      })
     } finally {
       setSaving(false)
     }
@@ -999,6 +1179,16 @@ const UserProfile: React.FC = () => {
   const handleCancel = () => {
     loadProfile()
     setIsDirty(false)
+  }
+
+  const handleDisconnectionRequest = (role: 'PRIMARY' | 'SECONDARY') => {
+    setDisconnectionRole(role)
+    setShowDisconnectionModal(true)
+  }
+
+  const handleDisconnectionSuccess = () => {
+    // Refresh the profile to update supervisor information
+    loadProfile()
   }
 
   if (loading) {
@@ -1140,7 +1330,11 @@ const UserProfile: React.FC = () => {
                 value={profile.mobile || ''}
                 onChange={handleInputChange}
                 placeholder="e.g., +61412345678"
+                className={fieldErrors.mobile ? 'border-red-500 bg-red-50' : ''}
               />
+              {fieldErrors.mobile && (
+                <p className="text-red-600 text-sm mt-1">{fieldErrors.mobile}</p>
+              )}
               <p className="text-xs text-gray-500 mt-1">
                 Australian mobile format: +614XXXXXXXX (optional)
               </p>
@@ -1249,32 +1443,82 @@ const UserProfile: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <Label htmlFor="provisional_registration_date">Provisional Registration Date</Label>
-                  <Input
-                    id="provisional_registration_date"
-                    name="provisional_registration_date"
-                    type="date"
-                    value={profile.provisional_registration_date || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, provisional_registration_date: e.target.value }))}
-                    max={new Date().toISOString().split('T')[0]} // Cannot be future date
-                    required
-                  />
+                  {savedDates.provisional_registration_date ? (
+                    <div className="mt-2 p-3 bg-gray-50 rounded-md text-sm text-gray-700">
+                      {format(new Date(profile.provisional_registration_date), "PPP")}
+                    </div>
+                  ) : (
+                    <div>
+                      <Input
+                        id="provisional_registration_date"
+                        name="provisional_registration_date"
+                        type="date"
+                        value={profile.provisional_registration_date || ''}
+                        onChange={(e) => {
+                          setProfile(prev => ({ ...prev, provisional_registration_date: e.target.value }))
+                          // Clear field error when user starts typing
+                          if (fieldErrors.provisional_registration_date) {
+                            setFieldErrors(prev => {
+                              const newErrors = { ...prev }
+                              delete newErrors.provisional_registration_date
+                              return newErrors
+                            })
+                          }
+                        }}
+                        max={new Date().toISOString().split('T')[0]} // Cannot be future date
+                        required
+                        className={fieldErrors.provisional_registration_date ? 'border-red-500 bg-red-50' : ''}
+                      />
+                      {fieldErrors.provisional_registration_date && (
+                        <p className="text-red-600 text-sm mt-1">{fieldErrors.provisional_registration_date}</p>
+                      )}
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Date when you received provisional registration from AHPRA
+                    {savedDates.provisional_registration_date 
+                      ? 'Date when you received provisional registration from AHPRA (cannot be changed once set)'
+                      : 'Date when you received provisional registration from AHPRA'
+                    }
                   </p>
                 </div>
                 
                 <div>
                   <Label htmlFor="internship_start_date">Internship Start Date</Label>
-                  <Input
-                    id="internship_start_date"
-                    name="internship_start_date"
-                    type="date"
-                    value={profile.internship_start_date || profile.provisional_start_date || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, internship_start_date: e.target.value }))}
-                    required
-                  />
+                  {savedDates.internship_start_date ? (
+                    <div className="mt-2 p-3 bg-gray-50 rounded-md text-sm text-gray-700">
+                      {format(new Date(profile.internship_start_date), "PPP")}
+                    </div>
+                  ) : (
+                    <div>
+                      <Input
+                        id="internship_start_date"
+                        name="internship_start_date"
+                        type="date"
+                        value={profile.internship_start_date || profile.provisional_start_date || ''}
+                        onChange={(e) => {
+                          setProfile(prev => ({ ...prev, internship_start_date: e.target.value }))
+                          // Clear field error when user starts typing
+                          if (fieldErrors.internship_start_date) {
+                            setFieldErrors(prev => {
+                              const newErrors = { ...prev }
+                              delete newErrors.internship_start_date
+                              return newErrors
+                            })
+                          }
+                        }}
+                        required
+                        className={fieldErrors.internship_start_date ? 'border-red-500 bg-red-50' : ''}
+                      />
+                      {fieldErrors.internship_start_date && (
+                        <p className="text-red-600 text-sm mt-1">{fieldErrors.internship_start_date}</p>
+                      )}
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
-                    When you officially started your 5+1 internship
+                    {savedDates.internship_start_date 
+                      ? 'When you officially started your 5+1 internship (cannot be changed once set)'
+                      : 'When you officially started your 5+1 internship'
+                    }
                   </p>
                 </div>
 
@@ -1671,6 +1915,71 @@ const UserProfile: React.FC = () => {
                 Add any additional supervisors or administrative contacts here
               </p>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Your Supervisors Section - Only for provisionals and registrars */}
+      {(profile.role === 'PROVISIONAL' || profile.role === 'REGISTRAR') && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl font-semibold text-textDark">Your Supervisors</CardTitle>
+            <p className="text-sm text-gray-600">Manage your supervision relationships</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Primary Supervisor */}
+            {profile.principal_supervisor && (
+              <div className="border rounded-lg p-4 bg-blue-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-textDark">Primary Supervisor</h4>
+                    <p className="text-sm text-gray-600">{profile.principal_supervisor}</p>
+                    {profile.principal_supervisor_email && (
+                      <p className="text-xs text-gray-500">{profile.principal_supervisor_email}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDisconnectionRequest('PRIMARY')}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    Request Disconnection
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Secondary Supervisor */}
+            {profile.secondary_supervisor && (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-textDark">Secondary Supervisor</h4>
+                    <p className="text-sm text-gray-600">{profile.secondary_supervisor}</p>
+                    {profile.secondary_supervisor_email && (
+                      <p className="text-xs text-gray-500">{profile.secondary_supervisor_email}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDisconnectionRequest('SECONDARY')}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    Request Disconnection
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* No supervisors message */}
+            {!profile.principal_supervisor && !profile.secondary_supervisor && (
+              <div className="text-center py-8 text-gray-500">
+                <p>You currently have no supervisors assigned.</p>
+                <p className="text-sm">Complete your supervision details above to add supervisors.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -2199,6 +2508,28 @@ const UserProfile: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+      )}
+      
+      {/* Error Overlay */}
+      {showErrorOverlay && currentError && (
+        <ErrorOverlay
+          isOpen={showErrorOverlay}
+          onClose={dismissError}
+          onRetry={retryAction || undefined}
+          error={currentError}
+        />
+      )}
+
+      {/* Disconnection Request Modal */}
+      {showDisconnectionModal && (
+        <DisconnectionRequestModal
+          isOpen={showDisconnectionModal}
+          onClose={() => setShowDisconnectionModal(false)}
+          supervisorName={disconnectionRole === 'PRIMARY' ? profile.principal_supervisor : profile.secondary_supervisor || ''}
+          supervisorEmail={disconnectionRole === 'PRIMARY' ? profile.principal_supervisor_email : profile.secondary_supervisor_email || ''}
+          role={disconnectionRole}
+          onSuccess={handleDisconnectionSuccess}
+        />
       )}
     </div>
   )

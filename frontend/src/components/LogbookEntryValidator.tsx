@@ -44,8 +44,8 @@ export function LogbookEntryValidator({
         onValidationChange?.(result.isValid, result.errors)
       } catch (error) {
         console.error('Validation error:', error)
-        setValidationResult({ isValid: false, errors: ['Validation failed'] })
-        onValidationChange?.(false, ['Validation failed'])
+        setValidationResult({ isValid: false, errors: ['Unable to validate this entry. Please check your input and try again.'] })
+        onValidationChange?.(false, ['Unable to validate this entry. Please check your input and try again.'])
       } finally {
         setIsValidating(false)
       }
@@ -78,7 +78,7 @@ export function LogbookEntryValidator({
   const getStatusText = () => {
     if (isValidating) return 'Validating...'
     if (validationResult.isValid) return 'Valid'
-    return 'Validation failed'
+    return 'Entry validation failed'
   }
 
   const getStatusColor = () => {

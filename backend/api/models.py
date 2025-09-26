@@ -560,4 +560,92 @@ class MeetingInvite(models.Model):
         self.save()
 
 
+class DisconnectionRequest(models.Model):
+    """Tracks disconnection requests between supervisors and supervisees"""
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('DECLINED', 'Declined'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+    
+    ROLE_CHOICES = [
+        ('PRIMARY', 'Primary Supervisor'),
+        ('SECONDARY', 'Secondary Supervisor'),
+    ]
+    
+    # Request details
+    supervisee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='disconnection_requests_sent')
+    supervisor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='disconnection_requests_received')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    # Request content
+    message = models.TextField(blank=True, help_text="Optional message from supervisee to supervisor")
+    
+    # Timestamps
+    requested_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    
+    # Response details
+    response_notes = models.TextField(blank=True, help_text="Optional notes from supervisor")
+    
+    # Audit fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-requested_at']
+        unique_together = ['supervisee', 'supervisor', 'role', 'status']
+    
+    def __str__(self):
+        return f"{self.supervisee.profile.first_name} {self.supervisee.profile.last_name} → {self.supervisor.profile.first_name} {self.supervisor.profile.last_name} ({self.role}) - {self.status}"
+    
+    def approve(self, notes=None):
+        """Approve the disconnection request"""
+        self.status = 'APPROVED'
+        self.response_notes = notes or ''
+        self.responded_at = timezone.now()
+        self.save()
+        
+        # Remove the supervision relationship
+        try:
+            supervision = Supervision.objects.get(
+                supervisor=self.supervisor,
+                supervisee=self.supervisee,
+                role=self.role,
+                status='ACCEPTED'
+            )
+            supervision.status = 'REJECTED'
+            supervision.rejected_at = timezone.now()
+            supervision.save()
+            
+            # Update supervisee profile to remove supervisor information
+            supervisee_profile = self.supervisee.profile
+            if self.role == 'PRIMARY':
+                supervisee_profile.principal_supervisor = ''
+                supervisee_profile.principal_supervisor_email = ''
+                supervisee_profile.save(update_fields=['principal_supervisor', 'principal_supervisor_email'])
+            else:
+                supervisee_profile.secondary_supervisor = ''
+                supervisee_profile.secondary_supervisor_email = ''
+                supervisee_profile.save(update_fields=['secondary_supervisor', 'secondary_supervisor_email'])
+                
+        except Supervision.DoesNotExist:
+            pass  # Supervision relationship already removed
+    
+    def decline(self, notes=None):
+        """Decline the disconnection request"""
+        self.status = 'DECLINED'
+        self.response_notes = notes or ''
+        self.responded_at = timezone.now()
+        self.save()
+    
+    def cancel(self):
+        """Cancel the disconnection request"""
+        self.status = 'CANCELLED'
+        self.responded_at = timezone.now()
+        self.save()
+
+
 # Create your models here.
