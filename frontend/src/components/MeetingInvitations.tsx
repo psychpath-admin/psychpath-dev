@@ -11,7 +11,8 @@ import {
   CheckCircle, 
   XCircle, 
   HelpCircle,
-  MessageSquare
+  MessageSquare,
+  Download
 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { toast } from 'sonner'
@@ -138,6 +139,30 @@ export default function MeetingInvitations() {
     }
   }
 
+  const downloadICS = async (meetingId: number) => {
+    try {
+      const response = await apiFetch(`/api/meetings/${meetingId}/download/`)
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `meeting_${meetingId}.ics`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        toast.success('Calendar file downloaded successfully')
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to download calendar file')
+      }
+    } catch (error) {
+      console.error('Error downloading ICS file:', error)
+      toast.error('Failed to download calendar file')
+    }
+  }
+
   const pendingInvites = invites.filter(invite => invite.response === 'PENDING')
   const respondedInvites = invites.filter(invite => invite.response !== 'PENDING')
 
@@ -167,8 +192,8 @@ export default function MeetingInvitations() {
               <div key={invite.id} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="font-medium text-lg">{invite.meeting.title}</h3>
-                    <p className="text-sm text-gray-600">Organized by {invite.meeting.organizer_name}</p>
+                    <h3 className="font-medium text-lg">{invite.meeting?.title || 'Meeting Title Not Available'}</h3>
+                    <p className="text-sm text-gray-600">Organized by {invite.meeting?.organizer_name || 'Unknown'}</p>
                   </div>
                   <Badge variant="outline" className="text-xs">
                     Pending Response
@@ -179,11 +204,11 @@ export default function MeetingInvitations() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Clock className="h-4 w-4" />
-                      {formatDateTime(invite.meeting.start_time)}
+                      {invite.meeting ? formatDateTime(invite.meeting.start_time) : 'Time not available'}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Clock className="h-4 w-4" />
-                      {formatTime(invite.meeting.start_time)} - {formatTime(invite.meeting.end_time)}
+                      {invite.meeting ? `${formatTime(invite.meeting.start_time)} - ${formatTime(invite.meeting.end_time)}` : 'Time not available'}
                     </div>
                     {invite.meeting.location && (
                       <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -261,6 +286,15 @@ export default function MeetingInvitations() {
                       <MessageSquare className="h-4 w-4 mr-1" />
                       Respond
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => downloadICS(invite.meeting.id)}
+                      className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Download Calendar
+                    </Button>
                     {invite.meeting.meeting_url && (
                       <Button
                         size="sm"
@@ -292,8 +326,8 @@ export default function MeetingInvitations() {
               <div key={invite.id} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="font-medium text-lg">{invite.meeting.title}</h3>
-                    <p className="text-sm text-gray-600">Organized by {invite.meeting.organizer_name}</p>
+                    <h3 className="font-medium text-lg">{invite.meeting?.title || 'Meeting Title Not Available'}</h3>
+                    <p className="text-sm text-gray-600">Organized by {invite.meeting?.organizer_name || 'Unknown'}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {getResponseIcon(invite.response)}
@@ -325,15 +359,26 @@ export default function MeetingInvitations() {
                   )}
                 </div>
 
-                {invite.meeting.meeting_url && (
+                <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => window.open(invite.meeting.meeting_url, '_blank')}
+                    onClick={() => downloadICS(invite.meeting.id)}
+                    className="text-blue-600 border-blue-300 hover:bg-blue-50"
                   >
-                    Join Meeting
+                    <Download className="h-4 w-4 mr-1" />
+                    Download Calendar
                   </Button>
-                )}
+                  {invite.meeting.meeting_url && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => window.open(invite.meeting.meeting_url, '_blank')}
+                    >
+                      Join Meeting
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </CardContent>

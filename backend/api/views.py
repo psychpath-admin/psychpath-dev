@@ -1,4 +1,4 @@
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
@@ -454,21 +454,30 @@ def register_verify_code(request):
                         raise ValueError(f"Invalid date format: {start_date_str}. Must be in YYYY-MM-DD format.")
                 
                 # Create user profile with registration data
-                profile = UserProfile.objects.create(
-                    user=user,
-                    role=registration_data.get('designation', UserRole.SUPERVISOR),
-                    first_name=registration_data.get('first_name', ''),
-                    middle_name=registration_data.get('middle_name', ''),
-                    last_name=registration_data.get('last_name', ''),
-                    ahpra_registration_number=registration_data.get('ahpra_registration_number', psy_number or 'PSY0000000000'),
-                    city=registration_data.get('city', ''),
-                    state=registration_data.get('state', ''),
-                    timezone=registration_data.get('timezone', ''),
-                    mobile=registration_data.get('mobile', ''),
-                    provisional_start_date=provisional_start_date,
-                    profile_completed=False,
-                    first_login_completed=False,
-                )
+                profile_data = {
+                    'user': user,
+                    'role': registration_data.get('designation', UserRole.SUPERVISOR),
+                    'first_name': registration_data.get('first_name', ''),
+                    'middle_name': registration_data.get('middle_name', ''),
+                    'last_name': registration_data.get('last_name', ''),
+                    'ahpra_registration_number': registration_data.get('ahpra_registration_number', psy_number or 'PSY0000000000'),
+                    'city': registration_data.get('city', ''),
+                    'state': registration_data.get('state', ''),
+                    'timezone': registration_data.get('timezone', ''),
+                    'mobile': registration_data.get('mobile', ''),
+                    'provisional_start_date': provisional_start_date,
+                    'profile_completed': False,
+                    'first_login_completed': False,
+                }
+                
+                # Set registrar defaults
+                if registration_data.get('designation') == UserRole.REGISTRAR:
+                    profile_data['qualification_level'] = 'MASTERS'  # Default to Masters
+                    profile_data['target_weeks'] = 88  # Masters default: 88 weeks
+                    profile_data['weekly_commitment'] = 34.1  # Masters default: 3000 hours / 88 weeks
+                    profile_data['program_type'] = 'registrar'
+                
+                profile = UserProfile.objects.create(**profile_data)
                 
                 # Mark verification as used only after successful creation
                 verification.is_used = True
@@ -575,17 +584,26 @@ def register_complete(request):
             
             # Create user profile
             print(f"Creating user profile with role: {designation}")
-            profile = UserProfile.objects.create(
-                user=user,
-                role=designation,
-                first_name=first_name,
-                middle_name=middle_name,
-                last_name=last_name,
-                ahpra_registration_number=ahpra_registration_number,
-                provisional_start_date=provisional_start_date,
-                profile_completed=False,
-                first_login_completed=False,
-            )
+            profile_data = {
+                'user': user,
+                'role': designation,
+                'first_name': first_name,
+                'middle_name': middle_name,
+                'last_name': last_name,
+                'ahpra_registration_number': ahpra_registration_number,
+                'provisional_start_date': provisional_start_date,
+                'profile_completed': False,
+                'first_login_completed': False,
+            }
+            
+            # Set registrar defaults
+            if designation == UserRole.REGISTRAR:
+                profile_data['qualification_level'] = 'MASTERS'  # Default to Masters
+                profile_data['target_weeks'] = 88  # Masters default: 88 weeks
+                profile_data['weekly_commitment'] = 34.1  # Masters default: 3000 hours / 88 weeks
+                profile_data['program_type'] = 'registrar'
+            
+            profile = UserProfile.objects.create(**profile_data)
             print(f"User profile created with ID: {profile.id}")
         
         return Response({
@@ -1263,6 +1281,48 @@ def user_lookup(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @support_error_handler
+def supervisees_list(request):
+    """Get list of supervisees for the current supervisor"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
+        return Response({'error': 'Only supervisors can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Get accepted supervisions for this supervisor
+    supervisions = Supervision.objects.filter(
+        supervisor=request.user,
+        status='ACCEPTED'
+    ).select_related('supervisee')
+    
+    supervisees = []
+    for supervision in supervisions:
+        if supervision.supervisee:
+            try:
+                profile = supervision.supervisee.profile
+                supervisees.append({
+                    'id': supervision.supervisee.id,
+                    'email': supervision.supervisee.email,
+                    'first_name': profile.first_name,
+                    'last_name': profile.last_name,
+                    'full_name': f"{profile.first_name} {profile.last_name}".strip(),
+                    'role': supervision.role,
+                    'supervision_id': supervision.id
+                })
+            except UserProfile.DoesNotExist:
+                supervisees.append({
+                    'id': supervision.supervisee.id,
+                    'email': supervision.supervisee.email,
+                    'first_name': '',
+                    'last_name': '',
+                    'full_name': supervision.supervisee.email,
+                    'role': supervision.role,
+                    'supervision_id': supervision.id
+                })
+    
+    return Response(supervisees)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
 def available_supervisors(request):
     """Get available supervisors for a specific endorsement"""
     endorsement = request.GET.get('endorsement')
@@ -1299,6 +1359,31 @@ def supervision_invite(request):
     if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
         return Response({'error': 'Only supervisors can invite supervisees'}, status=status.HTTP_403_FORBIDDEN)
     
+    # Check if supervisor profile is complete
+    supervisor_profile = request.user.profile
+    if not supervisor_profile.profile_completed:
+        return Response({
+            'error': 'You must complete your supervisor profile before inviting supervisees. Please complete all required fields in your profile.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Check if supervisor has confirmed they are board-approved
+    if not supervisor_profile.is_board_approved_supervisor:
+        return Response({
+            'error': 'You must confirm that you are a Board-approved supervisor before inviting supervisees. Please update your profile to indicate your Board approval status.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Check if supervisor has set their registration date
+    if not supervisor_profile.supervisor_registration_date:
+        return Response({
+            'error': 'You must provide your supervisor registration date before inviting supervisees. Please add your registration date in your profile.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Check if supervisor has selected at least one supervision scope
+    if not supervisor_profile.can_supervise_provisionals and not supervisor_profile.can_supervise_registrars:
+        return Response({
+            'error': 'You must select at least one supervision scope (provisionals or registrars) before inviting supervisees. Please update your profile to indicate what you can supervise.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
     serializer = SupervisionInviteSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -1327,8 +1412,20 @@ def supervision_invite(request):
             try:
                 user = User.objects.get(email=email)
                 user_exists = True
+                user_profile = user.profile
             except User.DoesNotExist:
                 user_exists = False
+                user_profile = None
+            
+            # Endorsement validation for registrars
+            if role == 'PRIMARY' and user_exists and user_profile and user_profile.role == 'REGISTRAR':
+                supervisor_profile = request.user.profile
+                if not supervisor_profile.can_supervise_registrar(user_profile):
+                    required_endorsements = supervisor_profile.get_required_endorsements_for_registrar(user_profile)
+                    if required_endorsements:
+                        endorsement_names = [dict(UserProfile.AOPE_CHOICES).get(e, e) for e in required_endorsements]
+                        errors.append(f"Cannot invite {email}: You need {', '.join(endorsement_names)} endorsement(s) to supervise this registrar")
+                        continue
             
             # Check if supervision relationship already exists
             existing_supervision = Supervision.objects.filter(
@@ -1727,7 +1824,6 @@ def supervision_assignments(request):
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
-@support_error_handler
 def meeting_list(request):
     """List meetings for the authenticated user or create a new meeting"""
     if request.method == 'GET':
@@ -1819,13 +1915,24 @@ def meeting_list(request):
             # Create notifications for attendees
             for invite in meeting.invites.all():
                 from logbook_app.models import Notification
+                # Get organizer name from user profile
+                organizer_name = meeting.organizer.email
+                try:
+                    if hasattr(meeting.organizer, 'profile'):
+                        profile = meeting.organizer.profile
+                        full_name = f"{profile.first_name} {profile.last_name}".strip()
+                        if full_name:
+                            organizer_name = full_name
+                except:
+                    pass  # Use email if profile access fails
+                
                 Notification.create_notification(
                     user=invite.attendee,
                     notification_type='meeting_invite_pending',
                     payload={
                         'meetingId': meeting.id,
                         'meetingTitle': meeting.title,
-                        'organizerName': meeting.organizer_name,
+                        'organizerName': organizer_name,
                         'startTime': meeting.start_time.isoformat(),
                         'location': meeting.location or 'Virtual Meeting'
                     },
@@ -1834,8 +1941,8 @@ def meeting_list(request):
             
             response_serializer = MeetingSerializer(meeting)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
@@ -1969,6 +2076,126 @@ def meeting_stats(request):
         'pending_invites': pending_invites,
         'this_week': this_week
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def meeting_ics_download(request, meeting_id):
+    """Download ICS file for a specific meeting"""
+    try:
+        meeting = Meeting.objects.get(id=meeting_id)
+        
+        # Check if user has access to this meeting (either organizer or attendee)
+        has_access = (
+            meeting.organizer == request.user or
+            meeting.attendees.filter(id=request.user.id).exists()
+        )
+        
+        if not has_access:
+            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Generate ICS content
+        ics_content = generate_ics_content(meeting)
+        
+        # Create response with ICS file
+        response = HttpResponse(ics_content, content_type='text/calendar; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="meeting_{meeting_id}.ics"'
+        return response
+        
+    except Meeting.DoesNotExist:
+        return Response({'error': 'Meeting not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': f'Failed to generate ICS file: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def generate_ics_content(meeting):
+    """Generate ICS file content for a meeting"""
+    import uuid
+    from datetime import datetime
+    
+    # Generate unique ID for the event
+    event_id = str(uuid.uuid4())
+    
+    # Format dates for ICS (UTC format)
+    start_utc = meeting.start_time.strftime('%Y%m%dT%H%M%SZ')
+    end_utc = meeting.end_time.strftime('%Y%m%dT%H%M%SZ')
+    created_utc = meeting.created_at.strftime('%Y%m%dT%H%M%SZ')
+    
+    # Escape special characters in text fields
+    def escape_ics_text(text):
+        if not text:
+            return ''
+        return text.replace('\\', '\\\\').replace(',', '\\,').replace(';', '\\;').replace('\n', '\\n').replace('\r', '')
+    
+    # Get organizer info
+    organizer_name = f"{meeting.organizer.first_name} {meeting.organizer.last_name}".strip() or meeting.organizer.email
+    organizer_email = meeting.organizer.email
+    
+    # Get attendee list
+    attendees = []
+    for attendee in meeting.attendees.all():
+        attendee_name = f"{attendee.first_name} {attendee.last_name}".strip() or attendee.email
+        attendees.append(f"ATTENDEE:CN={escape_ics_text(attendee_name)}:mailto:{attendee.email}")
+    
+    # Get meeting details
+    title = escape_ics_text(meeting.title)
+    description = escape_ics_text(meeting.description or '')
+    location = escape_ics_text(meeting.location or '')
+    
+    # Build ICS content
+    ics_lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//PsychPATH//Meeting Calendar//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        f'UID:{event_id}',
+        f'DTSTART:{start_utc}',
+        f'DTEND:{end_utc}',
+        f'DTSTAMP:{created_utc}',
+        f'ORGANIZER:CN={escape_ics_text(organizer_name)}:mailto:{organizer_email}',
+        f'SUMMARY:{title}',
+        f'DESCRIPTION:{description}',
+        f'LOCATION:{location}',
+        f'STATUS:CONFIRMED',
+        f'TRANSP:OPAQUE',
+    ]
+    
+    # Add attendees
+    ics_lines.extend(attendees)
+    
+    # Add meeting URL if available
+    if meeting.meeting_url:
+        ics_lines.append(f'URL:{meeting.meeting_url}')
+    
+    # Add recurrence if applicable
+    if meeting.is_recurring and meeting.recurrence_type != 'NONE':
+        freq_map = {
+            'DAILY': 'DAILY',
+            'WEEKLY': 'WEEKLY',
+            'BIWEEKLY': 'WEEKLY;INTERVAL=2',
+            'MONTHLY': 'MONTHLY'
+        }
+        freq = freq_map.get(meeting.recurrence_type, 'WEEKLY')
+        
+        rrule = f'RRULE:FREQ={freq}'
+        if meeting.recurrence_end_date:
+            end_date_utc = meeting.recurrence_end_date.strftime('%Y%m%dT%H%M%SZ')
+            rrule += f';UNTIL={end_date_utc}'
+        elif meeting.recurrence_count:
+            rrule += f';COUNT={meeting.recurrence_count}'
+        
+        ics_lines.append(rrule)
+    
+    # End the event and calendar
+    ics_lines.extend([
+        'END:VEVENT',
+        'END:VCALENDAR'
+    ])
+    
+    return '\r\n'.join(ics_lines)
 
 
 @api_view(['POST'])

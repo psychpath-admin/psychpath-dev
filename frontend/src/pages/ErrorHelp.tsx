@@ -32,6 +32,8 @@ const ErrorHelp: React.FC = () => {
     const urlParams = new URLSearchParams(window.location.search)
     const errorId = urlParams.get('errorId')
     const summary = urlParams.get('summary')
+    const explanation = urlParams.get('explanation')
+    const userAction = urlParams.get('userAction')
     
     if (errorId) {
       // Try to find exact match by errorId
@@ -39,6 +41,13 @@ const ErrorHelp: React.FC = () => {
       if (exactMatch) {
         setSelectedError(exactMatch)
         setHighlightedErrorId(errorId)
+        // Scroll to the error immediately
+        setTimeout(() => {
+          const element = document.getElementById(`error-${errorId}`)
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        }, 100)
         return
       }
     }
@@ -59,8 +68,30 @@ const ErrorHelp: React.FC = () => {
           errorId: summaryMatch.id,
           description: `I encountered this error: ${summaryMatch.summary}\n\n${summaryMatch.explanation}`
         }))
+        // Scroll to the error immediately
+        setTimeout(() => {
+          const element = document.getElementById(`error-${summaryMatch.id}`)
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        }, 100)
         return
       }
+    }
+    
+    // If we have explanation and userAction from URL, create a custom error entry
+    if (explanation && userAction) {
+      const customError: ErrorEntry = {
+        id: errorId || 'CUSTOM-ERROR',
+        summary: summary || 'Custom Error',
+        explanation: explanation,
+        stepsToResolve: userAction.split('\n').filter(step => step.trim()),
+        category: 'General',
+        frequency: 1
+      }
+      setSelectedError(customError)
+      setHighlightedErrorId(customError.id)
+      return
     }
     
     // If no exact match, try to find by keywords from the error
@@ -75,6 +106,13 @@ const ErrorHelp: React.FC = () => {
       if (keywordMatch) {
         setSelectedError(keywordMatch)
         setHighlightedErrorId(keywordMatch.id)
+        // Scroll to the error immediately
+        setTimeout(() => {
+          const element = document.getElementById(`error-${keywordMatch.id}`)
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        }, 100)
       }
     }
   }, [])
@@ -296,6 +334,140 @@ const ErrorHelp: React.FC = () => {
       ],
       category: 'Client',
       frequency: 5
+    },
+    {
+      id: 'ENDORSEMENT-001',
+      summary: 'Endorsement Required for Supervision',
+      explanation: 'You cannot supervise this registrar because you do not have the required professional endorsement. Supervisors must have the same Area of Practice Endorsement (AOPE) as the registrar they wish to supervise. This is a requirement set by AHPRA to ensure supervisors have the appropriate qualifications for their supervisees.',
+      stepsToResolve: [
+        'Go to your Profile page',
+        'Click "Manage Endorsements" in the Supervisor Endorsements section',
+        'Add the required endorsement type (e.g., Clinical Psychology, Forensic Psychology, etc.)',
+        'Enter the endorsement date and issuing body (usually AHPRA)',
+        'Save the endorsement and return to the supervision invitation',
+        'Try inviting the registrar again',
+        'If you believe you already have the required endorsement, contact support to verify your profile'
+      ],
+      category: 'Validation',
+      frequency: 12
+    },
+    {
+      id: 'SUPERVISOR-PROFILE-001',
+      summary: 'Supervisor Profile Incomplete',
+      explanation: 'You cannot invite supervisees because your supervisor profile is not complete. All required fields must be filled out before you can start supervising others.',
+      stepsToResolve: [
+        'Go to your Profile page',
+        'Complete all required fields in the Supervisor Profile section',
+        'Ensure you have filled in your personal information, contact details, and supervision preferences',
+        'Save your profile and try inviting supervisees again',
+        'If you are unsure which fields are required, contact support for assistance'
+      ],
+      category: 'Validation',
+      frequency: 8
+    },
+    {
+      id: 'SUPERVISOR-PROFILE-002',
+      summary: 'Board Approval Required',
+      explanation: 'You must confirm that you are a Board-approved supervisor before inviting supervisees. This is a requirement to ensure all supervisors have the necessary qualifications and approval from the Psychology Board.',
+      stepsToResolve: [
+        'Go to your Profile page',
+        'In the Supervisor Profile section, find "Are you a Board-approved supervisor?"',
+        'Select "Yes" if you are Board-approved',
+        'If you are not Board-approved, you cannot supervise others until you obtain Board approval',
+        'Contact the Psychology Board to obtain supervisor approval if needed',
+        'Save your profile and try inviting supervisees again'
+      ],
+      category: 'Validation',
+      frequency: 6
+    },
+    {
+      id: 'SUPERVISOR-PROFILE-003',
+      summary: 'Supervisor Registration Date Required',
+      explanation: 'You must provide your supervisor registration date before inviting supervisees. This is the date when you were officially approved as a supervisor by the Psychology Board.',
+      stepsToResolve: [
+        'Go to your Profile page',
+        'In the Supervisor Profile section, find "Supervisor Registration Date"',
+        'Enter the date when you were approved as a supervisor by the Psychology Board',
+        'This date should be on your supervisor approval certificate from AHPRA',
+        'Save your profile and try inviting supervisees again',
+        'If you cannot find this date, contact the Psychology Board for assistance'
+      ],
+      category: 'Validation',
+      frequency: 5
+    },
+    {
+      id: 'SUPERVISOR-PROFILE-004',
+      summary: 'Supervision Scope Required',
+      explanation: 'You must select at least one supervision scope before inviting supervisees. This indicates what type of psychologists you are qualified to supervise.',
+      stepsToResolve: [
+        'Go to your Profile page',
+        'In the Supervisor Profile section, find the supervision scope options',
+        'Select at least one of the following: "Can supervise provisionals" or "Can supervise registrars"',
+        'Choose based on your qualifications and Board approval',
+        'Save your profile and try inviting supervisees again',
+        'If you are unsure what you can supervise, check with the Psychology Board'
+      ],
+      category: 'Validation',
+      frequency: 4
+    },
+    {
+      id: 'MEETING-006',
+      summary: 'Location or Meeting URL Required',
+      explanation: 'You must provide either a physical location or a meeting URL so attendees know where to join the meeting. This ensures all participants can find the meeting location.',
+      stepsToResolve: [
+        'Check the Location field - enter a physical meeting location (e.g., "Conference Room A", "123 Main St, City")',
+        'OR check the Meeting URL field - enter a video conference link (e.g., "https://zoom.us/j/123456789")',
+        'You only need to fill ONE of these fields, not both',
+        'If it\'s an in-person meeting, use the Location field',
+        'If it\'s an online meeting, use the Meeting URL field',
+        'If it\'s a hybrid meeting, you can fill both fields',
+        'Save the meeting once you\'ve entered at least one location option'
+      ],
+      category: 'Validation',
+      frequency: 3
+    },
+    {
+      id: 'MEETING-003',
+      summary: 'Meeting Duration Required',
+      explanation: 'You must specify how long the meeting will last. The duration must be a positive number of minutes.',
+      stepsToResolve: [
+        'Check the Duration field in the meeting form',
+        'Enter a valid duration in minutes (e.g., 30, 60, 90)',
+        'Make sure the duration is greater than 0',
+        'Common meeting durations: 30 minutes, 60 minutes, 90 minutes, 120 minutes',
+        'Save the meeting once you\'ve entered a valid duration'
+      ],
+      category: 'Validation',
+      frequency: 2
+    },
+    {
+      id: 'MEETING-004',
+      summary: 'End Time Must Be After Start Time',
+      explanation: 'The meeting end time must be after the start time. This error should not occur if duration is calculated correctly, but may indicate a data validation issue.',
+      stepsToResolve: [
+        'Check that your meeting duration is greater than 0 minutes',
+        'Verify that your start time is valid and in the future',
+        'Try refreshing the page and re-entering your meeting details',
+        'If the problem persists, contact support as this may indicate a system issue',
+        'Ensure you\'re not entering negative or zero duration values'
+      ],
+      category: 'Validation',
+      frequency: 1
+    },
+    {
+      id: 'MEETING-API-001',
+      summary: 'Meeting Creation Failed - Server Error',
+      explanation: 'An unexpected server error occurred while trying to create or update your meeting. This could be due to server issues, database problems, or system maintenance.',
+      stepsToResolve: [
+        'Try refreshing the page and attempting to create the meeting again',
+        'Check that all required fields are filled out correctly',
+        'Ensure your internet connection is stable',
+        'If the problem persists, try creating the meeting at a different time',
+        'Contact support if the issue continues - this may indicate a system problem',
+        'Try creating a simpler meeting (without recurrence or complex settings) to test'
+      ],
+      category: 'System',
+      frequency: 2
     }
   ]
 
@@ -373,9 +545,10 @@ const ErrorHelp: React.FC = () => {
                   {filteredErrors.map((error) => (
                     <div
                       key={error.id}
+                      id={`error-${error.id}`}
                       className={`p-4 border rounded-lg cursor-pointer transition-colors ${
                         highlightedErrorId === error.id
-                          ? 'border-blue-500 bg-blue-50 shadow-md'
+                          ? 'border-yellow-400 bg-yellow-50 shadow-lg'
                           : 'border-gray-200 hover:bg-gray-50'
                       }`}
                       onClick={() => setSelectedError(error)}
@@ -387,7 +560,7 @@ const ErrorHelp: React.FC = () => {
                               {error.summary}
                             </h3>
                             {highlightedErrorId === error.id && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                              <span className="px-2 py-1 bg-yellow-200 text-yellow-800 text-xs font-medium rounded-full animate-pulse">
                                 Your Error
                               </span>
                             )}

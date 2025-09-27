@@ -108,7 +108,7 @@ const UserProfile: React.FC = () => {
     target_weeks: 44, // Default to minimum weeks for interns
     weekly_commitment: 17.5, // Default to full-time hours for interns
     aope: '',
-    qualification_level: '',
+    qualification_level: 'MASTERS', // Default to Masters for registrars
     // Supervisor-specific fields
     is_board_approved_supervisor: false,
     supervisor_registration_date: '',
@@ -367,6 +367,24 @@ const UserProfile: React.FC = () => {
           }
         }
         
+        // Set default values for registrars
+        if (data.role === 'REGISTRAR') {
+          // Default qualification level to Masters if not set
+          if (!data.qualification_level) {
+            data.qualification_level = 'MASTERS'
+          }
+          
+          // Set default target weeks and weekly commitment based on qualification level
+          const defaults = getRegistrarDefaults(data.qualification_level)
+          if (!data.target_weeks && defaults.target_weeks) {
+            data.target_weeks = defaults.target_weeks
+          }
+          if (!data.weekly_commitment && defaults.weekly_commitment) {
+            data.weekly_commitment = defaults.weekly_commitment
+          }
+        }
+        
+        console.log('Profile loaded:', data.role, 'qualification_level:', data.qualification_level)
         setProfile(data)
         
         // Set saved dates state based on loaded profile
@@ -1162,13 +1180,22 @@ const UserProfile: React.FC = () => {
         specificErrorId = 'ERR-009'
       } else if (error.message.includes('email') && error.message.includes('not valid')) {
         specificErrorId = 'ERR-010'
+      } else if (error.message.includes('file too large') || error.message.includes('2MB')) {
+        specificErrorId = 'FILE_TOO_LARGE'
+      } else if (error.message.includes('fetch') || error.message.includes('network')) {
+        specificErrorId = 'NETWORK_ERROR'
+      } else if (error.message.includes('401') || error.message.includes('unauthorized')) {
+        specificErrorId = 'SESSION_EXPIRED'
+      } else if (error.message.includes('500') || error.message.includes('server error')) {
+        specificErrorId = 'SERVER_ERROR'
+      } else if (error.message.includes('required') && error.message.includes('field')) {
+        specificErrorId = 'REQUIRED_FIELD'
+      } else if (error.message.includes('validation') || error.message.includes('invalid')) {
+        specificErrorId = 'INVALID_FORMAT'
       }
       
       await showError(error as Error, {
         title: 'Profile Save Failed',
-        summary: error.message, // Use the actual error message
-        explanation: 'There was an issue saving your profile. This could be due to validation errors or a network problem.',
-        userAction: 'Please check the highlighted fields and correct any errors, then try again.',
         errorId: specificErrorId
       })
     } finally {
@@ -1195,6 +1222,8 @@ const UserProfile: React.FC = () => {
     return <div className="container mx-auto py-8">Loading profile...</div>
   }
 
+  console.log('UserProfile render - profile.role:', profile.role, 'qualification_level:', profile.qualification_level)
+  
   return (
     <div className="container mx-auto py-8 space-y-8">
       <div className="flex items-center justify-between">
@@ -1575,7 +1604,8 @@ const UserProfile: React.FC = () => {
                     name="target_weeks"
                     type="number"
                     value={profile.target_weeks || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, target_weeks: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    readOnly
+                    className="bg-gray-50"
                     placeholder="Auto-calculated based on qualification"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -1590,7 +1620,8 @@ const UserProfile: React.FC = () => {
                     type="number"
                     step="0.1"
                     value={profile.weekly_commitment || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, weekly_commitment: e.target.value ? Math.round(parseFloat(e.target.value) * 10) / 10 : undefined }))}
+                    readOnly
+                    className="bg-gray-50"
                     placeholder="Auto-calculated based on qualification"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -1603,6 +1634,7 @@ const UserProfile: React.FC = () => {
             {/* Registrar-specific fields */}
             {profile.role === 'REGISTRAR' && (
               <>
+                {console.log('Rendering registrar fields, profile.role:', profile.role, 'qualification_level:', profile.qualification_level)}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <Label htmlFor="aope">Area of Practice Endorsement (AoPE)</Label>
@@ -1661,6 +1693,8 @@ const UserProfile: React.FC = () => {
                       onValueChange={(value) => {
                         // Update qualification level and set default values based on AHPRA rules
                         const defaults = getRegistrarDefaults(value)
+                        console.log('Qualification level changed to:', value)
+                        console.log('Defaults for', value, ':', defaults)
                         setProfile(prev => ({ 
                           ...prev, 
                           qualification_level: value,
@@ -1670,21 +1704,38 @@ const UserProfile: React.FC = () => {
                       }}
                       className="mt-2"
                     >
+                      {console.log('RadioGroup rendered with value:', profile.qualification_level)}
                       <div className="space-y-2">
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="MASTERS" id="qual_masters" />
+                          <RadioGroupItem 
+                            value="MASTERS" 
+                            id="qual_masters" 
+                            onClick={() => console.log('MASTERS clicked')}
+                          />
                           <Label htmlFor="qual_masters" className="text-sm">Masters</Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="COMBINED" id="qual_combined" />
+                          <RadioGroupItem 
+                            value="COMBINED" 
+                            id="qual_combined" 
+                            onClick={() => console.log('COMBINED clicked')}
+                          />
                           <Label htmlFor="qual_combined" className="text-sm">Combined Masters/PhD</Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="DOCTORATE" id="qual_doctorate" />
+                          <RadioGroupItem 
+                            value="DOCTORATE" 
+                            id="qual_doctorate" 
+                            onClick={() => console.log('DOCTORATE clicked')}
+                          />
                           <Label htmlFor="qual_doctorate" className="text-sm">Doctorate</Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="SECOND_AOPE" id="qual_second" />
+                          <RadioGroupItem 
+                            value="SECOND_AOPE" 
+                            id="qual_second" 
+                            onClick={() => console.log('SECOND_AOPE clicked')}
+                          />
                           <Label htmlFor="qual_second" className="text-sm">Second AoPE</Label>
                         </div>
                       </div>
@@ -1806,23 +1857,20 @@ const UserProfile: React.FC = () => {
                     />
                     <Label htmlFor="can-supervise-registrars">Supervise registrars</Label>
                   </div>
+                  
+                  {/* Endorsement requirement message - appears directly below the checkbox when checked */}
+                  {profile.can_supervise_registrars && (
+                    <div className="ml-6 mt-2 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                      <p className="text-sm text-amber-800">
+                        <strong>Important:</strong> To supervise registrars, you must add your professional endorsements. 
+                        Use the "Manage Endorsements" section above to add the required endorsements for the areas you can supervise.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 {!profile.can_supervise_provisionals && !profile.can_supervise_registrars && (
                   <p className="text-red-600 text-sm">Please select at least one supervision scope.</p>
                 )}
-              </div>
-            )}
-
-            {/* Note about endorsements for registrar supervision */}
-            {profile.is_board_approved_supervisor && profile.can_supervise_registrars && (
-              <div className="space-y-4 border-t pt-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-blue-800 mb-2">Registrar Supervision</h4>
-                  <p className="text-sm text-blue-700">
-                    To supervise registrars, you must add valid endorsements through the <strong>Manage Endorsements</strong> section above. 
-                    You will not be able to supervise registrars until you have logged valid endorsements.
-                  </p>
-                </div>
               </div>
             )}
           </CardContent>

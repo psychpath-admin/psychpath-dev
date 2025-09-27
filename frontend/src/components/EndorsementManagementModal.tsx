@@ -26,14 +26,14 @@ interface EndorsementManagementModalProps {
 
 const ENDORSEMENT_OPTIONS = [
   { value: 'CLINICAL', label: 'Clinical Psychology' },
-  { value: 'COUNSELLING', label: 'Counselling Psychology' },
-  { value: 'EDUCATIONAL', label: 'Educational Psychology' },
   { value: 'FORENSIC', label: 'Forensic Psychology' },
+  { value: 'ORGANISATIONAL', label: 'Organisational Psychology' },
+  { value: 'SPORT_EXERCISE', label: 'Sport and Exercise Psychology' },
+  { value: 'COMMUNITY', label: 'Community Psychology' },
+  { value: 'COUNSELLING', label: 'Counselling Psychology' },
+  { value: 'EDUCATIONAL_DEVELOPMENTAL', label: 'Educational and Developmental Psychology' },
   { value: 'HEALTH', label: 'Health Psychology' },
   { value: 'NEUROPSYCHOLOGY', label: 'Neuropsychology' },
-  { value: 'ORGANISATIONAL', label: 'Organisational Psychology' },
-  { value: 'SPORT', label: 'Sport Psychology' },
-  { value: 'COMMUNITY', label: 'Community Psychology' },
 ];
 
 const ENDORSEMENT_BODIES = [
@@ -53,7 +53,7 @@ export const EndorsementManagementModal: React.FC<EndorsementManagementModalProp
   const [editingEndorsement, setEditingEndorsement] = useState<Endorsement | null>(null);
   const [formData, setFormData] = useState({
     endorsement: '',
-    endorsement_date: '',
+    endorsement_date: new Date().toISOString().split('T')[0], // Default to today's date
     endorsement_body: '',
     is_active: true
   });
@@ -183,9 +183,10 @@ export const EndorsementManagementModal: React.FC<EndorsementManagementModalProp
 
   // Reset form
   const resetForm = () => {
+    const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
     setFormData({
       endorsement: '',
-      endorsement_date: '',
+      endorsement_date: today, // Set default to today's date
       endorsement_body: '',
       is_active: true
     });

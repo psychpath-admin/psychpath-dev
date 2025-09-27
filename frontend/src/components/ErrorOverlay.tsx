@@ -88,10 +88,12 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
   }
 
   const handleDismiss = () => {
+    console.log('handleDismiss called')
     onClose()
   }
 
   const handleGetHelp = () => {
+    console.log('handleGetHelp called')
     // Pass error details as URL parameters for highlighting
     const params = new URLSearchParams()
     if (error.errorId) {
@@ -112,7 +114,7 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" style={{ pointerEvents: 'auto' }}>
       <div
         ref={overlayRef}
         className="w-full max-w-md mx-4"
@@ -121,7 +123,7 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
         aria-labelledby="error-title"
         aria-describedby="error-description"
       >
-        <Card className="border-red-200 bg-white shadow-xl">
+        <Card className="border-red-200 bg-white shadow-xl" style={{ pointerEvents: 'auto' }}>
           <CardHeader className="pb-4">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">

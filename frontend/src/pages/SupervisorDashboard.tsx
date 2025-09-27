@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import SupervisionManagement from '@/components/SupervisionManagement'
 import { useNotifications } from '@/hooks/useNotifications'
+import { useAuth } from '@/context/AuthContext'
 import { 
   Users, 
   FileText, 
@@ -48,6 +49,7 @@ interface DashboardStats {
 
 export default function SupervisorDashboard() {
   console.log('SupervisorDashboard: Component starting')
+  const { user } = useAuth()
   const [selectedSupervisee, setSelectedSupervisee] = useState<string | null>(null)
   const [stats, setStats] = useState<DashboardStats>({
     totalSupervisees: 0,
@@ -97,9 +99,12 @@ export default function SupervisorDashboard() {
   }
 
   // Fetch real supervisor data from API
-  const fetchSupervisorData = async () => {
+  const fetchSupervisorData = async (isBackgroundRefresh = false) => {
     try {
-      setLoading(true)
+      // Only show loading spinner on initial load, not background refreshes
+      if (!isBackgroundRefresh) {
+        setLoading(true)
+      }
       
       // Fetch supervision relationships (both pending and accepted)
       const superviseesResponse = await fetch('/api/supervisions/', {
@@ -139,6 +144,9 @@ export default function SupervisorDashboard() {
         console.log('SupervisorDashboard: transformed items:', transformed)
         console.log('SupervisorDashboard: active items:', active)
         setSupervisees(active)
+        
+        // Reset poll interval on success
+        if (pollMs !== 5000) setPollMs(5000)
 
         // Update stats based on active supervisions
         const totalSupervisees = active.length
@@ -188,14 +196,45 @@ export default function SupervisorDashboard() {
         overdueLogbooks: 0,
         onTrack: 0
       })
+      // Exponential backoff on errors
+      setPollMs(Math.min(pollMs * 2, 60000)) // backoff up to 60s
     } finally {
-      setLoading(false)
+      // Only hide loading spinner on initial load, not background refreshes
+      if (!isBackgroundRefresh) {
+        setLoading(false)
+      }
     }
   }
+
+  // Auto-refresh state
+  const [pollMs, setPollMs] = useState(5000) // 5s, will backoff on errors
 
   // Fetch data on component mount
   useEffect(() => {
     fetchSupervisorData()
+  }, [])
+
+  // Auto-refresh supervisor data on interval (pause when hidden)
+  useEffect(() => {
+    if (document.hidden) return
+    const id = setInterval(() => {
+      fetchSupervisorData(true) // Background refresh - no loading spinner
+    }, pollMs)
+    return () => clearInterval(id)
+  }, [pollMs])
+
+  // Refresh immediately on tab focus or visibility change
+  useEffect(() => {
+    const onFocus = () => fetchSupervisorData(true) // Background refresh
+    const onVisibility = () => {
+      if (!document.hidden) fetchSupervisorData(true) // Background refresh
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
 
   const getStatusColor = (status: string) => {
@@ -246,7 +285,12 @@ export default function SupervisorDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Supervisor Dashboard</h1>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {user?.first_name && user?.last_name 
+                  ? `${user.first_name} ${user.last_name} Dashboard (${user.email})`
+                  : 'Supervisor Dashboard'
+                }
+              </h1>
               <p className="text-gray-600 mt-1">
                 {supervisees.length > 0 ? `${supervisees.length} supervisee${supervisees.length === 1 ? '' : 's'}` : 'No supervisees yet'}
               </p>

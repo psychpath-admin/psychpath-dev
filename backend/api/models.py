@@ -116,6 +116,44 @@ class UserProfile(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.user.get_username()} ({self.role})"
+    
+    def can_supervise_registrar(self, registrar_profile):
+        """
+        Check if this supervisor can supervise a specific registrar based on endorsements.
+        For registrars, the supervisor must have the same endorsement as the registrar's AOPE.
+        """
+        if self.role != UserRole.SUPERVISOR or not self.is_board_approved_supervisor:
+            return False
+        
+        if not self.can_supervise_registrars:
+            return False
+        
+        # Get supervisor's endorsements
+        supervisor_endorsements = set(
+            self.user.supervisor_endorsements.filter(is_active=True).values_list('endorsement', flat=True)
+        )
+        
+        # Check if supervisor has the registrar's AOPE endorsement
+        if registrar_profile.aope and registrar_profile.aope not in supervisor_endorsements:
+            return False
+        
+        return True
+    
+    def get_required_endorsements_for_registrar(self, registrar_profile):
+        """
+        Get the endorsements required for this supervisor to supervise a specific registrar.
+        """
+        if not registrar_profile.aope:
+            return []
+        
+        supervisor_endorsements = set(
+            self.user.supervisor_endorsements.filter(is_active=True).values_list('endorsement', flat=True)
+        )
+        
+        if registrar_profile.aope not in supervisor_endorsements:
+            return [registrar_profile.aope]
+        
+        return []
 
 
 class EPA(models.Model):
@@ -317,14 +355,14 @@ class SupervisorEndorsement(models.Model):
     """Tracks supervisor endorsements for specific areas of practice"""
     ENDORSEMENT_CHOICES = [
         ('CLINICAL', 'Clinical Psychology'),
-        ('COUNSELLING', 'Counselling Psychology'),
-        ('EDUCATIONAL', 'Educational Psychology'),
         ('FORENSIC', 'Forensic Psychology'),
+        ('ORGANISATIONAL', 'Organisational Psychology'),
+        ('SPORT_EXERCISE', 'Sport and Exercise Psychology'),
+        ('COMMUNITY', 'Community Psychology'),
+        ('COUNSELLING', 'Counselling Psychology'),
+        ('EDUCATIONAL_DEVELOPMENTAL', 'Educational and Developmental Psychology'),
         ('HEALTH', 'Health Psychology'),
         ('NEUROPSYCHOLOGY', 'Neuropsychology'),
-        ('ORGANISATIONAL', 'Organisational Psychology'),
-        ('SPORT', 'Sport Psychology'),
-        ('COMMUNITY', 'Community Psychology'),
     ]
     
     supervisor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='supervisor_endorsements')

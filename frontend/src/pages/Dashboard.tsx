@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getSectionAEntries, getPDMetrics, getSupervisionMetrics, getProgramSummary } from '@/lib/api'
+import { useAuth } from '@/context/AuthContext'
 import type { PDMetrics } from '@/types/pd'
 import type { SupervisionMetrics } from '@/types/supervision'
 import type { ProgramSummary } from '@/types/program'
@@ -50,6 +51,7 @@ interface DashboardProps {
 
 export default function Dashboard({ userRole }: DashboardProps) {
   console.log('Dashboard: Component rendering, userRole:', userRole)
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<Entry[]>([])
   const [pdMetrics, setPdMetrics] = useState<PDMetrics | null>(null)
@@ -487,7 +489,12 @@ export default function Dashboard({ userRole }: DashboardProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-headings text-3xl text-textDark">Provisional Dashboard</h1>
+        <h1 className="font-headings text-3xl text-textDark">
+          {user?.first_name && user?.last_name 
+            ? `${user.first_name} ${user.last_name} Dashboard (${user.email})`
+            : 'Provisional Dashboard'
+          }
+        </h1>
         <div className="flex gap-2">
           <button
             onClick={() => {
