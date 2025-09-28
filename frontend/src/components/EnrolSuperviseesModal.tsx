@@ -98,10 +98,31 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
           setEmails([''])
           onEnrolmentComplete?.()
         } else {
+          // Debug: Log the errors to see what we're getting
+          console.log('Invitation errors:', data.errors)
+          
           // Check for endorsement validation errors
           const endorsementErrors = data.errors.filter(error => 
             error.includes('You need') && error.includes('endorsement')
           )
+          
+          // Check for existing supervision relationship errors
+          const existingSupervisionErrors = data.errors.filter(error => 
+            error.includes('already has an active supervision relationship') ||
+            error.includes('already has a secondary supervisor') ||
+            error.includes('must first have a Primary Supervisor')
+          )
+          
+          // Check for database schema errors
+          const databaseErrors = data.errors.filter(error => 
+            error.includes('no such column') || 
+            error.includes('database') || 
+            error.includes('schema') ||
+            error.includes('api_supervisorendorsement') ||
+            (error.includes('endorsement') && !error.includes('You need'))
+          )
+          
+          console.log('Database errors detected:', databaseErrors)
           
           if (endorsementErrors.length > 0) {
             // Show error overlay for endorsement validation errors
@@ -110,6 +131,24 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
               {
                 title: 'Supervision Invitation Failed',
                 errorId: 'ENDORSEMENT-001'
+              }
+            )
+          } else if (existingSupervisionErrors.length > 0) {
+            // Show error overlay for existing supervision relationship errors
+            showError(
+              new Error('Registrar Already Has Supervisor'),
+              {
+                title: 'Supervision Invitation Failed',
+                errorId: 'EXISTING-SUPERVISION-001'
+              }
+            )
+          } else if (databaseErrors.length > 0) {
+            // Show error overlay for database/schema errors
+            showError(
+              new Error('System Configuration Error'),
+              {
+                title: 'Supervision Invitation Failed',
+                errorId: 'DATABASE-001'
               }
             )
           } else {

@@ -1417,14 +1417,44 @@ def supervision_invite(request):
                 user_exists = False
                 user_profile = None
             
-            # Endorsement validation for registrars
-            if role == 'PRIMARY' and user_exists and user_profile and user_profile.role == 'REGISTRAR':
+            # Check if registrar already has an active supervision relationship
+            if user_exists and user_profile and user_profile.role == 'REGISTRAR':
+                existing_active_supervisions = Supervision.objects.filter(
+                    supervisee=user,
+                    status='ACCEPTED'
+                )
+                
+                # Check for existing primary supervision
+                existing_primary = existing_active_supervisions.filter(role='PRIMARY').first()
+                # Check for existing secondary supervision
+                existing_secondary = existing_active_supervisions.filter(role='SECONDARY').first()
+                
+                if role == 'PRIMARY':
+                    # Primary supervisors cannot be added if there's already any active supervision
+                    if existing_primary or existing_secondary:
+                        existing_supervisor_name = f"{existing_primary.supervisor.profile.first_name} {existing_primary.supervisor.profile.last_name}".strip() if existing_primary else f"{existing_secondary.supervisor.profile.first_name} {existing_secondary.supervisor.profile.last_name}".strip()
+                        errors.append(f"Cannot invite {email} as Primary Supervisor: This registrar already has an active supervision relationship with {existing_supervisor_name}")
+                        continue
+                elif role == 'SECONDARY':
+                    # Secondary supervisors cannot be added if there's already a secondary supervisor
+                    if existing_secondary:
+                        existing_supervisor_name = f"{existing_secondary.supervisor.profile.first_name} {existing_secondary.supervisor.profile.last_name}".strip()
+                        errors.append(f"Cannot invite {email} as Secondary Supervisor: This registrar already has a secondary supervisor ({existing_supervisor_name})")
+                        continue
+                    # Secondary supervisors require a primary supervisor to exist first
+                    if not existing_primary:
+                        errors.append(f"Cannot invite {email} as Secondary Supervisor: This registrar must first have a Primary Supervisor")
+                        continue
+            
+            # Endorsement validation for registrars (applies to both primary and secondary supervisors)
+            if role in ['PRIMARY', 'SECONDARY'] and user_exists and user_profile and user_profile.role == 'REGISTRAR':
                 supervisor_profile = request.user.profile
                 if not supervisor_profile.can_supervise_registrar(user_profile):
                     required_endorsements = supervisor_profile.get_required_endorsements_for_registrar(user_profile)
                     if required_endorsements:
                         endorsement_names = [dict(UserProfile.AOPE_CHOICES).get(e, e) for e in required_endorsements]
-                        errors.append(f"Cannot invite {email}: You need {', '.join(endorsement_names)} endorsement(s) to supervise this registrar")
+                        role_display = "Primary Supervisor" if role == 'PRIMARY' else "Secondary Supervisor"
+                        errors.append(f"Cannot invite {email} as {role_display}: You need {', '.join(endorsement_names)} endorsement(s) to supervise this registrar")
                         continue
             
             # Check if supervision relationship already exists

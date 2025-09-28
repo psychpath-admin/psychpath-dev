@@ -111,9 +111,9 @@ const errorDatabase: Record<string, { summary: string; explanation: string; user
   
   // Supervision Errors
   'ENDORSEMENT-001': {
-    summary: 'Endorsement Required for Supervision',
-    explanation: 'You cannot supervise this registrar because you do not have the required professional endorsement. Supervisors must have the same Area of Practice Endorsement (AOPE) as the registrar they wish to supervise.',
-    userAction: 'Go to your Profile page, click "Manage Endorsements", and add the required endorsement type for the registrar you wish to supervise.'
+    summary: 'Endorsement Mismatch - Cannot Supervise This Registrar',
+    explanation: 'You cannot supervise this registrar because your professional endorsements do not match their Area of Practice Endorsement (AOPE). Supervisors must have the same endorsement type as the registrar they wish to supervise to ensure proper professional oversight.',
+    userAction: 'Go to your Profile page, click "Manage Endorsements", and add the required endorsement type for the registrar you wish to supervise. Alternatively, you can only invite registrars who have endorsements that match your existing ones.'
   },
   'SUPERVISOR-PROFILE-001': {
     summary: 'Supervisor Profile Incomplete',
@@ -135,6 +135,16 @@ const errorDatabase: Record<string, { summary: string; explanation: string; user
     explanation: 'You must select at least one supervision scope before inviting supervisees. This indicates what type of psychologists you are qualified to supervise.',
     userAction: 'Go to your Profile page and select at least one of the following: "Can supervise provisionals" or "Can supervise registrars" based on your qualifications.'
   },
+    'DATABASE-001': {
+      summary: 'System Configuration Error',
+      explanation: 'The system encountered a database configuration error while processing your request. This is a technical issue that requires system administrator attention.',
+      userAction: 'This error has been automatically reported to our technical team. Please try again in a few minutes, or contact support if the problem persists.'
+    },
+    'EXISTING-SUPERVISION-001': {
+      summary: 'Supervision Relationship Conflict',
+      explanation: 'There is a conflict with the registrar\'s current supervision arrangements. This could be because they already have a primary supervisor (if you\'re trying to add another primary), already have a secondary supervisor (if you\'re trying to add another secondary), or don\'t have a primary supervisor yet (if you\'re trying to add a secondary).',
+      userAction: 'Check the registrar\'s current supervision status. For secondary supervision: ensure they have a primary supervisor first. For primary supervision: they can only have one primary supervisor. Coordinate with existing supervisors if changes are needed.'
+    },
   
   // File Upload Errors
   'FILE_TOO_LARGE': {

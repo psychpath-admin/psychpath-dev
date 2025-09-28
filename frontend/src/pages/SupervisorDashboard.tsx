@@ -50,7 +50,6 @@ interface DashboardStats {
 export default function SupervisorDashboard() {
   console.log('SupervisorDashboard: Component starting')
   const { user } = useAuth()
-  const [selectedSupervisee, setSelectedSupervisee] = useState<string | null>(null)
   const [stats, setStats] = useState<DashboardStats>({
     totalSupervisees: 0,
     pendingReviews: 0,
@@ -119,12 +118,15 @@ export default function SupervisorDashboard() {
         console.log('SupervisorDashboard: /api/supervisions payload:', superviseesData)
         // Transform API data to match Supervisee interface (use Supervision serializer fields)
         const transformed = superviseesData.map((item: any, index: number) => {
-          const isPrimaryAccepted = (item?.status === 'ACCEPTED') && (item?.role === 'PRIMARY')
+          const isAccepted = item?.status === 'ACCEPTED'
+          const isPrimary = item?.role === 'PRIMARY'
+          const isSecondary = item?.role === 'SECONDARY'
+          
           return {
             id: (item.id ?? index).toString(),
             name: item.supervisee_name || item.supervisee_email || 'Unknown User',
-            status: isPrimaryAccepted ? 'on-track' : 'pending',
-            role: 'Provisional Psychologist',
+            status: isAccepted ? 'on-track' : 'pending',
+            role: item.supervisee_role || 'Registrar', // The supervisee's role from API
             supervisionId: item.id,
             email: item.supervisee_email,
             progress: {
@@ -139,7 +141,7 @@ export default function SupervisorDashboard() {
           }
         })
 
-        // Only accepted PRIMARY supervisions are active
+        // Both accepted PRIMARY and SECONDARY supervisions are active
         const active = transformed.filter((s: any) => s.status === 'on-track')
         console.log('SupervisorDashboard: transformed items:', transformed)
         console.log('SupervisorDashboard: active items:', active)
@@ -165,16 +167,26 @@ export default function SupervisorDashboard() {
           if (statsRes.ok) {
             const s = await statsRes.json()
             setStats({
-              totalSupervisees: (s.primary_supervisions || 0),
+              totalSupervisees: (s.primary_supervisions || 0) + (s.secondary_supervisions || 0),
               pendingReviews,
               overdueLogbooks,
-              onTrack: (s.primary_supervisions || 0)
+              onTrack: (s.primary_supervisions || 0) + (s.secondary_supervisions || 0)
             })
           } else {
-            setStats({ totalSupervisees, pendingReviews, overdueLogbooks, onTrack })
+            setStats({ 
+              totalSupervisees: active.length, 
+              pendingReviews, 
+              overdueLogbooks, 
+              onTrack: active.length 
+            })
           }
         } catch {
-          setStats({ totalSupervisees, pendingReviews, overdueLogbooks, onTrack })
+          setStats({ 
+            totalSupervisees: active.length, 
+            pendingReviews, 
+            overdueLogbooks, 
+            onTrack: active.length 
+          })
         }
       } else {
         // If no supervisees, show empty state
@@ -263,9 +275,6 @@ export default function SupervisorDashboard() {
     }
   }
 
-  const selectedSuperviseeData = selectedSupervisee 
-    ? supervisees.find(s => s.id === selectedSupervisee)
-    : supervisees[0]
 
   if (loading) {
     return (
@@ -343,74 +352,11 @@ export default function SupervisorDashboard() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Main Layout - 2 Column */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           
-          {/* Left Column - Active Supervisees (40%) */}
-          <div className="lg:col-span-2 space-y-6">
+          {/* Left Column - Quick Actions (25%) */}
+          <div className="lg:col-span-1 space-y-6">
             
-            {/* Active Supervisees List */}
-            <Card>
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Active Supervisees
-                  </span>
-                  <Badge variant="outline">{supervisees.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {supervisees.length > 0 ? (
-                  supervisees.map((supervisee) => (
-                    <div 
-                      key={supervisee.id} 
-                      className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                        selectedSupervisee === supervisee.id 
-                          ? 'border-blue-300 bg-blue-50' 
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => setSelectedSupervisee(supervisee.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Users className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm">{supervisee.name}</p>
-                            <p className="text-xs text-gray-500">{supervisee.role}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={getStatusColor(supervisee.status)}>
-                            {getStatusIcon(supervisee.status)}
-                            <span className="ml-1 capitalize">{supervisee.status.replace('-', ' ')}</span>
-                          </Badge>
-                          {supervisee.supervisionId && supervisee.email && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                removeSupervisee(supervisee.supervisionId!, supervisee.email!)
-                              }}
-                            >
-                              Remove
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500 mb-2">No supervisees yet</p>
-                    <p className="text-sm text-gray-400">Supervisees will appear here once they request supervision</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
             {/* Quick Actions */}
             <Card>
@@ -562,7 +508,7 @@ export default function SupervisorDashboard() {
             </Card>
           </div>
 
-          {/* Right Column - Main Content (60%) */}
+          {/* Right Column - Main Content (75%) */}
           <div className="lg:col-span-3 space-y-6">
             
             {/* Supervision Management - Primary Focus */}
@@ -578,134 +524,6 @@ export default function SupervisorDashboard() {
               </CardContent>
             </Card>
 
-            {/* Selected Supervisee Progress Overview */}
-            {selectedSuperviseeData && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5" />
-                      {selectedSuperviseeData.name} - Progress Overview
-                    </span>
-                    <Badge className={getStatusColor(selectedSuperviseeData.status)}>
-                      {getStatusIcon(selectedSuperviseeData.status)}
-                      <span className="ml-1 capitalize">{selectedSuperviseeData.status.replace('-', ' ')}</span>
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">Direct Client Contact</span>
-                          <span className="text-sm text-gray-500">
-                            {selectedSuperviseeData.progress.directClient.current}h / {selectedSuperviseeData.progress.directClient.target}h
-                          </span>
-                        </div>
-                        <Progress 
-                          value={(selectedSuperviseeData.progress.directClient.current / selectedSuperviseeData.progress.directClient.target) * 100} 
-                          className="h-2" 
-                        />
-                        <div className="flex items-center gap-1 mt-1">
-                          {selectedSuperviseeData.progress.directClient.current >= selectedSuperviseeData.progress.directClient.target ? (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                          )}
-                          <span className="text-xs text-gray-500">
-                            {selectedSuperviseeData.progress.directClient.current >= selectedSuperviseeData.progress.directClient.target ? 'Target Met' : 'Below Target'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">Client Related Activities</span>
-                          <span className="text-sm text-gray-500">
-                            {selectedSuperviseeData.progress.clientRelated.current}h / {selectedSuperviseeData.progress.clientRelated.target}h
-                          </span>
-                        </div>
-                        <Progress 
-                          value={(selectedSuperviseeData.progress.clientRelated.current / selectedSuperviseeData.progress.clientRelated.target) * 100} 
-                          className="h-2" 
-                        />
-                        <div className="flex items-center gap-1 mt-1">
-                          {selectedSuperviseeData.progress.clientRelated.current >= selectedSuperviseeData.progress.clientRelated.target ? (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                          )}
-                          <span className="text-xs text-gray-500">
-                            {selectedSuperviseeData.progress.clientRelated.current >= selectedSuperviseeData.progress.clientRelated.target ? 'Target Met' : 'Below Target'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">Supervision Hours</span>
-                          <span className="text-sm text-gray-500">
-                            {selectedSuperviseeData.progress.supervision.current}h / {selectedSuperviseeData.progress.supervision.target}h
-                          </span>
-                        </div>
-                        <Progress 
-                          value={(selectedSuperviseeData.progress.supervision.current / selectedSuperviseeData.progress.supervision.target) * 100} 
-                          className="h-2" 
-                        />
-                        <div className="flex items-center gap-1 mt-1">
-                          {selectedSuperviseeData.progress.supervision.current >= selectedSuperviseeData.progress.supervision.target ? (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                          )}
-                          <span className="text-xs text-gray-500">
-                            {selectedSuperviseeData.progress.supervision.current >= selectedSuperviseeData.progress.supervision.target ? 'Target Met' : 'Below Target'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">Professional Development</span>
-                          <span className="text-sm text-gray-500">
-                            {selectedSuperviseeData.progress.pd.current}h / {selectedSuperviseeData.progress.pd.target}h
-                          </span>
-                        </div>
-                        <Progress 
-                          value={(selectedSuperviseeData.progress.pd.current / selectedSuperviseeData.progress.pd.target) * 100} 
-                          className="h-2" 
-                        />
-                        <div className="flex items-center gap-1 mt-1">
-                          {selectedSuperviseeData.progress.pd.current >= selectedSuperviseeData.progress.pd.target ? (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                          )}
-                          <span className="text-xs text-gray-500">
-                            {selectedSuperviseeData.progress.pd.current >= selectedSuperviseeData.progress.pd.target ? 'Target Met' : 'Below Target'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {selectedSuperviseeData.overdueDates.length > 0 && (
-                    <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <AlertTriangle className="h-4 w-4 text-red-600" />
-                        <span className="font-medium text-red-800">Overdue Logbook Entries</span>
-                      </div>
-                      <p className="text-sm text-red-600">
-                        Dates: {selectedSuperviseeData.overdueDates.join(', ')}
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
       </div>
