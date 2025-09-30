@@ -112,6 +112,7 @@ INSTALLED_APPS = [
     'section_c',
     'support',
     'internship_validation', # Added internship validation app
+    'registrar_logbook', # Registrar program logbook app
 ]
 
 # Strong password hashers: prefer Argon2

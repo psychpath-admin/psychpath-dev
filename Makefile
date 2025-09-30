@@ -10,6 +10,7 @@ MANAGE := USE_SQLITE=1 $(VENV_PY) $(BACKEND_DIR)/manage.py
 .PHONY: help
 help:
 	@echo "Available targets:"
+	@echo "  setup             - Set up virtual environment and install dependencies"
 	@echo "  dev-up            - Run backend (SQLite) and frontend dev servers"
 	@echo "  db-backup         - Create timestamped SQLite backup"
 	@echo "  db-restore        - Restore SQLite from SNAPSHOT=path/to/file"
@@ -20,10 +21,28 @@ help:
 	@echo "  check             - Migrations check (dry-run)"
 	@echo "  eod               - End-of-day: code tag + DB snapshot (MSG='note')"
 
+.PHONY: setup
+setup:
+	@echo "Setting up virtual environment and installing dependencies..."
+	@if [ ! -d "$(BACKEND_DIR)/venv" ]; then \
+		echo "Creating virtual environment..."; \
+		cd $(BACKEND_DIR) && python3 -m venv venv; \
+	fi
+	@echo "Installing Python dependencies..."
+	@cd $(BACKEND_DIR) && ./venv/bin/pip install -r requirements.txt
+	@echo "Installing frontend dependencies..."
+	@cd $(FRONTEND_DIR) && npm install
+	@echo "Setup complete!"
+
 .PHONY: dev-up
 dev-up:
+	@echo "Checking if virtual environment exists..."
+	@if [ ! -d "$(BACKEND_DIR)/venv" ]; then \
+		echo "Virtual environment not found. Running setup..."; \
+		$(MAKE) setup; \
+	fi
 	@echo "Starting backend (SQLite) on :8000..."
-	@cd $(BACKEND_DIR) && USE_SQLITE=1 $(VENV_PY) manage.py runserver 0.0.0.0:8000 &
+	@cd $(BACKEND_DIR) && USE_SQLITE=1 ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 &
 	@sleep 1
 	@echo "Starting frontend on :5173..."
 	@cd $(FRONTEND_DIR) && npm run dev

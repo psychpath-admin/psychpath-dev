@@ -42,7 +42,10 @@ type DashboardCard = {
 }
 
 function minutesToHours(minutes: number): number {
-  return Math.round((minutes / 60) * 10) / 10
+  if (!minutes) return 0
+  const num = typeof minutes === 'string' ? parseInt(minutes, 10) : Number(minutes)
+  if (!Number.isFinite(num)) return 0
+  return Math.round((num / 60) * 10) / 10
 }
 
 interface DashboardProps {
@@ -114,29 +117,45 @@ export default function Dashboard({ userRole }: DashboardProps) {
   useEffect(() => {
     console.log('Dashboard: Loading card order from localStorage')
     const savedOrder = localStorage.getItem('dashboard-card-order')
-    let cardOrderToSet = ['supervision_requests', 'overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'internship_validation']
+    
+    // Default card orders based on user role
+    const defaultCardOrders = {
+      'PROVISIONAL': ['supervision_requests', 'overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'internship_validation'],
+      'REGISTRAR': ['supervision_requests', 'registrar_summary', 'overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'pd'],
+      'SUPERVISOR': ['supervision_requests'],
+      'ORG_ADMIN': ['supervision_requests']
+    }
+    
+    let cardOrderToSet = defaultCardOrders['PROVISIONAL'] // fallback
     
     if (savedOrder) {
       const parsed = JSON.parse(savedOrder)
-      // Ensure PD, supervision_hours and internship_validation are always included in the order
-      if (!parsed.includes('pd')) {
-        parsed.push('pd')
+      // Ensure essential cards are always included based on role
+      const userRole = programSummary?.role || 'PROVISIONAL'
+      const essentialCards = {
+        'PROVISIONAL': ['pd', 'supervision_hours', 'internship_validation'],
+        'REGISTRAR': ['pd', 'supervision_hours', 'registrar_summary'],
+        'SUPERVISOR': [],
+        'ORG_ADMIN': []
       }
-      if (!parsed.includes('supervision_hours')) {
-        parsed.push('supervision_hours')
-      }
-      if (!parsed.includes('internship_validation')) {
-        parsed.push('internship_validation')
-      }
-      if (!parsed.includes('registrar_summary')) {
-        parsed.push('registrar_summary')
-      }
+      
+      const requiredCards = essentialCards[userRole] || []
+      requiredCards.forEach(cardId => {
+        if (!parsed.includes(cardId)) {
+          parsed.push(cardId)
+        }
+      })
+      
       cardOrderToSet = parsed
+    } else {
+      // Use role-specific default order
+      const userRole = programSummary?.role || 'PROVISIONAL'
+      cardOrderToSet = defaultCardOrders[userRole] || defaultCardOrders['PROVISIONAL']
     }
     
     console.log('Dashboard: Setting card order:', cardOrderToSet)
     setCardOrder(cardOrderToSet)
-  }, [])
+  }, [programSummary?.role])
 
   useEffect(() => {
     let mounted = true
@@ -197,6 +216,20 @@ export default function Dashboard({ userRole }: DashboardProps) {
   }, [])
 
   const metrics = useMemo(() => {
+    // Prefer authoritative backend summary when available
+    if (programSummary?.progress) {
+      const p: any = programSummary.progress
+      const dcc = Number(p.dcc_hours) || 0
+      const cra = Number(p.cra_hours) || 0
+      const sdcc = Number(p.simulated_dcc_hours) || 0
+      const prac = Number(p.total_practice_hours) || (dcc + cra)
+      const pd = Number(p.pd_hours) || 0
+      const supervision = Number(p.supervision_hours) || 0
+      const intTotal = Number(p.total_hours) || (prac + pd + supervision)
+      return { dcc, cra, sdcc, prac, intTotal, pd, supervision }
+    }
+
+    // Fallback: compute from entries
     const safeMinutes = (v: any) => {
       const n = typeof v === 'string' ? parseInt(v, 10) : Number(v)
       return Number.isFinite(n) ? n : 0
@@ -217,19 +250,24 @@ export default function Dashboard({ userRole }: DashboardProps) {
     const cra = minutesToHours(craMin)
     const sdcc = minutesToHours(sdccMin)
     const prac = dcc + cra
-    const intTotal = prac // placeholder until PD and SUPER wired
-    return { dcc, cra, sdcc, prac, intTotal }
-  }, [entries])
+    const intTotal = prac
+    return { dcc, cra, sdcc, prac, intTotal, pd: 0, supervision: 0 }
+  }, [entries, programSummary])
 
-  const targets = {
-    int: 1500,
-    prac: 1360,
-    dccMin: 500,
-    craMin: 860,
-    sdccCap: 60,
-    pd: 60, // 60 hours of professional development
-    supervisionRatio: 17, // 1 hour supervision per 17 hours practice
-  }
+  const targets = useMemo(() => {
+    const req = programSummary?.requirements
+    const intTarget = (req?.total_hours ?? ((req?.practice_hours || 0) + (req?.pd_hours || 0) + (req?.supervision_hours || 0))) || 1500
+    return {
+      int: intTarget,
+      prac: req?.practice_hours || 1360,
+      dccMin: req?.dcc_hours || 500,
+      craMin: 0,
+      sdccCap: req?.max_simulated_dcc_hours || 60,
+      pd: req?.pd_hours || 60,
+      supervisionTotal: req?.supervision_hours || 80,
+      supervisionRatio: 17,
+    }
+  }, [programSummary])
 
   const percent = (value: number, target: number) => Math.max(0, Math.min(100, Math.round((value / target) * 100)))
   
@@ -302,7 +340,9 @@ export default function Dashboard({ userRole }: DashboardProps) {
           title="Overall (INT)" 
           value={metrics.intTotal} 
           target={targets.int}
-          description="Total internship hours including practice, professional development, and supervision. Must reach 1500 hours to complete internship requirements."
+          description={programSummary?.role === 'REGISTRAR' ?
+            'Total registrar program hours including practice, PD, and supervision. Targets vary by qualification level.' :
+            'Total internship hours including practice, professional development, and supervision. Must reach 1500 hours to complete internship requirements.'}
         />
       )
     },
@@ -347,9 +387,11 @@ export default function Dashboard({ userRole }: DashboardProps) {
           title="Direct Client Contact (DCC)"
           value={metrics.dcc}
           target={targets.dccMin}
-          subtitle={`Min 500h and ≥40% of PRAC (now: ${metrics.prac ? Math.round((metrics.dcc/metrics.prac)*100) : 0}%)`}
-          state={metrics.dcc >= 500 ? 'ok' : 'warn'}
-          description="Face-to-face or telehealth sessions with clients including assessments, interventions, and interviews. Must be at least 40% of your practice hours."
+          subtitle={programSummary?.role === 'REGISTRAR' ? undefined : `Min 500h and ≥40% of PRAC (now: ${metrics.prac ? Math.round((metrics.dcc/metrics.prac)*100) : 0}%)`}
+          state={programSummary?.role === 'REGISTRAR' ? (metrics.dcc > 0 ? 'ok' : 'warn') : (metrics.dcc >= targets.dccMin ? 'ok' : 'warn')}
+          description={programSummary?.role === 'REGISTRAR' ?
+            'Direct client contact accumulated toward registrar practice hours. Annual minimum expectation is handled in Alerts.' :
+            'Face-to-face or telehealth sessions with clients including assessments, interventions, and interviews. Must be at least 40% of your practice hours.'}
         />
       )
     },
@@ -398,7 +440,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
             <div className="mb-1 text-sm text-textLight">Professional Development (PD)</div>
             <div className="mb-2 text-xs text-textLight">Current week: {pdMetrics?.current_week_pd_hours || '0:00'}</div>
             <div className="mb-2 text-xl font-semibold text-textDark">
-              {pdMetrics?.total_pd_hours || '0:00'} <span className="text-sm text-textLight">/ 60:00</span>
+              {pdMetrics?.total_pd_hours || '0:00'} <span className="text-sm text-textLight">/ {targets.pd}:00</span>
             </div>
             <div className="h-2 w-full rounded bg-gray-100 mb-3">
               <div 
@@ -428,12 +470,12 @@ export default function Dashboard({ userRole }: DashboardProps) {
             <div className="mb-1 text-sm text-textLight">Supervision</div>
             <div className="mb-2 text-xs text-textLight">Current week: {supervisionMetrics?.current_week_supervision_hours || '0:00'}</div>
             <div className="mb-2 text-xl font-semibold text-textDark">
-              {supervisionMetrics?.total_supervision_hours || '0:00'} <span className="text-sm text-textLight">/ 80:00</span>
+              {supervisionMetrics?.total_supervision_hours || '0:00'} <span className="text-sm text-textLight">/ {targets.supervisionTotal}:00</span>
             </div>
             <div className="h-2 w-full rounded bg-gray-100 mb-3">
               <div 
-                className={`h-2 rounded ${supervisionMetrics && supervisionMetrics.total_supervision_minutes >= 80 * 60 ? 'bg-primaryBlue' : 'bg-amber-500'}`} 
-                style={{ width: `${Math.max(0, Math.min(100, Math.round((supervisionHours / 80) * 100)))}%` }} 
+                className={`h-2 rounded ${supervisionMetrics && supervisionMetrics.total_supervision_minutes >= (targets.supervisionTotal) * 60 ? 'bg-primaryBlue' : 'bg-amber-500'}`} 
+                style={{ width: `${Math.max(0, Math.min(100, Math.round((supervisionHours / (targets.supervisionTotal || 1)) * 100)))}%` }} 
               />
             </div>
             <div className="text-xs text-textLight leading-relaxed">
@@ -492,16 +534,23 @@ export default function Dashboard({ userRole }: DashboardProps) {
         <h1 className="font-headings text-3xl text-textDark">
           {user?.first_name && user?.last_name 
             ? `${user.first_name} ${user.last_name} Dashboard (${user.email})`
-            : 'Provisional Dashboard'
+            : `${programSummary?.role || 'Provisional'} Dashboard`
           }
         </h1>
         <div className="flex gap-2">
           <button
             onClick={() => {
-              const defaultOrder = ['overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'internship_validation', 'registrar_summary']
+              const userRole = programSummary?.role || 'PROVISIONAL'
+              const defaultCardOrders = {
+                'PROVISIONAL': ['supervision_requests', 'overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'internship_validation'],
+                'REGISTRAR': ['supervision_requests', 'registrar_summary', 'overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'pd'],
+                'SUPERVISOR': ['supervision_requests'],
+                'ORG_ADMIN': ['supervision_requests']
+              }
+              const defaultOrder = defaultCardOrders[userRole] || defaultCardOrders['PROVISIONAL']
               setCardOrder(defaultOrder)
               localStorage.setItem('dashboard-card-order', JSON.stringify(defaultOrder))
-              console.log('Dashboard: Reset layout to default order')
+              console.log('Dashboard: Reset layout to default order for', userRole)
             }}
             className="px-3 py-2 rounded-md border text-sm text-textLight hover:text-textDark"
           >
@@ -518,10 +567,21 @@ export default function Dashboard({ userRole }: DashboardProps) {
       <div className="rounded-lg border bg-blue-50 p-4">
         <h3 className="font-semibold text-textDark mb-2">Professional Practice Definition</h3>
         <p className="text-sm text-textLight leading-relaxed">
-          Professional practice includes all activities that contribute to your development as a psychologist, 
-          including Direct Client Contact (DCC), Client-Related Activities (CRA), Professional Development (PD), 
-          and Supervision (SUP). The 1:17 supervision ratio means you need 1 hour of supervision for every 
-          17 hours of professional practice.
+          {programSummary?.role === 'REGISTRAR' ? (
+            <>
+              Professional practice includes all activities that contribute to your development as a registrar psychologist, 
+              including Direct Client Contact (DCC), Client-Related Activities (CRA), Professional Development (PD), 
+              and Supervision (SUP). Registrar requirements vary by qualification level and area of practice endorsement (AoPE).
+              The supervision ratio and total hours depend on your specific program requirements.
+            </>
+          ) : (
+            <>
+              Professional practice includes all activities that contribute to your development as a psychologist, 
+              including Direct Client Contact (DCC), Client-Related Activities (CRA), Professional Development (PD), 
+              and Supervision (SUP). The 1:17 supervision ratio means you need 1 hour of supervision for every 
+              17 hours of professional practice.
+            </>
+          )}
         </p>
       </div>
 

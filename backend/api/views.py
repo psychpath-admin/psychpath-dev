@@ -690,7 +690,7 @@ def get_program_progress(profile):
     """Get current progress for all program categories"""
     try:
         from section_a.models import SectionAEntry
-        from pd_app.models import ProfessionalDevelopmentEntry
+        from section_b.models import ProfessionalDevelopmentEntry
         from section_c.models import SupervisionEntry
         
         # Get total hours for each category
@@ -799,7 +799,7 @@ def get_program_alerts(profile, progress, requirements):
     # Annual PD alert
     current_year_start = date.today().replace(month=1, day=1)
     try:
-        from pd_app.models import ProfessionalDevelopmentEntry
+        from section_b.models import ProfessionalDevelopmentEntry
         annual_pd_minutes = ProfessionalDevelopmentEntry.objects.filter(
             trainee=profile.user,
             date_of_activity__gte=current_year_start
@@ -829,6 +829,108 @@ def get_program_alerts(profile, progress, requirements):
                     'category': 'supervision_ratio'
                 })
     
+    # Registrar-specific AoPE delivery rules
+    if profile.program_type == 'registrar':
+        try:
+            from section_c.models import SupervisionEntry
+            from section_a.models import SectionAEntry
+            from .models import SupervisionAssignment
+            # Calculate supervision delivery proportions (principal share and individual vs group)
+            total_supervision_minutes = SupervisionEntry.objects.filter(trainee=profile).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+            if total_supervision_minutes > 0:
+                principal_minutes = SupervisionEntry.objects.filter(trainee=profile, supervisor_type='PRINCIPAL').aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+                individual_minutes = SupervisionEntry.objects.filter(trainee=profile, supervision_type='INDIVIDUAL').aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+                principal_share = principal_minutes / total_supervision_minutes
+                individual_share = individual_minutes / total_supervision_minutes
+                # Principal supervisor must provide at least 50%
+                if principal_share < 0.5:
+                    alerts.append({
+                        'type': 'warning',
+                        'message': f"Principal supervision below 50% (current {principal_share*100:.0f}%). Principal should provide ≥50% of total supervision.",
+                        'category': 'principal_share'
+                    })
+                # At least 66% must be individual supervision
+                if individual_share < 0.66:
+                    alerts.append({
+                        'type': 'warning',
+                        'message': f"Individual supervision below 66% (current {individual_share*100:.0f}%). At least 66% should be 1:1 supervision (max 33% group).",
+                        'category': 'individual_share'
+                    })
+
+                # Secondary supervisor endorsement limits
+                # Strategy: correlate accepted SECONDARY SupervisionAssignments with SupervisionEntry.supervisor_name
+                # Check each secondary's share and approval/endorsement status
+                secondary_assignments = SupervisionAssignment.objects.filter(
+                    provisional=profile.user,
+                    role='SECONDARY',
+                    status='ACCEPTED'
+                )
+                for assignment in secondary_assignments:
+                    sec_name = assignment.supervisor_name
+                    # Minutes attributed to this secondary (by name match)
+                    sec_minutes = SupervisionEntry.objects.filter(
+                        trainee=profile,
+                        supervisor_type='SECONDARY',
+                        supervisor_name=sec_name
+                    ).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+                    if sec_minutes <= 0:
+                        continue
+                    sec_share = sec_minutes / total_supervision_minutes
+                    # Determine supervisor user profile if linked
+                    supervisor_profile = getattr(getattr(assignment, 'supervisor_user', None), 'profile', None)
+                    board_approved = bool(getattr(supervisor_profile, 'is_board_approved_supervisor', False)) if supervisor_profile else False
+                    same_endorsement = False
+                    if supervisor_profile and supervisor_profile.can_supervise_registrars:
+                        # If supervisor has endorsements listed, check match with registrar aope
+                        try:
+                            from .models import SupervisorEndorsement
+                            same_endorsement = SupervisorEndorsement.objects.filter(
+                                supervisor=assignment.supervisor_user,
+                                endorsement=profile.aope,
+                                is_active=True
+                            ).exists()
+                        except Exception:
+                            same_endorsement = False
+                    # Enforce board-approved requirement
+                    if not board_approved:
+                        alerts.append({
+                            'type': 'error',
+                            'message': f"Secondary supervisor '{sec_name}' is not recorded as Board-approved. Only Board-approved supervisors can supervise registrars.",
+                            'category': 'secondary_board_approval'
+                        })
+                    # Apply percentage caps
+                    if same_endorsement:
+                        if sec_share > 0.50:
+                            alerts.append({
+                                'type': 'warning',
+                                'message': f"Secondary supervisor '{sec_name}' is providing {sec_share*100:.0f}% of total supervision; cap is 50% when endorsed in the same AoPE.",
+                                'category': 'secondary_same_aope_cap'
+                            })
+                    else:
+                        if sec_share > 0.33:
+                            alerts.append({
+                                'type': 'warning',
+                                'message': f"Secondary supervisor '{sec_name}' is providing {sec_share*100:.0f}% of total supervision; cap is 33% when not endorsed in the same AoPE.",
+                                'category': 'secondary_other_aope_cap'
+                            })
+            # Annual DCC minimum 176 hours/year
+            current_year_start = date.today().replace(month=1, day=1)
+            dcc_minutes_year = SectionAEntry.objects.filter(
+                trainee=profile.user,
+                entry_type='client_contact',
+                session_date__gte=current_year_start
+            ).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+            dcc_hours_year = dcc_minutes_year / 60
+            if dcc_hours_year < 176:
+                alerts.append({
+                    'type': 'warning',
+                    'message': f"Direct client contact this year is {dcc_hours_year:.1f}h; AHPRA expects ≥176h/year of direct client contact.",
+                    'category': 'annual_dcc'
+                })
+        except Exception:
+            # Non-fatal if we cannot compute
+            pass
+
     return alerts
 
 

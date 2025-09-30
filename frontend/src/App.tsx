@@ -1,6 +1,8 @@
 import React from 'react'
 import './App.css'
 import Navbar from '@/components/Navbar'
+import RegistrarNavigation from '@/components/registrar/RegistrarNavigation'
+import PathwaySwitcher from '@/components/PathwaySwitcher'
 import { AuthProvider } from '@/context/AuthContext'
 import EPAList from '@/components/EPAList'
 import ReflectionLog from '@/components/ReflectionLog'
@@ -34,6 +36,23 @@ import ErrorHelp from '@/pages/ErrorHelp'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { setupGlobalErrorHandling } from '@/lib/errorLogger'
 import { Toaster } from 'sonner'
+// Registrar imports
+import RegistrarDashboard from '@/components/registrar/RegistrarDashboard'
+import RegistrarProgramSetup from '@/pages/registrar/RegistrarProgramSetup'
+import RegistrarPracticeLog from '@/pages/registrar/RegistrarPracticeLog'
+import RegistrarPracticeEntryForm from '@/pages/registrar/RegistrarPracticeEntryForm'
+import RegistrarSupervisionLog from '@/pages/registrar/RegistrarSupervisionLog'
+import RegistrarReports from '@/pages/registrar/RegistrarReports'
+
+// Component to redirect users to appropriate dashboard based on role
+const DashboardRedirect: React.FC<{ userRole?: string }> = ({ userRole }) => {
+  if (userRole === 'REGISTRAR') {
+    // For now, redirect to registrar dashboard - the dashboard will handle the case where no programs exist
+    return <Navigate to="/registrar" replace />
+  }
+  
+  return <Dashboard userRole={userRole} />
+}
 
 function App() {
   const [me, setMe] = useState<{ role?: string } | null>(null)
@@ -81,10 +100,20 @@ function App() {
 
   const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) => {
     if (!me) return <Navigate to="/login" replace />
+    
+    const isRegistrarPath = window.location.pathname.startsWith('/registrar')
+    
     return (
       <>
-        <Navbar />
+        {isRegistrarPath ? <RegistrarNavigation /> : <Navbar />}
         <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+          {(me.role === 'REGISTRAR') && (
+            <PathwaySwitcher 
+              userRole={me.role}
+              hasRegistrarProgram={true}
+              hasProvisionalProgram={true}
+            />
+          )}
           {children}
         </main>
       </>
@@ -109,7 +138,7 @@ function App() {
           <Route path="/register/verify" element={<PublicRoute><RegisterVerify /></PublicRoute>} />
           <Route path="/register/subscribe" element={<PublicRoute><RegisterSubscribe /></PublicRoute>} />
 
-          <Route path="/" element={<RequireAuth><Dashboard userRole={me?.role} /></RequireAuth>} />
+          <Route path="/" element={<RequireAuth><DashboardRedirect userRole={me?.role} /></RequireAuth>} />
           <Route path="/epas" element={<RequireAuth><><EPAList /><section id="reflections"><ReflectionLog /></section></></RequireAuth>} />
           <Route path="/epa/:code" element={<RequireAuth><EPADetail /></RequireAuth>} />
           <Route path="/section-a" element={<RequireAuth><SectionA /></RequireAuth>} />
@@ -126,6 +155,14 @@ function App() {
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
           <Route path="/help/errors" element={<ErrorHelp />} />
+          {/* Registrar Routes */}
+                    {me?.role === 'REGISTRAR' && <Route path="/registrar" element={<RequireAuth><RegistrarDashboard /></RequireAuth>} />}
+                    {me?.role === 'REGISTRAR' && <Route path="/registrar/setup" element={<RequireAuth><RegistrarProgramSetup /></RequireAuth>} />}
+                    {me?.role === 'REGISTRAR' && <Route path="/registrar/practice" element={<RequireAuth><RegistrarPracticeLog /></RequireAuth>} />}
+                    {me?.role === 'REGISTRAR' && <Route path="/registrar/practice/new" element={<RequireAuth><RegistrarPracticeEntryForm /></RequireAuth>} />}
+                    {me?.role === 'REGISTRAR' && <Route path="/registrar/practice/:id/edit" element={<RequireAuth><RegistrarPracticeEntryForm /></RequireAuth>} />}
+                    {me?.role === 'REGISTRAR' && <Route path="/registrar/supervision" element={<RequireAuth><RegistrarSupervisionLog /></RequireAuth>} />}
+                    {me?.role === 'REGISTRAR' && <Route path="/registrar/reports" element={<RequireAuth><RegistrarReports /></RequireAuth>} />}
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
           {me?.role === 'ORG_ADMIN' && <Route path="/org" element={<RequireAuth><OrgDashboard /></RequireAuth>} />}
