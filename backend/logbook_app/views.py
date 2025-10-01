@@ -6,6 +6,7 @@ from rest_framework import status
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction
+from django.shortcuts import render
 from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification
 from .serializers import (
     LogbookSerializer, LogbookDraftSerializer, EligibleWeekSerializer, 
@@ -1455,3 +1456,98 @@ def logbook_review(request, logbook_id):
         return Response({'message': 'Rejected'})
 
     return Response({'error': 'Invalid decision'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_html_report(request, logbook_id):
+    """Generate HTML report view for a logbook"""
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check permissions
+    if not hasattr(request.user, 'profile'):
+        return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+    
+    user_role = request.user.profile.role
+    
+    # Trainees can view their own logbooks, supervisors can view all
+    if user_role in ['PROVISIONAL', 'REGISTRAR']:
+        if logbook.trainee != request.user:
+            return Response({'error': 'Can only view your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    elif user_role != 'SUPERVISOR':
+        return Response({'error': 'Insufficient permissions'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Get all entries
+    from section_a.models import SectionAEntry
+    from section_b.models import ProfessionalDevelopmentEntry
+    from section_c.models import SupervisionEntry
+    from django.db.models import Sum
+    
+    section_a_entries = SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).order_by('session_date')
+    section_b_entries = ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).order_by('date_of_activity')
+    section_c_entries = SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).order_by('date_of_supervision')
+    
+    # Calculate totals
+    section_a_total_minutes = sum(e.duration_minutes or 0 for e in section_a_entries)
+    section_b_total_minutes = sum(e.duration_minutes or 0 for e in section_b_entries)
+    section_c_total_minutes = sum(e.duration_minutes or 0 for e in section_c_entries)
+    
+    # Calculate cumulative totals (all entries before and including this week)
+    section_a_cumulative = SectionAEntry.objects.filter(
+        trainee=logbook.trainee,
+        session_date__lte=logbook.week_end_date
+    ).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+    
+    section_b_cumulative = ProfessionalDevelopmentEntry.objects.filter(
+        trainee=logbook.trainee,
+        date_of_activity__lte=logbook.week_end_date
+    ).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+    
+    section_c_cumulative = SupervisionEntry.objects.filter(
+        trainee=logbook.trainee.profile,
+        date_of_supervision__lte=logbook.week_end_date
+    ).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+    
+    # Helper function to format minutes to hours:minutes
+    def format_minutes(minutes):
+        hours = minutes // 60
+        mins = minutes % 60
+        return f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+    
+    # Get trainee info
+    trainee_profile = logbook.trainee.profile
+    trainee_name = f"{trainee_profile.first_name} {trainee_profile.last_name}".strip()
+    ahpra_number = trainee_profile.ahpra_registration_number or "Not provided"
+    supervisor_name = trainee_profile.principal_supervisor or "Not assigned"
+    
+    # Prepare context
+    context = {
+        'logbook': logbook,
+        'trainee_name': trainee_name,
+        'ahpra_number': ahpra_number,
+        'supervisor_name': supervisor_name,
+        'section_a_entries': section_a_entries,
+        'section_b_entries': section_b_entries,
+        'section_c_entries': section_c_entries,
+        'section_a_total_minutes': section_a_total_minutes,
+        'section_b_total_minutes': section_b_total_minutes,
+        'section_c_total_minutes': section_c_total_minutes,
+        'section_a_cumulative_minutes': section_a_cumulative,
+        'section_b_cumulative_minutes': section_b_cumulative,
+        'section_c_cumulative_minutes': section_c_cumulative,
+        'section_a_total_hours': format_minutes(section_a_total_minutes),
+        'section_b_total_hours': format_minutes(section_b_total_minutes),
+        'section_c_total_hours': format_minutes(section_c_total_minutes),
+        'section_a_cumulative_hours': format_minutes(section_a_cumulative),
+        'section_b_cumulative_hours': format_minutes(section_b_cumulative),
+        'section_c_cumulative_hours': format_minutes(section_c_cumulative),
+        'total_weekly_hours': format_minutes(section_a_total_minutes + section_b_total_minutes + section_c_total_minutes),
+        'total_cumulative_hours': format_minutes(section_a_cumulative + section_b_cumulative + section_c_cumulative),
+        'now': timezone.now(),
+    }
+    
+    return render(request, 'logbook_report.html', context)

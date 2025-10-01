@@ -13,7 +13,8 @@ import {
   AlertCircle,
   Eye,
   FileText,
-  Unlock
+  Unlock,
+  ExternalLink
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
@@ -250,6 +251,16 @@ export default function LogbookDashboard() {
                     >
                       <Eye className="h-4 w-4 mr-2" />
                       View
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/logbook/${logbook.id}/html-report/`, '_blank')}
+                      title="View AHPRA-formatted report"
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Report
                     </Button>
                     
                     {logbook.status === 'approved' && (

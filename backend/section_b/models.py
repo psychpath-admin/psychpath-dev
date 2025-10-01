@@ -28,6 +28,7 @@ class ProfessionalDevelopmentEntry(models.Model):
     activity_details = models.TextField(help_text="E.g. name of course, presenter, institution etc")
     topics_covered = models.TextField(help_text="E.g. behavioural interventions for ADHD in adolescents")
     competencies_covered = models.JSONField(default=list, help_text="List of selected competencies")
+    reflection = models.TextField(blank=True, default="", help_text="Reflection on learning and application")
     week_starting = models.DateField(help_text="Week starting date for grouping")
     
     # Logbook integration

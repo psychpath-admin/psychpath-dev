@@ -9,6 +9,26 @@ import { InternshipValidationCard } from '@/components/InternshipValidationCard'
 import RegistrarSummaryCard from '@/components/RegistrarSummaryCard'
 import PendingSupervisionRequests from '@/components/PendingSupervisionRequests'
 import SupervisorDashboard from '@/pages/SupervisorDashboard'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { 
+  Clock, 
+  Users, 
+  BookOpen, 
+  Target, 
+  CheckCircle, 
+  AlertTriangle, 
+  XCircle,
+  TrendingUp,
+  FileText,
+  Download,
+  Briefcase,
+  UserCheck,
+  Calendar,
+  Activity
+} from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -52,6 +72,19 @@ interface DashboardProps {
   userRole?: string
 }
 
+interface SupervisionInvitation {
+  id: number
+  supervisor: number
+  supervisor_name: string
+  supervisee_email: string
+  role: string
+  status: string
+  created_at: string
+  expires_at: string
+  is_expired: boolean
+  can_be_accepted: boolean
+}
+
 export default function Dashboard({ userRole }: DashboardProps) {
   console.log('Dashboard: Component rendering, userRole:', userRole)
   const { user } = useAuth()
@@ -62,6 +95,8 @@ export default function Dashboard({ userRole }: DashboardProps) {
   const [programSummary, setProgramSummary] = useState<ProgramSummary | null>(null)
   const [cardOrder, setCardOrder] = useState<string[]>([])
   const [refreshKey, setRefreshKey] = useState(0) // For triggering refreshes
+  const [pendingInvitations, setPendingInvitations] = useState<SupervisionInvitation[]>([])
+  const [respondingToInvitation, setRespondingToInvitation] = useState<number | null>(null)
 
   // Centralized data fetcher so children can trigger a refresh safely
   const fetchData = () => {
@@ -111,6 +146,76 @@ export default function Dashboard({ userRole }: DashboardProps) {
     setRefreshKey(prev => prev + 1)
     // Also refresh data
     fetchData()
+  }
+
+  // Fetch pending supervision invitations
+  const fetchPendingInvitations = async () => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/supervisions/pending/`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setPendingInvitations(data)
+      }
+    } catch (error) {
+      console.error('Error fetching pending invitations:', error)
+    }
+  }
+
+  // Handle accept/reject invitation
+  const handleInvitationResponse = async (invitationId: number, action: 'accept' | 'reject') => {
+    setRespondingToInvitation(invitationId)
+    
+    try {
+      // First get the supervision details to get the token
+      const supervisionResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/supervisions/`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!supervisionResponse.ok) {
+        throw new Error('Failed to fetch supervision details')
+      }
+      
+      const supervisions = await supervisionResponse.json()
+      const supervision = supervisions.find((s: any) => s.id === invitationId)
+      
+      if (!supervision) {
+        throw new Error('Supervision request not found')
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/supervisions/respond/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          token: supervision.verification_token,
+          action: action
+        })
+      })
+
+      if (response.ok) {
+        // Refresh invitations and all data
+        await fetchPendingInvitations()
+        fetchData()
+      } else {
+        const errorData = await response.json()
+        alert(errorData.error || `Failed to ${action} request`)
+      }
+    } catch (error) {
+      console.error(`Error ${action}ing request:`, error)
+      alert(`Error ${action}ing request`)
+    } finally {
+      setRespondingToInvitation(null)
+    }
   }
 
   // Load saved card order from localStorage
@@ -212,6 +317,9 @@ export default function Dashboard({ userRole }: DashboardProps) {
         setProgramSummary(null)
       })
     
+    // Load pending invitations
+    fetchPendingInvitations()
+    
     return () => { mounted = false }
   }, [])
 
@@ -290,6 +398,51 @@ export default function Dashboard({ userRole }: DashboardProps) {
     if (ratio <= targets.supervisionRatio * 1.2) return { status: 'amber', message: 'Approaching limit' }
     return { status: 'red', message: 'Below required ratio' }
   }, [metrics.prac, targets.supervisionRatio, supervisionMetrics])
+
+  // Circular Progress Component (similar to registrar dashboard)
+  const CircularProgress = ({ percentage, size = 120, strokeWidth = 8, color = "#3b82f6" }: { 
+    percentage: number, 
+    size?: number, 
+    strokeWidth?: number, 
+    color?: string 
+  }) => {
+    const radius = (size - strokeWidth) / 2
+    const circumference = radius * 2 * Math.PI
+    const strokeDasharray = circumference
+    const strokeDashoffset = circumference - (percentage / 100) * circumference
+
+    return (
+      <div className="relative inline-flex items-center justify-center">
+        <svg width={size} height={size} className="transform -rotate-90">
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            fill="transparent"
+            className="text-gray-200"
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            fill="transparent"
+            strokeDasharray={strokeDasharray}
+            strokeDashoffset={strokeDashoffset}
+            className="transition-all duration-300 ease-in-out"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-2xl font-bold" style={{ color }}>
+            {Math.round(percentage)}%
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -528,118 +681,415 @@ export default function Dashboard({ userRole }: DashboardProps) {
     return <SupervisorDashboard />
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p>Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="font-headings text-3xl text-textDark">
-          {user?.first_name && user?.last_name 
-            ? `${user.first_name} ${user.last_name} Dashboard (${user.email})`
-            : `${programSummary?.role || 'Provisional'} Dashboard`
-          }
-        </h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              const userRole = programSummary?.role || 'PROVISIONAL'
-              const defaultCardOrders = {
-                'PROVISIONAL': ['supervision_requests', 'overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'sdcc', 'pd', 'internship_validation'],
-                'REGISTRAR': ['supervision_requests', 'registrar_summary', 'overall', 'practice', 'supervision', 'supervision_hours', 'dcc', 'cra', 'pd'],
-                'SUPERVISOR': ['supervision_requests'],
-                'ORG_ADMIN': ['supervision_requests']
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">
+              {user?.first_name && user?.last_name 
+                ? `${user.first_name} ${user.last_name}'s Dashboard`
+                : `${programSummary?.role || 'Provisional'} Dashboard`
               }
-              const defaultOrder = defaultCardOrders[userRole] || defaultCardOrders['PROVISIONAL']
-              setCardOrder(defaultOrder)
-              localStorage.setItem('dashboard-card-order', JSON.stringify(defaultOrder))
-              console.log('Dashboard: Reset layout to default order for', userRole)
-            }}
-            className="px-3 py-2 rounded-md border text-sm text-textLight hover:text-textDark"
-          >
-            Reset Layout
-          </button>
-          <Link to="/section-a" className="px-3 py-2 rounded-md bg-primaryBlue text-white text-sm">Open Section A</Link>
-          <Link to="/section-b" className="px-3 py-2 rounded-md bg-green-600 text-white text-sm">Open Section B</Link>
-          <Link to="/section-c" className="px-3 py-2 rounded-md bg-purple-600 text-white text-sm">Open Section C</Link>
-          <Link to="/logbook" className="px-3 py-2 rounded-md border text-sm">Open Logbook</Link>
+            </h1>
+            <p className="text-blue-100">
+              Track your progress through the 5+1 provisional psychology internship program
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Link to="/section-a" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+              Open Section A
+            </Link>
+            <Link to="/section-b" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+              Open Section B
+            </Link>
+            <Link to="/section-c" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+              Open Section C
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Professional Practice Definition */}
-      <div className="rounded-lg border bg-blue-50 p-4">
-        <h3 className="font-semibold text-textDark mb-2">Professional Practice Definition</h3>
-        <p className="text-sm text-textLight leading-relaxed">
-          {programSummary?.role === 'REGISTRAR' ? (
-            <>
-              Professional practice includes all activities that contribute to your development as a registrar psychologist, 
-              including Direct Client Contact (DCC), Client-Related Activities (CRA), Professional Development (PD), 
-              and Supervision (SUP). Registrar requirements vary by qualification level and area of practice endorsement (AoPE).
-              The supervision ratio and total hours depend on your specific program requirements.
-            </>
-          ) : (
-            <>
-              Professional practice includes all activities that contribute to your development as a psychologist, 
-              including Direct Client Contact (DCC), Client-Related Activities (CRA), Professional Development (PD), 
-              and Supervision (SUP). The 1:17 supervision ratio means you need 1 hour of supervision for every 
-              17 hours of professional practice.
-            </>
-          )}
-        </p>
-      </div>
-
-      {/* Drag and Drop Instructions */}
-      <div className="rounded-lg border bg-gray-50 p-3">
-        <p className="text-xs text-textLight">
-          💡 <strong>Tip:</strong> Drag and drop the cards below to rearrange your dashboard. Your layout will be saved automatically.
-        </p>
-      </div>
-
-      {/* Fallback if drag and drop fails */}
-      {cardOrder.length === 0 && (
-        <div className="text-center py-8">
-          <p className="text-textLight">Loading dashboard cards...</p>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="text-sm text-textLight">Loading metrics…</div>
-      ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={cardOrder} strategy={verticalListSortingStrategy}>
-            <div className="grid gap-4 md:grid-cols-2">
-              {cardOrder.map((cardId) => {
-                const card = dashboardCards[cardId]
-                if (!card) {
-                  console.log('Dashboard: Missing card for', cardId)
-                  return null
-                }
-                
-                // Role-based card filtering
-                const userRole = programSummary?.role
-                if (cardId === 'internship_validation' && userRole !== 'PROVISIONAL') {
-                  return null // Hide internship validation for non-provisionals
-                }
-                if (cardId === 'registrar_summary' && userRole !== 'REGISTRAR') {
-                  return null // Hide registrar summary for non-registrars
-                }
-                
-                console.log('Dashboard: Rendering card', cardId, card.title)
-                
-                return (
-                  <SortableCard key={cardId} id={cardId}>
-                    {card.component}
-                  </SortableCard>
-                )
-              })}
+      {/* Main Program Overview Card */}
+      <Card className="w-full">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-2xl">5+1 Internship Progress</CardTitle>
+              <Badge variant="outline" className="mt-2">
+                Provisional Psychologist
+              </Badge>
             </div>
-          </SortableContext>
-        </DndContext>
-      )}
+            <div className="text-right">
+              <div className="text-sm text-gray-600">Total Hours</div>
+              <div className="text-lg font-semibold">{metrics.intTotal}h / {targets.int}h</div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Progress Overview */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg">Overall Progress</h3>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Practice Hours</span>
+                    <span>{metrics.prac} / {targets.prac}</span>
+                  </div>
+                  <Progress value={(metrics.prac / targets.prac) * 100} />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Professional Development</span>
+                    <span>{pdMetrics ? minutesToHours(pdMetrics.total_pd_minutes).toFixed(1) : '0'} / {targets.pd}</span>
+                  </div>
+                  <Progress value={pdMetrics ? (minutesToHours(pdMetrics.total_pd_minutes) / targets.pd) * 100 : 0} />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Supervision</span>
+                    <span>{supervisionMetrics ? minutesToHours(supervisionMetrics.total_supervision_minutes).toFixed(1) : '0'} / {targets.supervisionTotal}</span>
+                  </div>
+                  <Progress value={supervisionMetrics ? (minutesToHours(supervisionMetrics.total_supervision_minutes) / targets.supervisionTotal) * 100 : 0} />
+                </div>
+              </div>
+            </div>
 
-      <div className="text-xs text-textLight">PD and Supervision metrics will be added next.</div>
+            {/* Key Metrics */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg">Key Metrics</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">{metrics.dcc}</div>
+                  <div className="text-sm text-gray-600">DCC Hours</div>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">{metrics.cra}</div>
+                  <div className="text-sm text-gray-600">CRA Hours</div>
+                </div>
+                <div className="text-center p-3 bg-purple-50 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600">{metrics.sdcc}</div>
+                  <div className="text-sm text-gray-600">SDCC Hours</div>
+                </div>
+                <div className="text-center p-3 bg-orange-50 rounded-lg">
+                  <div className="text-2xl font-bold text-orange-600">{Math.round((metrics.dcc / metrics.prac) * 100) || 0}%</div>
+                  <div className="text-sm text-gray-600">DCC Ratio</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Status & Alerts */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg">Status & Alerts</h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${supervisionStatus.status === 'green' ? 'bg-green-500' : supervisionStatus.status === 'amber' ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
+                  <div>
+                    <div className="text-sm font-medium">Supervision Ratio</div>
+                    <div className="text-sm text-gray-600">{supervisionStatus.message}</div>
+                  </div>
+                </div>
+                {metrics.sdcc > targets.sdccCap && (
+                  <div className="flex items-center gap-2 p-2 bg-red-50 rounded-md">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <span className="text-sm text-red-800">SDCC limit exceeded</span>
+                  </div>
+                )}
+                {metrics.dcc < targets.dccMin && (
+                  <div className="flex items-center gap-2 p-2 bg-yellow-50 rounded-md">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                    <span className="text-sm text-yellow-800">DCC below minimum</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Pending Supervision Invitations */}
+          {pendingInvitations.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h3 className="font-semibold text-sm text-gray-700 mb-3">Supervision Invitations</h3>
+              <div className="space-y-2">
+                {pendingInvitations.map((invitation) => (
+                  <div key={invitation.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-blue-600" />
+                        <span className="font-medium text-sm">{invitation.supervisor_name}</span>
+                        <Badge variant={invitation.role === 'PRIMARY' ? 'default' : 'secondary'} className="text-xs">
+                          {invitation.role === 'PRIMARY' ? 'Primary' : 'Secondary'} Supervisor
+                        </Badge>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleInvitationResponse(invitation.id, 'accept')}
+                        disabled={respondingToInvitation === invitation.id}
+                        className="bg-green-600 hover:bg-green-700 text-xs h-8 px-3"
+                      >
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        {respondingToInvitation === invitation.id ? 'Accepting...' : 'Accept'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleInvitationResponse(invitation.id, 'reject')}
+                        disabled={respondingToInvitation === invitation.id}
+                        className="text-xs h-8 px-3"
+                      >
+                        <XCircle className="h-3 w-3 mr-1" />
+                        {respondingToInvitation === invitation.id ? 'Rejecting...' : 'Reject'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Activity Groups */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Client Activities Group */}
+        <Card className="flex-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Briefcase className="h-5 w-5 text-blue-600" />
+              Client Activities
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Practice Hours */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CircularProgress 
+                  percentage={(metrics.prac / targets.prac) * 100} 
+                  size={80} 
+                  strokeWidth={6}
+                  color="#3b82f6"
+                />
+                <div>
+                  <div className="font-medium">Practice Hours</div>
+                  <div className="text-sm text-gray-600">{metrics.prac} / {targets.prac}h</div>
+                </div>
+              </div>
+            </div>
+
+            {/* DCC Hours */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CircularProgress 
+                  percentage={(metrics.dcc / targets.dccMin) * 100} 
+                  size={80} 
+                  strokeWidth={6}
+                  color="#10b981"
+                />
+                <div>
+                  <div className="font-medium">Direct Client Contact</div>
+                  <div className="text-sm text-gray-600">{metrics.dcc} / {targets.dccMin}h</div>
+                </div>
+              </div>
+            </div>
+
+            {/* CRA Hours */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CircularProgress 
+                  percentage={(metrics.cra / 860) * 100} 
+                  size={80} 
+                  strokeWidth={6}
+                  color="#8b5cf6"
+                />
+                <div>
+                  <div className="font-medium">Client-Related Activities</div>
+                  <div className="text-sm text-gray-600">{metrics.cra}h</div>
+                </div>
+              </div>
+            </div>
+
+            {/* SDCC Hours */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CircularProgress 
+                  percentage={(metrics.sdcc / targets.sdccCap) * 100} 
+                  size={80} 
+                  strokeWidth={6}
+                  color={metrics.sdcc > targets.sdccCap ? "#ef4444" : "#f59e0b"}
+                />
+                <div>
+                  <div className="font-medium">Simulated DCC</div>
+                  <div className="text-sm text-gray-600">{metrics.sdcc} / {targets.sdccCap}h</div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Professional Development Activities Group */}
+        <Card className="flex-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <BookOpen className="h-5 w-5 text-green-600" />
+              PD Activities
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* PD Hours */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CircularProgress 
+                  percentage={pdMetrics ? (minutesToHours(pdMetrics.total_pd_minutes) / targets.pd) * 100 : 0} 
+                  size={80} 
+                  strokeWidth={6}
+                  color="#10b981"
+                />
+                <div>
+                  <div className="font-medium">Professional Development</div>
+                  <div className="text-sm text-gray-600">
+                    {pdMetrics ? minutesToHours(pdMetrics.total_pd_minutes).toFixed(1) : '0'} / {targets.pd}h
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Current Week PD */}
+            <div className="p-3 bg-green-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-green-800">Current Week PD</span>
+                <span className="text-sm text-green-600">{pdMetrics?.current_week_pd_hours || '0:00'}</span>
+              </div>
+              <Progress value={pdMetrics ? (minutesToHours(pdMetrics.current_week_pd_minutes) / 2) * 100 : 0} className="h-2" />
+            </div>
+
+            {/* Annual PD Progress */}
+            <div className="p-3 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-blue-800">Annual PD Progress</span>
+                <span className="text-sm text-blue-600">{pdMetrics?.annual_pd_hours || 0} / {targets.pd}h</span>
+              </div>
+              <Progress value={pdMetrics ? (pdMetrics.annual_pd_hours / targets.pd) * 100 : 0} className="h-2" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Supervision Activities Group */}
+        <Card className="flex-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Users className="h-5 w-5 text-purple-600" />
+              Supervision Activities
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Supervision Hours */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CircularProgress 
+                  percentage={supervisionMetrics ? (minutesToHours(supervisionMetrics.total_supervision_minutes) / targets.supervisionTotal) * 100 : 0} 
+                  size={80} 
+                  strokeWidth={6}
+                  color="#8b5cf6"
+                />
+                <div>
+                  <div className="font-medium">Supervision Hours</div>
+                  <div className="text-sm text-gray-600">
+                    {supervisionMetrics ? minutesToHours(supervisionMetrics.total_supervision_minutes).toFixed(1) : '0'} / {targets.supervisionTotal}h
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Supervision Ratio */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Current Ratio</span>
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${supervisionStatus.status === 'green' ? 'bg-green-500' : supervisionStatus.status === 'amber' ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm font-medium">
+                    {supervisionMetrics && metrics.prac > 0 ? `1:${Math.round(metrics.prac / minutesToHours(supervisionMetrics.total_supervision_minutes))}` : '1:∞'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Required Ratio</span>
+                <span className="text-sm font-medium">1:17</span>
+              </div>
+            </div>
+
+            {/* Current Week Supervision */}
+            <div className="p-3 bg-purple-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-purple-800">Current Week</span>
+                <span className="text-sm text-purple-600">{supervisionMetrics?.current_week_supervision_hours || '0:00'}</span>
+              </div>
+              <Progress value={supervisionMetrics ? (minutesToHours(supervisionMetrics.current_week_supervision_minutes) / 2) * 100 : 0} className="h-2" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5" />
+            Quick Actions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Link to="/section-a">
+              <Button variant="outline" className="h-auto p-4 flex flex-col items-center gap-2 w-full">
+                <Briefcase className="h-6 w-6" />
+                <span className="text-sm">Add Practice Entry</span>
+              </Button>
+            </Link>
+            <Link to="/section-c">
+              <Button variant="outline" className="h-auto p-4 flex flex-col items-center gap-2 w-full">
+                <Users className="h-6 w-6" />
+                <span className="text-sm">Log Supervision</span>
+              </Button>
+            </Link>
+            <Link to="/section-b">
+              <Button variant="outline" className="h-auto p-4 flex flex-col items-center gap-2 w-full">
+                <BookOpen className="h-6 w-6" />
+                <span className="text-sm">Add PD Entry</span>
+              </Button>
+            </Link>
+            <Button variant="outline" className="h-auto p-4 flex flex-col items-center gap-2">
+              <FileText className="h-6 w-6" />
+              <span className="text-sm">View Reports</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Additional Information */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">Additional Information</h2>
+        <p className="text-gray-600">
+          All your progress information is now displayed in the organized sections above. 
+          The new dashboard provides a comprehensive view of your internship progress with 
+          clear visual indicators and easy-to-understand metrics.
+        </p>
+      </div>
     </div>
   )
 }
@@ -676,7 +1126,7 @@ function Bar({ title, value, target, subtitle, state, description }: { title: st
   )
 }
 
-function Progress({ percent }: { percent: number }) {
+function ProgressBar({ percent }: { percent: number }) {
   return (
     <div className="h-2 w-full rounded bg-gray-100">
       <div className="h-2 rounded bg-primaryBlue" style={{ width: `${percent}%` }} />

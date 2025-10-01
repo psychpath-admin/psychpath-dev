@@ -464,6 +464,20 @@ export default function SectionADashboard() {
               <div>
                 <h1 className="text-4xl font-headings mb-2">Section A: Direct Client Contact</h1>
                 <p className="text-white/90 text-lg font-body">Track your client interactions and build your professional portfolio</p>
+                <div className="flex gap-2 mt-4">
+                  <Button
+                    onClick={() => window.location.href = '/section-b'}
+                    className="px-3 py-2 rounded-md bg-green-600 text-white text-sm hover:bg-green-700"
+                  >
+                    Open Section B
+                  </Button>
+                  <Button
+                    onClick={() => window.location.href = '/section-c'}
+                    className="px-3 py-2 rounded-md bg-purple-600 text-white text-sm hover:bg-purple-700"
+                  >
+                    Open Section C
+                  </Button>
+                </div>
               </div>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <Button 

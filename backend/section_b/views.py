@@ -32,10 +32,41 @@ class ProfessionalDevelopmentEntryListCreateView(generics.ListCreateAPIView):
         # Calculate week starting date
         date_of_activity = serializer.validated_data['date_of_activity']
         week_starting = date_of_activity - timedelta(days=date_of_activity.weekday())
-        serializer.save(trainee=self.request.user, week_starting=week_starting)
+        instance = serializer.save(trainee=self.request.user, week_starting=week_starting)
         
         # Update weekly summary
         self.update_weekly_summary(self.request.user, week_starting)
+    
+    def update_weekly_summary(self, user, week_starting):
+        """Update or create weekly summary for the given week"""
+        # Calculate totals for the week
+        week_entries = ProfessionalDevelopmentEntry.objects.filter(
+            trainee=user,
+            week_starting=week_starting
+        )
+        week_total = week_entries.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+        
+        # Calculate cumulative total (all weeks up to and including this week)
+        cumulative_entries = ProfessionalDevelopmentEntry.objects.filter(
+            trainee=user,
+            week_starting__lte=week_starting
+        )
+        cumulative_total = cumulative_entries.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+        
+        # Update or create weekly summary
+        summary, created = PDWeeklySummary.objects.get_or_create(
+            trainee=user,
+            week_starting=week_starting,
+            defaults={
+                'week_total_minutes': week_total,
+                'cumulative_total_minutes': cumulative_total
+            }
+        )
+        
+        if not created:
+            summary.week_total_minutes = week_total
+            summary.cumulative_total_minutes = cumulative_total
+            summary.save()
 
 
 class ProfessionalDevelopmentEntryDetailView(generics.RetrieveUpdateDestroyAPIView):

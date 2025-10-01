@@ -8,7 +8,8 @@ from .views import (
     comment_message_detail, create_unlock_request, unlock_requests_queue,
     review_unlock_request, force_relock_unlock_request,
     user_notifications, notification_stats, mark_notification_read,
-    mark_all_notifications_read, create_notification
+    mark_all_notifications_read, create_notification,
+    logbook_html_report
 )
 
 urlpatterns = [
@@ -29,6 +30,7 @@ urlpatterns = [
     path('<int:logbook_id>/messages/', logbook_messages, name='logbook-messages'),
     path('<int:logbook_id>/audit/', logbook_audit_trail, name='logbook-audit-trail'),
     path('<int:logbook_id>/resubmit/', logbook_resubmit, name='logbook-resubmit'),
+    path('<int:logbook_id>/html-report/', logbook_html_report, name='logbook-html-report'),
     
     # Comment system endpoints
     path('<int:logbook_id>/comments/', logbook_comment_threads, name='logbook-comment-threads'),

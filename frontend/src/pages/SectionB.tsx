@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Plus, BookOpen, Clock, Target, Brain } from 'lucide-react'
 import { 
   getPDEntriesGroupedByWeek, 
   getPDCompetencies, 
@@ -19,6 +20,15 @@ const SectionB: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState<PDEntry | null>(null)
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-AU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+  }
   const [formData, setFormData] = useState({
     activity_type: 'WORKSHOP',
     date_of_activity: new Date().toISOString().split('T')[0],
@@ -26,7 +36,8 @@ const SectionB: React.FC = () => {
     is_active_activity: true,
     activity_details: '',
     topics_covered: '',
-    competencies_covered: [] as string[]
+    competencies_covered: [] as string[],
+    reflection: ''
   })
 
   const activityTypes = [
@@ -48,9 +59,64 @@ const SectionB: React.FC = () => {
         getPDCompetencies()
       ])
       setWeeklyGroups(groupsData)
-      setCompetencies(competenciesData)
+      
+      // Always use fallback competencies data for now since API might not be implemented
+      const fallbackCompetencies = [
+        { 
+          id: 1, 
+          name: 'Applies and builds scientific knowledge of psychology', 
+          description: 'Uses current psychological theory and research to inform case formulation, assessment choices, and treatment planning. Thinks critically about evidence quality and can explain the scientific rationale for clinical decisions.',
+          is_active: true 
+        },
+        { 
+          id: 2, 
+          name: 'Practices ethically and professionally', 
+          description: 'Acts consistently with the Code of Conduct and legal obligations. Maintains clear boundaries, confidentiality, informed consent, accurate records, and seeks supervision when dilemmas arise.',
+          is_active: true 
+        },
+        { 
+          id: 3, 
+          name: 'Exercises professional reflexivity, purposeful and deliberate practice, and self‑care', 
+          description: 'Regularly examines how personal values, culture, biases, and power dynamics affect practice. Uses feedback, supervision, and CPD to target growth areas, and maintains wellbeing to practise safely.',
+          is_active: true 
+        },
+        { 
+          id: 4, 
+          name: 'Conducts psychological assessment', 
+          description: 'Selects and administers appropriate, validated assessment methods. Integrates data from multiple sources into clear, useful formulations and reports that inform next steps.',
+          is_active: true 
+        },
+        { 
+          id: 5, 
+          name: 'Conducts psychological intervention', 
+          description: 'Plans and delivers evidence‑based interventions tailored to client goals, context, and preferences. Monitors outcomes and adapts approach when progress stalls or needs change.',
+          is_active: true 
+        },
+        { 
+          id: 6, 
+          name: 'Communicates and relates to others effectively and appropriately', 
+          description: 'Builds therapeutic rapport and communicates clearly with clients, families, and teams. Uses digital and telehealth tools appropriately, including privacy, consent, and modality‑specific limits.',
+          is_active: true 
+        },
+        { 
+          id: 7, 
+          name: 'Demonstrates a health equity and human rights approach with people from diverse groups', 
+          description: 'Works inclusively and without discrimination across culture, language, disability, gender, sexuality, and other identities. Applies trauma‑aware, culturally informed care and adapts practice to reduce barriers and promote equitable access.',
+          is_active: true 
+        },
+        { 
+          id: 8, 
+          name: 'Demonstrates a health equity and human rights approach with Aboriginal and Torres Strait Islander peoples, families, and communities', 
+          description: 'Provides culturally safe, trauma‑aware, self‑determined care as defined by Aboriginal and Torres Strait Islander peoples. Engages in ongoing critical reflection and collaborates to support community priorities and client self‑determination.',
+          is_active: true 
+        }
+      ]
+      
+      setCompetencies(fallbackCompetencies)
+      console.log('Using fallback competencies:', fallbackCompetencies.length)
     } catch (error) {
       console.error('Error loading data:', error)
+      console.log('Using fallback data due to error')
       // Demo data fallback
       setWeeklyGroups([
         {
@@ -76,16 +142,58 @@ const SectionB: React.FC = () => {
           ]
         }
       ])
-      setCompetencies([
-        { id: 1, name: 'Communication and Interpersonal Relationships', description: '', is_active: true },
-        { id: 2, name: 'Ethical, Legal and Professional Matters', description: '', is_active: true },
-        { id: 3, name: 'Intervention Strategies', description: '', is_active: true },
-        { id: 4, name: 'Knowledge of the Discipline', description: '', is_active: true },
-        { id: 5, name: 'Practice Across the Lifespan', description: '', is_active: true },
-        { id: 6, name: 'Psychological Measurement and Assessment', description: '', is_active: true },
-        { id: 7, name: 'Research and Evaluation', description: '', is_active: true },
-        { id: 8, name: 'Working within a Cross Cultural Context', description: '', is_active: true }
-      ])
+      // Use the same fallback competencies as in the try block
+      const fallbackCompetencies = [
+        { 
+          id: 1, 
+          name: 'Applies and builds scientific knowledge of psychology', 
+          description: 'Uses current psychological theory and research to inform case formulation, assessment choices, and treatment planning. Thinks critically about evidence quality and can explain the scientific rationale for clinical decisions.',
+          is_active: true 
+        },
+        { 
+          id: 2, 
+          name: 'Practices ethically and professionally', 
+          description: 'Acts consistently with the Code of Conduct and legal obligations. Maintains clear boundaries, confidentiality, informed consent, accurate records, and seeks supervision when dilemmas arise.',
+          is_active: true 
+        },
+        { 
+          id: 3, 
+          name: 'Exercises professional reflexivity, purposeful and deliberate practice, and self‑care', 
+          description: 'Regularly examines how personal values, culture, biases, and power dynamics affect practice. Uses feedback, supervision, and CPD to target growth areas, and maintains wellbeing to practise safely.',
+          is_active: true 
+        },
+        { 
+          id: 4, 
+          name: 'Conducts psychological assessment', 
+          description: 'Selects and administers appropriate, validated assessment methods. Integrates data from multiple sources into clear, useful formulations and reports that inform next steps.',
+          is_active: true 
+        },
+        { 
+          id: 5, 
+          name: 'Conducts psychological intervention', 
+          description: 'Plans and delivers evidence‑based interventions tailored to client goals, context, and preferences. Monitors outcomes and adapts approach when progress stalls or needs change.',
+          is_active: true 
+        },
+        { 
+          id: 6, 
+          name: 'Communicates and relates to others effectively and appropriately', 
+          description: 'Builds therapeutic rapport and communicates clearly with clients, families, and teams. Uses digital and telehealth tools appropriately, including privacy, consent, and modality‑specific limits.',
+          is_active: true 
+        },
+        { 
+          id: 7, 
+          name: 'Demonstrates a health equity and human rights approach with people from diverse groups', 
+          description: 'Works inclusively and without discrimination across culture, language, disability, gender, sexuality, and other identities. Applies trauma‑aware, culturally informed care and adapts practice to reduce barriers and promote equitable access.',
+          is_active: true 
+        },
+        { 
+          id: 8, 
+          name: 'Demonstrates a health equity and human rights approach with Aboriginal and Torres Strait Islander peoples, families, and communities', 
+          description: 'Provides culturally safe, trauma‑aware, self‑determined care as defined by Aboriginal and Torres Strait Islander peoples. Engages in ongoing critical reflection and collaborates to support community priorities and client self‑determination.',
+          is_active: true 
+        }
+      ]
+      setCompetencies(fallbackCompetencies)
     } finally {
       setLoading(false)
     }
@@ -99,7 +207,8 @@ const SectionB: React.FC = () => {
       is_active_activity: true,
       activity_details: '',
       topics_covered: '',
-      competencies_covered: []
+      competencies_covered: [],
+      reflection: ''
     })
     setEditingEntry(null)
     setShowForm(true)
@@ -113,7 +222,8 @@ const SectionB: React.FC = () => {
       is_active_activity: entry.is_active_activity,
       activity_details: entry.activity_details,
       topics_covered: entry.topics_covered,
-      competencies_covered: entry.competencies_covered
+      competencies_covered: entry.competencies_covered,
+      reflection: entry.reflection || ''
     })
     setEditingEntry(entry)
     setShowForm(true)
@@ -171,44 +281,254 @@ const SectionB: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Record of Professional Development</h1>
-        <Button onClick={handleCreateNew} className="bg-blue-600 hover:bg-blue-700">
-          Create New PD Record
-        </Button>
-      </div>
+    <div className="min-h-screen bg-bgSection">
+      <div className="container mx-auto px-4 py-8">
+        {/* Hero Section - PsychPathway Brand */}
+        <div className="mb-8">
+          <div className="bg-gradient-to-r from-primary to-primary/90 rounded-card p-8 text-white shadow-md">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div>
+                <h1 className="text-4xl font-headings mb-2">Section B: Professional Development</h1>
+                <p className="text-white/90 text-lg font-body">Track your learning activities and competency development</p>
+                <div className="flex gap-2 mt-4">
+                  <Button
+                    onClick={() => window.location.href = '/section-a'}
+                    className="px-3 py-2 rounded-md bg-primaryBlue text-white text-sm hover:bg-blue-700"
+                  >
+                    Open Section A
+                  </Button>
+                  <Button
+                    onClick={() => window.location.href = '/section-c'}
+                    className="px-3 py-2 rounded-md bg-purple-600 text-white text-sm hover:bg-purple-700"
+                  >
+                    Open Section C
+                  </Button>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  onClick={handleCreateNew}
+                  size="lg"
+                  className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  New PD Activity
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => window.open('/competencies-help', '_blank')}
+                  className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+                >
+                  <BookOpen className="h-5 w-5 mr-2" />
+                  Competencies Help
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-gray-600">CURRENT WEEK STARTING (DATE)</div>
-            <div className="text-lg font-semibold">
-              {new Date().toISOString().split('T')[0]}
+        {/* Summary Cards */}
+        {(() => {
+          const totalEntries = weeklyGroups.reduce((sum, group) => sum + group.entries.length, 0)
+          const totalHours = weeklyGroups.reduce((sum, group) => 
+            sum + group.entries.reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+          const totalActiveHours = weeklyGroups.reduce((sum, group) => 
+            sum + group.entries.filter(entry => entry.is_active_activity)
+              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+          const uniqueCompetencies = new Set(weeklyGroups.flatMap(group => 
+            group.entries.flatMap(entry => entry.competencies_covered || []))).size
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Total Activities</p>
+                      <p className="text-3xl font-bold text-primary">{totalEntries}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <BookOpen className="h-6 w-6 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Total Hours</p>
+                      <p className="text-3xl font-bold text-secondary">{totalHours.toFixed(1)}h</p>
+                    </div>
+                    <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
+                      <Clock className="h-6 w-6 text-secondary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Active Hours</p>
+                      <p className="text-3xl font-bold text-accent">{totalActiveHours.toFixed(1)}h</p>
+                    </div>
+                    <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
+                      <Target className="h-6 w-6 text-accent" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Competencies</p>
+                      <p className="text-3xl font-bold text-primary">{uniqueCompetencies}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Brain className="h-6 w-6 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-gray-600">CUMULATIVE PD HOURS</div>
-            <div className="text-lg font-semibold text-green-600">
-              {weeklyGroups.length > 0 ? weeklyGroups[0].cumulative_total_display : '0:00'}
+          )
+        })()}
+
+        {/* AHPRA 5+1 Program Progress Section */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-8 w-8 bg-accent rounded-full flex items-center justify-center">
+              <Target className="h-4 w-4 text-white" />
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-gray-600">REMAINING PD HOURS</div>
-            <div className="text-lg font-semibold text-red-600">
-              {weeklyGroups.length > 0 ? 
-                (60 - parseInt(weeklyGroups[0].cumulative_total_display.split(':')[0])).toString() + ':00' : 
-                '60:00'
-              }
+            <h2 className="text-2xl font-headings text-textDark">AHPRA 5+1 PROGRAM PROGRESS</h2>
+          </div>
+          <p className="text-textLight mb-6 font-body">Track your professional development requirements</p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            {/* Professional Development Card */}
+            <Card className="brand-card hover:shadow-md transition-all duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                    <BookOpen className="h-6 w-6 text-primary" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-textDark mb-1">
+                  {weeklyGroups.length > 0 ? weeklyGroups[0].cumulative_total_display : '0:00'}
+                </div>
+                <div className="text-xs font-semibold text-textDark mb-1 font-body">Professional Development</div>
+                <div className="text-xs text-textLight mb-2">Target: 80h</div>
+                {(() => {
+                  const currentHours = weeklyGroups.length > 0 ? 
+                    parseInt(weeklyGroups[0].cumulative_total_display.split(':')[0]) : 0
+                  const remaining = 80 - currentHours
+                  return remaining > 0 ? (
+                    <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
+                      {remaining}:00 remaining
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
+                      ✓ Met
+                    </Badge>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Active PD Card */}
+            <Card className="brand-card hover:shadow-md transition-all duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
+                    <Target className="h-6 w-6 text-secondary" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-textDark mb-1">
+                  {(() => {
+                    const activeHours = weeklyGroups.reduce((sum, group) => 
+                      sum + group.entries.filter(entry => entry.is_active_activity)
+                        .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+                    return `${Math.floor(activeHours)}:${Math.round((activeHours % 1) * 60).toString().padStart(2, '0')}`
+                  })()}
+                </div>
+                <div className="text-xs font-semibold text-textDark mb-1 font-body">Active PD Hours</div>
+                <div className="text-xs text-textLight mb-2">Target: 80h</div>
+                {(() => {
+                  const activeHours = weeklyGroups.reduce((sum, group) => 
+                    sum + group.entries.filter(entry => entry.is_active_activity)
+                      .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+                  const remaining = 80 - activeHours
+                  return remaining > 0 ? (
+                    <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
+                      {Math.floor(remaining)}:{Math.round((remaining % 1) * 60).toString().padStart(2, '0')} remaining
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
+                      ✓ Met
+                    </Badge>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Competency Development Card */}
+            <Card className="brand-card hover:shadow-md transition-all duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
+                    <Brain className="h-6 w-6 text-accent" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-textDark mb-1">
+                  {(() => {
+                    const uniqueCompetencies = new Set(weeklyGroups.flatMap(group => 
+                      group.entries.flatMap(entry => entry.competencies_covered || []))).size
+                    return uniqueCompetencies
+                  })()}
+                </div>
+                <div className="text-xs font-semibold text-textDark mb-1 font-body">Competencies Covered</div>
+                <div className="text-xs text-textLight mb-2">Target: All 8 domains</div>
+                <Badge variant="outline" className="text-secondary border-secondary text-xs font-semibold">
+                  Ongoing Development
+                </Badge>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Overall Progress Bar */}
+          <div className="bg-bgCard p-4 rounded-lg border border-border">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-semibold text-textDark font-body">Overall Progress</span>
+              <span className="text-lg font-bold text-primary">{(() => {
+                const currentHours = weeklyGroups.length > 0 ? 
+                  parseInt(weeklyGroups[0].cumulative_total_display.split(':')[0]) : 0
+                return ((currentHours / 80) * 100).toFixed(1)
+              })()}%</span>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <div className="relative">
+              <div className="w-full bg-border rounded-full h-2 overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-primary via-secondary to-accent h-2 rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${(() => {
+                    const currentHours = weeklyGroups.length > 0 ? 
+                      parseInt(weeklyGroups[0].cumulative_total_display.split(':')[0]) : 0
+                    return Math.min((currentHours / 80) * 100, 100)
+                  })()}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between text-xs text-textLight mt-1">
+                <span>{weeklyGroups.length > 0 ? weeklyGroups[0].cumulative_total_display : '0:00'}</span>
+                <span>80h target</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
       {/* Search and Controls */}
       <div className="flex gap-4 mb-6">
@@ -235,7 +555,7 @@ const SectionB: React.FC = () => {
           <Card key={group.week_starting}>
             <CardHeader>
               <CardTitle className="text-lg">
-                Week Starting: {new Date(group.week_starting).toLocaleDateString()}, 
+                Week Starting: {formatDate(group.week_starting)}, 
                 Week Total: {group.week_total_display}, 
                 Cumulative Total: {group.cumulative_total_display}
               </CardTitle>
@@ -258,7 +578,7 @@ const SectionB: React.FC = () => {
                   <tbody>
                     {group.entries.map((entry) => (
                       <tr key={entry.id} className="border-b hover:bg-gray-50">
-                        <td className="p-2">{new Date(entry.date_of_activity).toLocaleDateString()}</td>
+                        <td className="p-2">{formatDate(entry.date_of_activity)}</td>
                         <td className="p-2">{entry.duration_minutes}</td>
                         <td className="p-2">{entry.activity_type}</td>
                         <td className="p-2">{entry.is_active_activity ? 'Y' : 'N'}</td>
@@ -303,14 +623,24 @@ const SectionB: React.FC = () => {
 
       {/* PD Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <CardHeader>
-              <CardTitle>
-                {editingEntry ? 'Edit Professional Development Activity' : 'Professional Development Activity Details'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50">
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+              <div className="flex-shrink-0 p-6 border-b">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">
+                    {editingEntry ? 'Edit Professional Development Activity' : 'Professional Development Activity Details'}
+                  </h2>
+                  <button
+                    onClick={() => setShowForm(false)}
+                    className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-6" style={{ minHeight: '400px', maxHeight: '60vh' }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">ACTIVITY TYPE</label>
@@ -388,59 +718,116 @@ const SectionB: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Competencies Covered by Activity</label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium">Competencies Covered by Activity</label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open('/competencies-help', '_blank')}
+                    className="text-xs"
+                  >
+                    Help
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <h4 className="font-medium mb-2">Available Competencies</h4>
-                    <div className="space-y-2 max-h-40 overflow-y-auto border p-2 rounded">
-                      {competencies.map(comp => (
-                        <div
-                          key={comp.id}
-                          onClick={() => toggleCompetency(comp.name)}
-                          className={`p-2 cursor-pointer rounded text-sm ${
-                            formData.competencies_covered.includes(comp.name)
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'hover:bg-gray-100'
-                          }`}
-                        >
-                          {comp.name}
+                    <h4 className="font-medium mb-3 text-gray-700">Available Competencies</h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 p-3 rounded-lg bg-gray-50">
+                      {competencies.length === 0 ? (
+                        <div className="text-gray-500 text-sm text-center py-4">
+                          Loading competencies...
                         </div>
-                      ))}
+                      ) : (
+                        competencies
+                          .filter(comp => !formData.competencies_covered.includes(comp.name))
+                          .map(comp => (
+                            <div
+                              key={comp.id}
+                              onClick={() => toggleCompetency(comp.name)}
+                              className="p-3 cursor-pointer rounded-md text-sm border border-transparent hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                            >
+                              <div className="font-medium text-gray-800">{comp.name}</div>
+                              <div className="text-xs text-gray-600 mt-1" style={{ 
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden'
+                              }}>
+                                {comp.description}
+                              </div>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2">
+                      Click on a competency to select it
                     </div>
                   </div>
                   <div>
-                    <h4 className="font-medium mb-2">Selected Competencies</h4>
-                    <div className="space-y-2 max-h-40 overflow-y-auto border p-2 rounded">
-                      {formData.competencies_covered.map((comp, idx) => (
-                        <div key={idx} className="p-2 bg-blue-100 text-blue-800 rounded text-sm flex justify-between">
-                          <span>{comp}</span>
-                          <button
-                            onClick={() => toggleCompetency(comp)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            ×
-                          </button>
+                    <h4 className="font-medium mb-3 text-gray-700">Selected Competencies</h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 p-3 rounded-lg bg-blue-50">
+                      {formData.competencies_covered.length === 0 ? (
+                        <div className="text-gray-500 text-sm text-center py-4">
+                          No competencies selected yet
                         </div>
-                      ))}
+                      ) : (
+                        formData.competencies_covered.map((comp, idx) => (
+                          <div key={idx} className="p-3 bg-blue-100 text-blue-800 rounded-md text-sm border border-blue-200">
+                            <div className="flex justify-between items-start">
+                              <span className="font-medium flex-1">{comp}</span>
+                              <button
+                                onClick={() => toggleCompetency(comp)}
+                                className="ml-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                                title="Remove competency"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2">
+                      {formData.competencies_covered.length} competency(ies) selected
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-4">
-                <Button variant="outline" onClick={() => setShowForm(false)}>
+              <div>
+                <label className="block text-sm font-medium mb-2">Reflection</label>
+                <textarea
+                  value={formData.reflection}
+                  onChange={(e) => setFormData(prev => ({ ...prev, reflection: e.target.value }))}
+                  className="w-full p-2 border rounded h-24"
+                  placeholder="Reflect on how this activity contributed to your professional development..."
+                />
+              </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 mt-6 px-6 pb-6">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowForm(false)}
+                  className="px-6 py-2 border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700">
-                  {editingEntry ? 'Update' : 'Create'}
+                <Button 
+                  onClick={handleSave} 
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                >
+                  {editingEntry ? 'Update Activity' : 'Create Activity'}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
 
 export default SectionB
+

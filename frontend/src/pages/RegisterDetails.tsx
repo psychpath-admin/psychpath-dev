@@ -4,10 +4,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CalendarIcon } from 'lucide-react'
-import { format } from 'date-fns'
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { API_URL } from '@/lib/api'
@@ -31,7 +27,7 @@ export default function RegisterDetails() {
     confirm_password: '',
     ahpra_registration_number: '',
     designation: '',
-    provisional_start_date: null as Date | null,
+    provisional_start_date: '' as string,
     city: '',
     state: '',
     timezone: '',
@@ -78,12 +74,13 @@ export default function RegisterDetails() {
     
     // Program start date validation (only for provisional psychologists)
     if (formData.designation === 'PROVISIONAL' && formData.provisional_start_date) {
+      const selectedDate = new Date(formData.provisional_start_date)
       const now = new Date()
       const fiveYearsAgo = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
       
-      if (formData.provisional_start_date > now) {
+      if (selectedDate > now) {
         newErrors.provisional_start_date = 'Program start date must be in the past'
-      } else if (formData.provisional_start_date < fiveYearsAgo) {
+      } else if (selectedDate < fiveYearsAgo) {
         newErrors.provisional_start_date = 'Program start date must be less than 5 years ago'
       }
     }
@@ -145,7 +142,7 @@ export default function RegisterDetails() {
     
     // Clear start date when supervisor is selected
     if (field === 'designation' && value === 'SUPERVISOR') {
-      setFormData(prev => ({ ...prev, provisional_start_date: null }))
+      setFormData(prev => ({ ...prev, provisional_start_date: '' }))
       // Clear start date error
       if (errors.provisional_start_date) {
         setErrors(prev => ({ ...prev, provisional_start_date: '' }))
@@ -284,48 +281,32 @@ export default function RegisterDetails() {
               </div>
               
               <div className="space-y-2">
-                <Label>
+                <Label htmlFor="provisional_start_date">
                   {formData.designation === 'REGISTRAR' ? 'Endorsement Registrar Start Date *' : 
                    formData.designation === 'SUPERVISOR' ? 'Start Date' :
                    'Internship Start Date *'}
                 </Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      disabled={formData.designation === 'SUPERVISOR'}
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !formData.provisional_start_date && "text-muted-foreground",
-                        errors.provisional_start_date && "border-red-500",
-                        formData.designation === 'SUPERVISOR' && "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formData.provisional_start_date ? (
-                        format(formData.provisional_start_date, "PPP")
-                      ) : (
-                        <span>
-                          {formData.designation === 'SUPERVISOR' ? 'Not applicable for supervisors' : 'Pick a date'}
-                        </span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={formData.provisional_start_date || undefined}
-                      onSelect={(date) => handleInputChange('provisional_start_date', date)}
-                      disabled={(date) => date > new Date() || date < new Date(new Date().getFullYear() - 5, 0, 1)}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Input
+                  id="provisional_start_date"
+                  type="date"
+                  value={formData.provisional_start_date}
+                  onChange={(e) => handleInputChange('provisional_start_date', e.target.value)}
+                  disabled={formData.designation === 'SUPERVISOR'}
+                  max={new Date().toISOString().split('T')[0]}
+                  min={new Date(new Date().getFullYear() - 5, 0, 1).toISOString().split('T')[0]}
+                  className={cn(
+                    errors.provisional_start_date && "border-red-500",
+                    formData.designation === 'SUPERVISOR' && "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  )}
+                  placeholder={formData.designation === 'SUPERVISOR' ? 'Not applicable for supervisors' : 'Select a date'}
+                />
                 {errors.provisional_start_date && <p className="text-sm text-red-500">{errors.provisional_start_date}</p>}
                 {formData.designation === 'SUPERVISOR' ? (
                   <p className="text-xs text-gray-500">Start date is not required for supervisors</p>
                 ) : (
-                  <p className="text-xs text-gray-500">Must be in the past and less than 5 years ago</p>
+                  <p className="text-xs text-gray-500">
+                    Select the date when your {formData.designation === 'REGISTRAR' ? 'registrar program' : 'internship'} started (must be in the past and less than 5 years ago)
+                  </p>
                 )}
               </div>
               

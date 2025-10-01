@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Plus, Users, Clock, User, Target, ChevronDown, ChevronUp } from 'lucide-react'
 import { 
   getSupervisionEntriesGroupedByWeek, 
   createSupervisionEntry, 
@@ -17,6 +18,7 @@ const SectionC: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState<SupervisionEntry | null>(null)
+  const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set())
   const [formData, setFormData] = useState({
     date_of_supervision: new Date().toISOString().split('T')[0],
     supervisor_name: '',
@@ -50,129 +52,8 @@ const SectionC: React.FC = () => {
       setWeeklyGroups(groupsData)
     } catch (error) {
       console.error('Error loading data:', error)
-      // Demo data fallback
-      setWeeklyGroups([
-        {
-          id: 1,
-          week_starting: '2025-08-18',
-          week_total_minutes: 120,
-          cumulative_total_minutes: 375,
-          week_total_display: '2:00',
-          cumulative_total_display: '6:15',
-          entries: [
-            {
-              id: 1,
-              date_of_supervision: '2025-08-19',
-              supervisor_name: 'Demo Supervisor',
-              supervisor_type: 'SECONDARY',
-              supervision_type: 'GROUP',
-              duration_minutes: 120,
-              summary: 'Cultural considerations; interpreter debrief',
-              week_starting: '2025-08-18',
-              duration_display: '2:00',
-              duration_hours_minutes: '2h 0m',
-              created_at: '2025-08-19T10:00:00Z',
-              updated_at: '2025-08-19T10:00:00Z'
-            }
-          ],
-          created_at: '2025-08-18T10:00:00Z',
-          updated_at: '2025-08-18T10:00:00Z'
-        },
-        {
-          id: 2,
-          week_starting: '2025-08-11',
-          week_total_minutes: 60,
-          cumulative_total_minutes: 255,
-          week_total_display: '1:00',
-          cumulative_total_display: '4:15',
-          entries: [
-            {
-              id: 2,
-              date_of_supervision: '2025-08-11',
-              supervisor_name: 'Demo Supervisor',
-              supervisor_type: 'PRINCIPAL',
-              supervision_type: 'INDIVIDUAL',
-              duration_minutes: 60,
-              summary: 'Ethical consent in complex trauma',
-              week_starting: '2025-08-11',
-              duration_display: '1:00',
-              duration_hours_minutes: '1h 0m',
-              created_at: '2025-08-11T10:00:00Z',
-              updated_at: '2025-08-11T10:00:00Z'
-            }
-          ],
-          created_at: '2025-08-11T10:00:00Z',
-          updated_at: '2025-08-11T10:00:00Z'
-        },
-        {
-          id: 3,
-          week_starting: '2025-08-04',
-          week_total_minutes: 195,
-          cumulative_total_minutes: 195,
-          week_total_display: '3:15',
-          cumulative_total_display: '3:15',
-          entries: [
-            {
-              id: 3,
-              date_of_supervision: '2025-08-05',
-              supervisor_name: 'Demo Supervisor',
-              supervisor_type: 'PRINCIPAL',
-              supervision_type: 'INDIVIDUAL',
-              duration_minutes: 45,
-              summary: 'Review reflections; session timing',
-              week_starting: '2025-08-04',
-              duration_display: '0:45',
-              duration_hours_minutes: '45m',
-              created_at: '2025-08-05T10:00:00Z',
-              updated_at: '2025-08-05T10:00:00Z'
-            },
-            {
-              id: 4,
-              date_of_supervision: '2025-08-05',
-              supervisor_name: 'Demo Supervisor',
-              supervisor_type: 'PRINCIPAL',
-              supervision_type: 'INDIVIDUAL',
-              duration_minutes: 60,
-              summary: 'Case review - trauma pacing (AC-1992-F)',
-              week_starting: '2025-08-04',
-              duration_display: '1:00',
-              duration_hours_minutes: '1h 0m',
-              created_at: '2025-08-05T11:00:00Z',
-              updated_at: '2025-08-05T11:00:00Z'
-            },
-            {
-              id: 5,
-              date_of_supervision: '2025-08-06',
-              supervisor_name: 'Demo Supervisor',
-              supervisor_type: 'PRINCIPAL',
-              supervision_type: 'INDIVIDUAL',
-              duration_minutes: 60,
-              summary: 'Grief case KZ-1999-F - use of silence',
-              week_starting: '2025-08-04',
-              duration_display: '1:00',
-              duration_hours_minutes: '1h 0m',
-              created_at: '2025-08-06T10:00:00Z',
-              updated_at: '2025-08-06T10:00:00Z'
-            },
-            {
-              id: 6,
-              date_of_supervision: '2025-08-07',
-              supervisor_name: 'Demo Supervisor',
-              supervisor_type: 'SECONDARY',
-              supervision_type: 'GROUP',
-              duration_minutes: 30,
-              summary: 'Boundaries & scope check-in',
-              week_starting: '2025-08-04',
-              duration_display: '0:30',
-              duration_hours_minutes: '30m',
-              created_at: '2025-08-07T10:00:00Z',
-              updated_at: '2025-08-07T10:00:00Z'
-            }
-          ],
-          created_at: '2025-08-04T10:00:00Z',
-          updated_at: '2025-08-04T10:00:00Z'
-        }
-      ])
+      // No demo data - show empty state
+      setWeeklyGroups([])
     } finally {
       setLoading(false)
     }
@@ -237,13 +118,6 @@ const SectionC: React.FC = () => {
     )
   )
 
-  // Calculate current week starting date
-  const today = new Date()
-  const daysSinceMonday = today.getDay() === 0 ? 6 : today.getDay() - 1
-  const currentWeekStart = new Date(today)
-  currentWeekStart.setDate(today.getDate() - daysSinceMonday)
-  const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0]
-
   // Calculate total supervision hours (use the maximum cumulative value)
   const totalMinutes = weeklyGroups.length > 0 ? Math.max(...weeklyGroups.map(group => group.cumulative_total_minutes)) : 0
   const totalHours = Math.floor(totalMinutes / 60)
@@ -258,35 +132,233 @@ const SectionC: React.FC = () => {
   const remainingHoursDisplay = `${remainingHours}:${remainingMins.toString().padStart(2, '0')}`
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="font-headings text-3xl text-textDark">Record of Supervision (Section C)</h1>
-        <Button onClick={handleCreateNewEntry} className="bg-primaryBlue hover:bg-primaryBlue/90 text-white">
-          Create New Supervision Record
-        </Button>
-      </div>
+    <div className="min-h-screen bg-bgSection">
+      <div className="container mx-auto px-4 py-8">
+        {/* Hero Section - PsychPathway Brand */}
+        <div className="mb-8">
+          <div className="bg-gradient-to-r from-primary to-primary/90 rounded-card p-8 text-white shadow-md">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div>
+                <h1 className="text-4xl font-headings mb-2">Section C: Supervision</h1>
+                <p className="text-white/90 text-lg font-body">Track your supervision sessions and professional development</p>
+                <div className="flex gap-2 mt-4">
+                  <Button
+                    onClick={() => window.location.href = '/section-a'}
+                    className="px-3 py-2 rounded-md bg-primaryBlue text-white text-sm hover:bg-blue-700"
+                  >
+                    Open Section A
+                  </Button>
+                  <Button
+                    onClick={() => window.location.href = '/section-b'}
+                    className="px-3 py-2 rounded-md bg-green-600 text-white text-sm hover:bg-green-700"
+                  >
+                    Open Section B
+                  </Button>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  onClick={handleCreateNewEntry}
+                  size="lg"
+                  className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  New Supervision Record
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+                >
+                  <Users className="h-5 w-5 mr-2" />
+                  View Reports
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-textLight mb-1">CURRENT WEEK STARTING (DATE)</div>
-            <div className="text-lg font-semibold text-textDark">{currentWeekStartStr}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-textLight mb-1">CUMULATIVE SUPERVISION HOURS</div>
-            <div className="text-lg font-semibold text-green-600">{totalHoursDisplay}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-textLight mb-1">REMAINING SUPERVISION HOURS</div>
-            <div className="text-lg font-semibold text-red-600">{remainingHoursDisplay}</div>
-          </CardContent>
-        </Card>
-      </div>
+        {/* Summary Cards */}
+        {(() => {
+          const totalEntries = weeklyGroups.reduce((sum, group) => sum + group.entries.length, 0)
+          const totalHours = weeklyGroups.reduce((sum, group) => 
+            sum + group.entries.reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+          const individualHours = weeklyGroups.reduce((sum, group) => 
+            sum + group.entries.filter(entry => entry.supervision_type === 'INDIVIDUAL')
+              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+          const groupHours = weeklyGroups.reduce((sum, group) => 
+            sum + group.entries.filter(entry => entry.supervision_type === 'GROUP')
+              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Total Sessions</p>
+                      <p className="text-3xl font-bold text-primary">{totalEntries}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Users className="h-6 w-6 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Total Hours</p>
+                      <p className="text-3xl font-bold text-secondary">{totalHours.toFixed(1)}h</p>
+                    </div>
+                    <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
+                      <Clock className="h-6 w-6 text-secondary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Individual Hours</p>
+                      <p className="text-3xl font-bold text-accent">{individualHours.toFixed(1)}h</p>
+                    </div>
+                    <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
+                      <User className="h-6 w-6 text-accent" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Group Hours</p>
+                      <p className="text-3xl font-bold text-primary">{groupHours.toFixed(1)}h</p>
+                    </div>
+                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Users className="h-6 w-6 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )
+        })()}
+
+        {/* AHPRA 5+1 Program Progress Section */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-8 w-8 bg-accent rounded-full flex items-center justify-center">
+              <Target className="h-4 w-4 text-white" />
+            </div>
+            <h2 className="text-2xl font-headings text-textDark">AHPRA 5+1 PROGRAM PROGRESS</h2>
+          </div>
+          <p className="text-textLight mb-6 font-body">Track your supervision requirements</p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            {/* Total Supervision Card */}
+            <Card className="brand-card hover:shadow-md transition-all duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                    <Users className="h-6 w-6 text-primary" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-textDark mb-1">
+                  {totalHoursDisplay}
+                </div>
+                <div className="text-xs font-semibold text-textDark mb-1 font-body">Total Supervision</div>
+                <div className="text-xs text-textLight mb-2">Target: 100h</div>
+                {remainingMinutes > 0 ? (
+                  <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
+                    {remainingHoursDisplay} remaining
+                  </Badge>
+                ) : (
+                  <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
+                    ✓ Met
+                  </Badge>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Individual Supervision Card */}
+            <Card className="brand-card hover:shadow-md transition-all duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
+                    <User className="h-6 w-6 text-secondary" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-textDark mb-1">
+                  {(() => {
+                    const individualHours = weeklyGroups.reduce((sum, group) => 
+                      sum + group.entries.filter(entry => entry.supervision_type === 'INDIVIDUAL')
+                        .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+                    return `${Math.floor(individualHours)}:${Math.round((individualHours % 1) * 60).toString().padStart(2, '0')}`
+                  })()}
+                </div>
+                <div className="text-xs font-semibold text-textDark mb-1 font-body">Individual Supervision</div>
+                <div className="text-xs text-textLight mb-2">Target: 66h (66%)</div>
+                <Badge variant="outline" className="text-secondary border-secondary text-xs font-semibold">
+                  Ongoing Development
+                </Badge>
+              </CardContent>
+            </Card>
+
+            {/* Group Supervision Card */}
+            <Card className="brand-card hover:shadow-md transition-all duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
+                    <Users className="h-6 w-6 text-accent" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-textDark mb-1">
+                  {(() => {
+                    const groupHours = weeklyGroups.reduce((sum, group) => 
+                      sum + group.entries.filter(entry => entry.supervision_type === 'GROUP')
+                        .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+                    return `${Math.floor(groupHours)}:${Math.round((groupHours % 1) * 60).toString().padStart(2, '0')}`
+                  })()}
+                </div>
+                <div className="text-xs font-semibold text-textDark mb-1 font-body">Group Supervision</div>
+                <div className="text-xs text-textLight mb-2">Target: 34h (34%)</div>
+                <Badge variant="outline" className="text-secondary border-secondary text-xs font-semibold">
+                  Ongoing Development
+                </Badge>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Overall Progress Bar */}
+          <div className="bg-bgCard p-4 rounded-lg border border-border">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-semibold text-textDark font-body">Overall Progress</span>
+              <span className="text-lg font-bold text-primary">{(() => {
+                const progressPercentage = Math.min((totalMinutes / 6000) * 100, 100) // 100 hours = 6000 minutes
+                return progressPercentage.toFixed(1)
+              })()}%</span>
+            </div>
+            <div className="relative">
+              <div className="w-full bg-border rounded-full h-2 overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-primary via-secondary to-accent h-2 rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${Math.min((totalMinutes / 6000) * 100, 100)}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between text-xs text-textLight mt-1">
+                <span>{totalHoursDisplay}</span>
+                <span>100h target</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
       {/* Search and Actions */}
       <div className="flex items-center gap-4">
@@ -322,54 +394,83 @@ const SectionC: React.FC = () => {
                   </p>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supervisor Name</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Principal or Secondary</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Individual/Group/Other</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Summary</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {group.entries.map((entry) => (
-                          <tr key={entry.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={() => handleEditEntry(entry)}>
-                                  Edit
-                                </Button>
-                                <Button variant="destructive" size="sm" onClick={() => handleDeleteEntry(entry.id)}>
-                                  Delete
-                                </Button>
+                  <div className="space-y-3">
+                    {group.entries.map((entry) => {
+                      const isExpanded = expandedEntries.has(entry.id)
+                      
+                      return (
+                        <div key={entry.id} className="border border-gray-200 rounded-lg hover:border-gray-300 transition-colors bg-white">
+                          {/* Main entry details */}
+                          <div className="px-4 py-3 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-4 flex-1">
+                              <div className="text-sm font-medium text-gray-900">
+                                {new Date(entry.date_of_supervision).toLocaleDateString('en-AU', { 
+                                  day: '2-digit', 
+                                  month: 'short', 
+                                  year: 'numeric' 
+                                })}
                               </div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {new Date(entry.date_of_supervision).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {entry.duration_minutes}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {entry.supervisor_name}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {entry.supervisor_type}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {entry.supervision_type}
-                            </td>
-                            <td className="px-4 py-4 text-sm text-gray-900">
+                              <div className="text-sm text-gray-600">
+                                {entry.duration_minutes} min
+                              </div>
+                              <div className="text-sm text-gray-900 font-medium">
+                                {entry.supervisor_name}
+                              </div>
+                              <Badge variant={entry.supervisor_type === 'PRINCIPAL' ? 'default' : 'secondary'} className="text-xs">
+                                {entry.supervisor_type}
+                              </Badge>
+                              <span className="text-xs text-gray-500">
+                                {entry.supervision_type}
+                              </span>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button variant="outline" size="sm" onClick={() => handleEditEntry(entry)} className="h-7 px-2 text-xs">
+                                Edit
+                              </Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleDeleteEntry(entry.id)} className="h-7 px-2 text-xs">
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          {/* Summary section */}
+                          <div className="px-4 pb-3">
+                            <div className="text-xs text-gray-500 mb-1 font-medium">Summary:</div>
+                            <div className={`text-sm text-gray-700 ${!isExpanded ? 'line-clamp-3' : ''}`}>
                               {entry.summary}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            </div>
+                            {entry.summary.length > 200 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedEntries)
+                                  if (isExpanded) {
+                                    newExpanded.delete(entry.id)
+                                  } else {
+                                    newExpanded.add(entry.id)
+                                  }
+                                  setExpandedEntries(newExpanded)
+                                }}
+                                className="mt-1 h-6 px-2 text-xs text-blue-600 hover:text-blue-700"
+                              >
+                                {isExpanded ? (
+                                  <>
+                                    <ChevronUp className="h-3 w-3 mr-1" />
+                                    Show less
+                                  </>
+                                ) : (
+                                  <>
+                                    <ChevronDown className="h-3 w-3 mr-1" />
+                                    Show more
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </CardContent>
               </Card>
@@ -502,6 +603,7 @@ const SectionC: React.FC = () => {
           </Card>
         </div>
       )}
+      </div>
     </div>
   )
 }

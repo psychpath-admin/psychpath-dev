@@ -43,6 +43,7 @@ import RegistrarPracticeLog from '@/pages/registrar/RegistrarPracticeLog'
 import RegistrarPracticeEntryForm from '@/pages/registrar/RegistrarPracticeEntryForm'
 import RegistrarSupervisionLog from '@/pages/registrar/RegistrarSupervisionLog'
 import RegistrarReports from '@/pages/registrar/RegistrarReports'
+import CompetenciesHelp from '@/pages/CompetenciesHelp'
 
 // Component to redirect users to appropriate dashboard based on role
 const DashboardRedirect: React.FC<{ userRole?: string }> = ({ userRole }) => {
@@ -155,6 +156,7 @@ function App() {
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
           <Route path="/help/errors" element={<ErrorHelp />} />
+          <Route path="/competencies-help" element={<CompetenciesHelp />} />
           {/* Registrar Routes */}
                     {me?.role === 'REGISTRAR' && <Route path="/registrar" element={<RequireAuth><RegistrarDashboard /></RequireAuth>} />}
                     {me?.role === 'REGISTRAR' && <Route path="/registrar/setup" element={<RequireAuth><RegistrarProgramSetup /></RequireAuth>} />}
