@@ -3,7 +3,26 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Plus, BookOpen, Clock, Target, Brain } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { 
+  Plus, 
+  BookOpen, 
+  Clock, 
+  Target, 
+  Brain, 
+  Filter, 
+  ChevronUp, 
+  ChevronDown, 
+  ChevronLeft,
+  ChevronRight,
+  X, 
+  Eye, 
+  Edit, 
+  Trash2,
+  Calendar,
+  FileText,
+  BarChart3
+} from 'lucide-react'
 import { 
   getPDEntriesGroupedByWeek, 
   getPDCompetencies, 
@@ -12,6 +31,7 @@ import {
   deletePDEntry
 } from '@/lib/api'
 import type { PDEntry, PDCompetency, PDWeeklyGroup } from '@/types/pd'
+import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationUtils'
 
 const SectionB: React.FC = () => {
   const [weeklyGroups, setWeeklyGroups] = useState<PDWeeklyGroup[]>([])
@@ -21,13 +41,208 @@ const SectionB: React.FC = () => {
   const [showForm, setShowForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState<PDEntry | null>(null)
 
-  const formatDate = (dateString: string) => {
+  // Filter states (matching Section A)
+  const [showFilters, setShowFilters] = useState(false)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [activityType, setActivityType] = useState('all')
+  const [durationMin, setDurationMin] = useState('')
+  const [durationMax, setDurationMax] = useState('')
+  const [sortBy, setSortBy] = useState('newest')
+  const [groupByWeek, setGroupByWeek] = useState(false)
+  const [entriesPerPage, setEntriesPerPage] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
+
+
+  const formatDateDDMMYYYY = (dateString: string) => {
+    if (!dateString) return ''
     const date = new Date(dateString)
+    // Check if the date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date string:', dateString)
+      return 'Invalid Date'
+    }
     return date.toLocaleDateString('en-AU', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
     })
+  }
+
+  const formatDuration = (minutes: number | string) => {
+    return formatDurationDisplay(minutes)
+  }
+
+  const truncateText = (text: string, maxLength: number) => {
+    if (!text) return ''
+    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text
+  }
+
+  // Toggle entry expansion
+  const toggleEntryExpansion = (entryId: string) => {
+    const newExpanded = new Set(expandedEntries)
+    if (newExpanded.has(entryId)) {
+      newExpanded.delete(entryId)
+    } else {
+      newExpanded.add(entryId)
+    }
+    setExpandedEntries(newExpanded)
+  }
+
+  // Toggle week expansion
+  const toggleWeekExpansion = (weekStart: string) => {
+    const newExpanded = new Set(expandedWeeks)
+    if (newExpanded.has(weekStart)) {
+      newExpanded.delete(weekStart)
+    } else {
+      newExpanded.add(weekStart)
+    }
+    setExpandedWeeks(newExpanded)
+  }
+
+  // Clear all filters
+  const clearFilters = () => {
+    setDateFrom('')
+    setDateTo('')
+    setActivityType('all')
+    setDurationMin('')
+    setDurationMax('')
+    setGroupByWeek(false)
+    setSearchTerm('')
+    setCurrentPage(1)
+  }
+
+  // Pagination helpers
+  const getPaginatedEntries = (entries: PDEntry[]) => {
+    const startIndex = (currentPage - 1) * entriesPerPage
+    const endIndex = startIndex + entriesPerPage
+    return entries.slice(startIndex, endIndex)
+  }
+
+  const getPaginatedGroups = (groups: Array<{ weekStart: string; entries: PDEntry[] }>) => {
+    const startIndex = (currentPage - 1) * entriesPerPage
+    const endIndex = startIndex + entriesPerPage
+    return groups.slice(startIndex, endIndex)
+  }
+
+  const getTotalPages = (totalEntries: number) => {
+    return Math.ceil(totalEntries / entriesPerPage)
+  }
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
+  const handleEntriesPerPageChange = (newPerPage: number) => {
+    setEntriesPerPage(newPerPage)
+    setCurrentPage(1) // Reset to first page when changing page size
+  }
+
+  // Check if any filters are active
+  const hasActiveFilters = dateFrom || dateTo || activityType !== 'all' || durationMin || durationMax || groupByWeek
+
+  // Get all entries from weekly groups
+  const allEntries = weeklyGroups.flatMap(group => group.entries)
+
+  // Filter entries based on current filters
+  const filteredEntries = allEntries.filter(entry => {
+    // Date range filter
+    if (dateFrom) {
+      const entryDate = new Date(entry.date_of_activity)
+      const fromDate = new Date(dateFrom)
+      if (entryDate < fromDate) return false
+    }
+    if (dateTo) {
+      const entryDate = new Date(entry.date_of_activity)
+      const toDate = new Date(dateTo)
+      if (entryDate > toDate) return false
+    }
+
+    // Activity type filter
+    if (activityType !== 'all' && entry.activity_type !== activityType) return false
+
+    // Duration filter
+    const duration = parseInt(entry.duration_minutes.toString()) || 0
+    if (durationMin && duration < parseInt(durationMin)) return false
+    if (durationMax && duration > parseInt(durationMax)) return false
+
+    // Search term filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase()
+      const matchesSearch = 
+        entry.activity_details.toLowerCase().includes(searchLower) ||
+        entry.topics_covered.toLowerCase().includes(searchLower) ||
+        entry.activity_type.toLowerCase().includes(searchLower)
+      if (!matchesSearch) return false
+    }
+
+    return true
+  })
+
+  // Sort entries
+  const sortEntries = (entries: PDEntry[]) => {
+    return [...entries].sort((a, b) => {
+      switch (sortBy) {
+        case 'newest':
+          return new Date(b.date_of_activity).getTime() - new Date(a.date_of_activity).getTime()
+        case 'oldest':
+          return new Date(a.date_of_activity).getTime() - new Date(b.date_of_activity).getTime()
+        case 'duration':
+          return (parseInt(b.duration_minutes.toString()) || 0) - (parseInt(a.duration_minutes.toString()) || 0)
+        case 'activity':
+          return a.activity_type.localeCompare(b.activity_type)
+        default:
+          return new Date(b.date_of_activity).getTime() - new Date(a.date_of_activity).getTime()
+      }
+    })
+  }
+
+  // Group entries by week if enabled
+  const getGroupedEntries = () => {
+    if (!groupByWeek) return []
+
+    const grouped = filteredEntries.reduce((acc, entry) => {
+      const weekStart = entry.week_starting
+      if (!weekStart) {
+        console.warn('Entry with missing week_starting:', entry)
+        return acc
+      }
+      if (!acc[weekStart]) {
+        acc[weekStart] = []
+      }
+      acc[weekStart].push(entry)
+      return acc
+    }, {} as Record<string, PDEntry[]>)
+
+    // Sort weeks based on sortBy
+    const sortedWeeks = Object.entries(grouped).sort(([a], [b]) => {
+      const dateA = new Date(a).getTime()
+      const dateB = new Date(b).getTime()
+      
+      switch (sortBy) {
+        case 'newest':
+          return dateB - dateA // Newest weeks first
+        case 'oldest':
+          return dateA - dateB // Oldest weeks first
+        case 'duration':
+          // For duration, sort by total duration of all entries in the week
+          const totalDurationA = grouped[a].reduce((sum, entry) => sum + (parseInt(entry.duration_minutes.toString()) || 0), 0)
+          const totalDurationB = grouped[b].reduce((sum, entry) => sum + (parseInt(entry.duration_minutes.toString()) || 0), 0)
+          return totalDurationB - totalDurationA // Longest duration weeks first
+        case 'activity':
+          // For activity, sort alphabetically by week start date string
+          return a.localeCompare(b)
+        default:
+          return dateB - dateA // Default to newest first
+      }
+    })
+    
+    return sortedWeeks.map(([weekStart, entries]) => ({ 
+      weekStart, 
+      entries: sortEntries(entries)
+    }))
   }
   const [formData, setFormData] = useState({
     activity_type: 'WORKSHOP',
@@ -51,10 +266,67 @@ const SectionB: React.FC = () => {
     loadData()
   }, [])
 
+  // Auto-expand first week when grouping is enabled
+  useEffect(() => {
+    if (groupByWeek && weeklyGroups.length > 0) {
+      const allEntries = weeklyGroups.flatMap(group => group.entries)
+      const filteredEntries = allEntries.filter(entry => {
+        // Apply basic filters (same logic as in the component)
+        if (dateFrom) {
+          const entryDate = new Date(entry.date_of_activity)
+          const fromDate = new Date(dateFrom)
+          if (entryDate < fromDate) return false
+        }
+        if (dateTo) {
+          const entryDate = new Date(entry.date_of_activity)
+          const toDate = new Date(dateTo)
+          if (entryDate > toDate) return false
+        }
+        if (activityType !== 'all' && entry.activity_type !== activityType) return false
+        const duration = parseInt(entry.duration_minutes.toString()) || 0
+        if (durationMin && duration < parseInt(durationMin)) return false
+        if (durationMax && duration > parseInt(durationMax)) return false
+        if (searchTerm) {
+          const searchLower = searchTerm.toLowerCase()
+          const matchesSearch = 
+            entry.activity_details.toLowerCase().includes(searchLower) ||
+            entry.topics_covered.toLowerCase().includes(searchLower) ||
+            entry.activity_type.toLowerCase().includes(searchLower)
+          if (!matchesSearch) return false
+        }
+        return true
+      })
+
+      // Group the filtered entries
+      const grouped = filteredEntries.reduce((acc, entry) => {
+        const weekStart = entry.week_starting
+        if (!weekStart) return acc
+        if (!acc[weekStart]) {
+          acc[weekStart] = []
+        }
+        acc[weekStart].push(entry)
+        return acc
+      }, {} as Record<string, PDEntry[]>)
+
+      const sortedWeeks = Object.entries(grouped).sort(([a], [b]) => {
+        const dateA = new Date(a).getTime()
+        const dateB = new Date(b).getTime()
+        return sortBy === 'oldest' ? dateA - dateB : dateB - dateA
+      })
+
+      if (sortedWeeks.length > 0) {
+        const firstWeek = sortedWeeks[0][0]
+        if (!expandedWeeks.has(firstWeek)) {
+          setExpandedWeeks(prev => new Set([...prev, firstWeek]))
+        }
+      }
+    }
+  }, [groupByWeek, weeklyGroups, dateFrom, dateTo, activityType, durationMin, durationMax, searchTerm, sortBy, expandedWeeks])
+
   const loadData = async () => {
     try {
       setLoading(true)
-      const [groupsData, competenciesData] = await Promise.all([
+      const [groupsData] = await Promise.all([
         getPDEntriesGroupedByWeek(),
         getPDCompetencies()
       ])
@@ -264,13 +536,6 @@ const SectionB: React.FC = () => {
     }))
   }
 
-  const filteredGroups = weeklyGroups.filter(group => 
-    group.entries.some(entry => 
-      entry.activity_details.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      entry.topics_covered.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      entry.activity_type.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  )
 
   if (loading) {
     return (
@@ -280,12 +545,13 @@ const SectionB: React.FC = () => {
     )
   }
 
+
   return (
     <div className="min-h-screen bg-bgSection">
       <div className="container mx-auto px-4 py-8">
         {/* Hero Section - PsychPathway Brand */}
         <div className="mb-8">
-          <div className="bg-gradient-to-r from-primary to-primary/90 rounded-card p-8 text-white shadow-md">
+          <div className="bg-gradient-to-r from-green-600 to-green-600/90 rounded-card p-8 text-white shadow-md">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <h1 className="text-4xl font-headings mb-2">Section B: Professional Development</h1>
@@ -293,7 +559,7 @@ const SectionB: React.FC = () => {
                 <div className="flex gap-2 mt-4">
                   <Button
                     onClick={() => window.location.href = '/section-a'}
-                    className="px-3 py-2 rounded-md bg-primaryBlue text-white text-sm hover:bg-blue-700"
+                    className="px-3 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700"
                   >
                     Open Section A
                   </Button>
@@ -309,7 +575,7 @@ const SectionB: React.FC = () => {
                 <Button 
                   onClick={handleCreateNew}
                   size="lg"
-                  className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg"
+                  className="bg-white text-green-600 hover:bg-white/90 font-semibold shadow-sm rounded-lg"
                 >
                   <Plus className="h-5 w-5 mr-2" />
                   New PD Activity
@@ -318,26 +584,30 @@ const SectionB: React.FC = () => {
                   variant="outline"
                   size="lg"
                   onClick={() => window.open('/competencies-help', '_blank')}
-                  className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+                  className="border-white text-white hover:bg-white hover:text-green-600 font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
                 >
                   <BookOpen className="h-5 w-5 mr-2" />
                   Competencies Help
+                </Button>
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  className="border-white text-white hover:bg-white hover:text-green-600 font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+                >
+                  <BarChart3 className="h-5 w-5 mr-2" />
+                  View Reports
                 </Button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Summary Cards */}
+        {/* Quick Stats Cards */}
         {(() => {
-          const totalEntries = weeklyGroups.reduce((sum, group) => sum + group.entries.length, 0)
-          const totalHours = weeklyGroups.reduce((sum, group) => 
-            sum + group.entries.reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
-          const totalActiveHours = weeklyGroups.reduce((sum, group) => 
-            sum + group.entries.filter(entry => entry.is_active_activity)
-              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
-          const uniqueCompetencies = new Set(weeklyGroups.flatMap(group => 
-            group.entries.flatMap(entry => entry.competencies_covered || []))).size
+          const totalEntries = allEntries.length
+          const totalMinutes = allEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0)
+          const uniqueCompetencies = new Set(allEntries.flatMap(entry => entry.competencies_covered || [])).size
+          const activeMinutes = allEntries.filter(entry => entry.is_active_activity).reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0)
 
           return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -349,7 +619,7 @@ const SectionB: React.FC = () => {
                       <p className="text-3xl font-bold text-primary">{totalEntries}</p>
                     </div>
                     <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <BookOpen className="h-6 w-6 text-primary" />
+                      <FileText className="h-6 w-6 text-primary" />
                     </div>
                   </div>
                 </CardContent>
@@ -360,7 +630,7 @@ const SectionB: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="brand-label">Total Hours</p>
-                      <p className="text-3xl font-bold text-secondary">{totalHours.toFixed(1)}h</p>
+                      <p className="text-3xl font-bold text-secondary">{formatDurationWithUnit(totalMinutes)}</p>
                     </div>
                     <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
                       <Clock className="h-6 w-6 text-secondary" />
@@ -374,7 +644,7 @@ const SectionB: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="brand-label">Active Hours</p>
-                      <p className="text-3xl font-bold text-accent">{totalActiveHours.toFixed(1)}h</p>
+                      <p className="text-3xl font-bold text-accent">{formatDurationWithUnit(activeMinutes)}</p>
                     </div>
                     <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
                       <Target className="h-6 w-6 text-accent" />
@@ -400,226 +670,663 @@ const SectionB: React.FC = () => {
           )
         })()}
 
-        {/* AHPRA 5+1 Program Progress Section */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-8 w-8 bg-accent rounded-full flex items-center justify-center">
-              <Target className="h-4 w-4 text-white" />
+        <Card className="mb-8 brand-card">
+          <CardHeader className="pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <Filter className="h-4 w-4 text-primary" />
             </div>
-            <h2 className="text-2xl font-headings text-textDark">AHPRA 5+1 PROGRAM PROGRESS</h2>
+                <div>
+                  <CardTitle className="text-xl font-headings text-textDark">Filters & Search</CardTitle>
+                  <p className="text-sm text-textLight font-body">Refine your PD entries</p>
           </div>
-          <p className="text-textLight mb-6 font-body">Track your professional development requirements</p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            {/* Professional Development Card */}
-            <Card className="brand-card hover:shadow-md transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
-                    <BookOpen className="h-6 w-6 text-primary" />
                   </div>
-                </div>
-                <div className="text-2xl font-bold text-textDark mb-1">
-                  {weeklyGroups.length > 0 ? weeklyGroups[0].cumulative_total_display : '0:00'}
-                </div>
-                <div className="text-xs font-semibold text-textDark mb-1 font-body">Professional Development</div>
-                <div className="text-xs text-textLight mb-2">Target: 80h</div>
-                {(() => {
-                  const currentHours = weeklyGroups.length > 0 ? 
-                    parseInt(weeklyGroups[0].cumulative_total_display.split(':')[0]) : 0
-                  const remaining = 80 - currentHours
-                  return remaining > 0 ? (
-                    <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
-                      {remaining}:00 remaining
-                    </Badge>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => setShowFilters(!showFilters)} 
+                  variant="outline" 
+                  size="sm"
+                  className="text-primary border-primary/20 hover:bg-primary/5"
+                >
+                  {showFilters ? (
+                    <>
+                      <ChevronUp className="h-4 w-4 mr-2" />
+                      Hide Filters
+                    </>
                   ) : (
-                    <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
-                      ✓ Met
+                    <>
+                      <ChevronDown className="h-4 w-4 mr-2" />
+                      Show Filters
+                    </>
+                  )}
+                </Button>
+                {hasActiveFilters && (
+                  <Button onClick={clearFilters} variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
+                    <X className="h-4 w-4 mr-2" />
+                    Clear All
+                  </Button>
+                )}
+                </div>
+                </div>
+            
+            {/* Quick Filter Chips */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {hasActiveFilters && (
+                <>
+                  {dateFrom && (
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                      From: {formatDateDDMMYYYY(dateFrom)}
+                      <button onClick={() => setDateFrom('')} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
                     </Badge>
-                  )
-                })()}
-              </CardContent>
-            </Card>
-
-            {/* Active PD Card */}
-            <Card className="brand-card hover:shadow-md transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
-                    <Target className="h-6 w-6 text-secondary" />
-                  </div>
-                </div>
-                <div className="text-2xl font-bold text-textDark mb-1">
-                  {(() => {
-                    const activeHours = weeklyGroups.reduce((sum, group) => 
-                      sum + group.entries.filter(entry => entry.is_active_activity)
-                        .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
-                    return `${Math.floor(activeHours)}:${Math.round((activeHours % 1) * 60).toString().padStart(2, '0')}`
-                  })()}
-                </div>
-                <div className="text-xs font-semibold text-textDark mb-1 font-body">Active PD Hours</div>
-                <div className="text-xs text-textLight mb-2">Target: 80h</div>
-                {(() => {
-                  const activeHours = weeklyGroups.reduce((sum, group) => 
-                    sum + group.entries.filter(entry => entry.is_active_activity)
-                      .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
-                  const remaining = 80 - activeHours
-                  return remaining > 0 ? (
-                    <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
-                      {Math.floor(remaining)}:{Math.round((remaining % 1) * 60).toString().padStart(2, '0')} remaining
+                  )}
+                  {dateTo && (
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                      To: {formatDateDDMMYYYY(dateTo)}
+                      <button onClick={() => setDateTo('')} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
                     </Badge>
-                  ) : (
-                    <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
-                      ✓ Met
+                  )}
+                  {activityType && activityType !== 'all' && (
+                    <Badge variant="secondary" className="bg-secondary/10 text-secondary">
+                      Type: {activityType.replace('_', ' ')}
+                      <button onClick={() => setActivityType('all')} className="ml-2 hover:bg-secondary/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
                     </Badge>
-                  )
-                })()}
-              </CardContent>
-            </Card>
-
-            {/* Competency Development Card */}
-            <Card className="brand-card hover:shadow-md transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
-                    <Brain className="h-6 w-6 text-accent" />
-                  </div>
-                </div>
-                <div className="text-2xl font-bold text-textDark mb-1">
-                  {(() => {
-                    const uniqueCompetencies = new Set(weeklyGroups.flatMap(group => 
-                      group.entries.flatMap(entry => entry.competencies_covered || []))).size
-                    return uniqueCompetencies
-                  })()}
-                </div>
-                <div className="text-xs font-semibold text-textDark mb-1 font-body">Competencies Covered</div>
-                <div className="text-xs text-textLight mb-2">Target: All 8 domains</div>
-                <Badge variant="outline" className="text-secondary border-secondary text-xs font-semibold">
-                  Ongoing Development
-                </Badge>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Overall Progress Bar */}
-          <div className="bg-bgCard p-4 rounded-lg border border-border">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-semibold text-textDark font-body">Overall Progress</span>
-              <span className="text-lg font-bold text-primary">{(() => {
-                const currentHours = weeklyGroups.length > 0 ? 
-                  parseInt(weeklyGroups[0].cumulative_total_display.split(':')[0]) : 0
-                return ((currentHours / 80) * 100).toFixed(1)
-              })()}%</span>
+                  )}
+                  {(durationMin || durationMax) && (
+                    <Badge variant="secondary" className="bg-accent/10 text-accent">
+                      Duration: {durationMin || '0'} - {durationMax || '∞'} min
+                      <button onClick={() => { setDurationMin(''); setDurationMax('') }} className="ml-2 hover:bg-accent/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {groupByWeek && (
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                      Grouped by Week
+                      <button onClick={() => setGroupByWeek(false)} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                </>
+              )}
             </div>
-            <div className="relative">
-              <div className="w-full bg-border rounded-full h-2 overflow-hidden">
+          </CardHeader>
+          {showFilters && (
+            <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              {/* Date Range */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Date From</label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  placeholder="Start date"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Date To</label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  placeholder="End date"
+                />
+              </div>
+              
+              {/* Activity Type */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Activity Type</label>
+                <Select value={activityType} onValueChange={setActivityType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    <SelectItem value="WORKSHOP">Workshop</SelectItem>
+                    <SelectItem value="WEBINAR">Webinar</SelectItem>
+                    <SelectItem value="LECTURE">Lecture</SelectItem>
+                    <SelectItem value="PRESENTATION">Presentation</SelectItem>
+                    <SelectItem value="READING">Reading</SelectItem>
+                    <SelectItem value="COURSE">Course</SelectItem>
+                    <SelectItem value="CONFERENCE">Conference</SelectItem>
+                    <SelectItem value="TRAINING">Training</SelectItem>
+                    <SelectItem value="OTHER">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Duration Range */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Duration (min)</label>
+                <div className="flex gap-1">
+                  <Input
+                    type="number"
+                    value={durationMin}
+                    onChange={(e) => setDurationMin(e.target.value)}
+                    placeholder="Min"
+                    className="flex-1"
+                  />
+                  <Input
+                    type="number"
+                    value={durationMax}
+                    onChange={(e) => setDurationMax(e.target.value)}
+                    placeholder="Max"
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* Sort and Pagination Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Sort by:</label>
+                  <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Newest to Oldest</SelectItem>
+                      <SelectItem value="oldest">Oldest to Newest</SelectItem>
+                      <SelectItem value="duration">Duration (Longest to Shortest)</SelectItem>
+                      <SelectItem value="activity">Activity Type (A-Z)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="groupByWeek"
+                    checked={groupByWeek}
+                    onChange={(e) => setGroupByWeek(e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <label htmlFor="groupByWeek" className="text-sm font-medium">
+                    Group by Week
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Show:</label>
+                <Select value={entriesPerPage.toString()} onValueChange={(value) => handleEntriesPerPageChange(parseInt(value))}>
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-textLight">entries</span>
+              </div>
+            </div>
+            
+            {/* Search */}
+            <div className="mt-4">
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="Search activities, topics, or details..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+                <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                  <Filter className="h-4 w-4 text-textLight" />
+                </div>
+              </div>
+            </div>
+              </CardContent>
+          )}
+            </Card>
+
+        {/* Entries Display */}
+        <div className="space-y-4">
+          {groupByWeek ? (
+            // Grouped by week display
+            getPaginatedGroups(getGroupedEntries()).map((group) => (
+              <div key={group.weekStart} className="space-y-4">
+                {/* Week Header */}
                 <div 
-                  className="bg-gradient-to-r from-primary via-secondary to-accent h-2 rounded-full transition-all duration-1000 ease-out"
-                  style={{ width: `${(() => {
-                    const currentHours = weeklyGroups.length > 0 ? 
-                      parseInt(weeklyGroups[0].cumulative_total_display.split(':')[0]) : 0
-                    return Math.min((currentHours / 80) * 100, 100)
-                  })()}%` }}
-                ></div>
+                  className="bg-green-50 border border-green-200 rounded-lg p-4 cursor-pointer hover:bg-green-100 transition-colors duration-200"
+                  onClick={() => toggleWeekExpansion(group.weekStart)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-5 w-5 text-green-600" />
+                      <div>
+                        <h3 className="text-lg font-semibold text-green-700">
+                          Week Starting {formatDateDDMMYYYY(group.weekStart)}
+                        </h3>
+                        <p className="text-sm text-green-600">
+                          {group.entries.length} {group.entries.length === 1 ? 'activity' : 'activities'}
+                        </p>
+                  </div>
+                </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="text-sm font-medium text-green-700">
+                          {formatDurationWithUnit(group.entries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0))}
+                </div>
+                        <div className="text-xs text-green-600">Total Duration</div>
+                      </div>
+                      {expandedWeeks.has(group.weekStart) ? (
+                        <ChevronUp className="h-5 w-5 text-green-600" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-green-600" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Week Entries */}
+                {expandedWeeks.has(group.weekStart) && (
+                  <div className="space-y-3">
+                    {group.entries.map((entry) => (
+                      <Card key={entry.id} className="brand-card hover:shadow-md transition-all duration-300">
+                        <CardContent className="p-4">
+                          <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                            <div className="lg:col-span-2">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Clock className="h-4 w-4 text-textLight" />
+                                <span className="text-sm font-semibold text-textDark">
+                                  {formatDuration(entry.duration_minutes)}
+                                </span>
+                                <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
+                                  {entry.is_active_activity ? 'Active' : 'Passive'}
+                    </Badge>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-textLight" />
+                                <span className="text-sm font-semibold text-textDark">
+                                  {formatDateDDMMYYYY(entry.date_of_activity)}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div className="lg:col-span-2">
+                              <div className="flex items-center gap-2 mb-2">
+                                <BookOpen className="h-4 w-4 text-textLight" />
+                                <span className="text-sm font-semibold text-textDark">
+                                  {entry.activity_type}
+                                </span>
+                  </div>
+                              <div className="text-sm text-textDark break-words">
+                                {truncateText(entry.activity_details, 80)}
+                </div>
+                </div>
+                            
+                            <div className="lg:col-span-2">
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {entry.competencies_covered.slice(0, 3).map((comp, idx) => (
+                                  <Badge key={idx} variant="outline" className="text-xs">
+                                    {comp}
+                </Badge>
+                                ))}
+                                {entry.competencies_covered.length > 3 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{entry.competencies_covered.length - 3} more
+                                  </Badge>
+                                )}
+          </div>
+                              {entry.topics_covered && (
+                                <p className="text-sm text-gray-700 break-words line-clamp-2">
+                                  {truncateText(entry.topics_covered, 100)}
+                                </p>
+                              )}
+            </div>
               </div>
-              <div className="flex justify-between text-xs text-textLight mt-1">
-                <span>{weeklyGroups.length > 0 ? weeklyGroups[0].cumulative_total_display : '0:00'}</span>
-                <span>80h target</span>
+
+                          <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleEntryExpansion(entry.id.toString())}
+                              className="text-primary border-primary/20 hover:bg-primary/5"
+                            >
+                              {expandedEntries.has(entry.id.toString()) ? (
+                                <>
+                                  <ChevronUp className="h-4 w-4 mr-2" />
+                                  Hide Details
+                                </>
+                              ) : (
+                                <>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </>
+                              )}
+                            </Button>
+                            
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEdit(entry)}
+                                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDelete(entry.id)}
+                                className="text-red-600 border-red-200 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </Button>
               </div>
             </div>
+
+                          {/* Expanded Details Section */}
+                          {expandedEntries.has(entry.id.toString()) && (
+                            <div className="border-t border-gray-200 bg-gray-50/50 mt-4 pt-4">
+                              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                                <Eye className="h-4 w-4" />
+                                Detailed Information
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                {/* Activity Information */}
+                                <div className="space-y-2">
+                                  <h5 className="font-medium text-gray-700">Activity Details</h5>
+                                  <div className="space-y-1 text-gray-600">
+                                    <div><span className="font-medium">Type:</span> {entry.activity_type}</div>
+                                    <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.date_of_activity)}</div>
+                                    <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
+                                    <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
           </div>
         </div>
 
-      {/* Search and Controls */}
-      <div className="flex gap-4 mb-6">
-        <div className="flex-1">
-          <Input
-            placeholder="Search activities..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full"
-          />
+                                {/* Learning Information */}
+                                <div className="space-y-2">
+                                  <h5 className="font-medium text-gray-700">Learning Details</h5>
+                                  <div className="space-y-1 text-gray-600">
+                                    <div><span className="font-medium">Details:</span> {entry.activity_details}</div>
+                                    {entry.topics_covered && (
+                                      <div><span className="font-medium">Topics:</span> {entry.topics_covered}</div>
+                                    )}
         </div>
-        <Button variant="outline">Go</Button>
-        <select className="px-3 py-2 border rounded">
-          <option>Rows 50</option>
-        </select>
-        <select className="px-3 py-2 border rounded">
-          <option>Actions</option>
-        </select>
       </div>
 
-      {/* Weekly Groups */}
-      <div className="space-y-6">
-        {filteredGroups.map((group, groupIndex) => (
-          <Card key={group.week_starting}>
-            <CardHeader>
-              <CardTitle className="text-lg">
-                Week Starting: {formatDate(group.week_starting)}, 
-                Week Total: {group.week_total_display}, 
-                Cumulative Total: {group.cumulative_total_display}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2">Date of Activity</th>
-                      <th className="text-left p-2">Duration in Minutes</th>
-                      <th className="text-left p-2">Activity Type</th>
-                      <th className="text-left p-2">Active activity?</th>
-                      <th className="text-left p-2">Activity Details</th>
-                      <th className="text-left p-2">Competencies</th>
-                      <th className="text-left p-2">Topics/Learnings</th>
-                      <th className="text-left p-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.entries.map((entry) => (
-                      <tr key={entry.id} className="border-b hover:bg-gray-50">
-                        <td className="p-2">{formatDate(entry.date_of_activity)}</td>
-                        <td className="p-2">{entry.duration_minutes}</td>
-                        <td className="p-2">{entry.activity_type}</td>
-                        <td className="p-2">{entry.is_active_activity ? 'Y' : 'N'}</td>
-                        <td className="p-2">{entry.activity_details}</td>
-                        <td className="p-2">
+                                {/* Competencies */}
+                                <div className="md:col-span-2 space-y-2">
+                                  <h5 className="font-medium text-gray-700">Competencies Covered</h5>
                           <div className="flex flex-wrap gap-1">
                             {entry.competencies_covered.map((comp, idx) => (
-                              <Badge key={idx} variant="secondary" className="text-xs">
+                                      <Badge key={idx} variant="outline" className="text-xs">
                                 {comp}
                               </Badge>
                             ))}
                           </div>
-                        </td>
-                        <td className="p-2">{entry.topics_covered}</td>
-                        <td className="p-2">
+                                </div>
+
+                                {/* Reflection */}
+                                {entry.reflection && (
+                                  <div className="md:col-span-2 space-y-2">
+                                    <h5 className="font-medium text-gray-700">Reflection</h5>
+                                    <p className="text-gray-600 text-sm leading-relaxed bg-white p-3 rounded border">
+                                      {entry.reflection}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            // Individual entries display
+            getPaginatedEntries(sortEntries(filteredEntries)).map((entry) => (
+              <Card key={entry.id} className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                    <div className="lg:col-span-2">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="h-4 w-4 text-textLight" />
+                        <span className="text-sm font-semibold text-textDark">
+                          {formatDuration(entry.duration_minutes)}
+                        </span>
+                        <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
+                          {entry.is_active_activity ? 'Active' : 'Passive'}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-textLight" />
+                        <span className="text-sm font-semibold text-textDark">
+                          {formatDateDDMMYYYY(entry.date_of_activity)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="lg:col-span-2">
+                      <div className="flex items-center gap-2 mb-2">
+                        <BookOpen className="h-4 w-4 text-textLight" />
+                        <span className="text-sm font-semibold text-textDark">
+                          {entry.activity_type}
+                        </span>
+                      </div>
+                      <div className="text-sm text-textDark break-words">
+                        {truncateText(entry.activity_details, 80)}
+                      </div>
+                    </div>
+                    
+                    <div className="lg:col-span-2">
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {entry.competencies_covered.slice(0, 3).map((comp, idx) => (
+                          <Badge key={idx} variant="outline" className="text-xs">
+                            {comp}
+                          </Badge>
+                        ))}
+                        {entry.competencies_covered.length > 3 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{entry.competencies_covered.length - 3} more
+                          </Badge>
+                        )}
+                      </div>
+                      {entry.topics_covered && (
+                        <p className="text-sm text-gray-700 break-words line-clamp-2">
+                          {truncateText(entry.topics_covered, 100)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleEntryExpansion(entry.id.toString())}
+                      className="text-primary border-primary/20 hover:bg-primary/5"
+                    >
+                      {expandedEntries.has(entry.id.toString()) ? (
+                        <>
+                          <ChevronUp className="h-4 w-4 mr-2" />
+                          Hide Details
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
+                        </>
+                      )}
+                    </Button>
+                    
                           <div className="flex gap-2">
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleEdit(entry)}
+                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
                             >
+                        <Edit className="h-4 w-4 mr-2" />
                               Edit
                             </Button>
                             <Button
                               size="sm"
-                              variant="destructive"
+                        variant="outline"
                               onClick={() => handleDelete(entry.id)}
+                        className="text-red-600 border-red-200 hover:bg-red-50"
                             >
+                        <Trash2 className="h-4 w-4 mr-2" />
                               Delete
                             </Button>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  </div>
+
+                  {/* Expanded Details Section */}
+                  {expandedEntries.has(entry.id.toString()) && (
+                    <div className="border-t border-gray-200 bg-gray-50/50 mt-4 pt-4">
+                      <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <Eye className="h-4 w-4" />
+                        Detailed Information
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        {/* Activity Information */}
+                        <div className="space-y-2">
+                          <h5 className="font-medium text-gray-700">Activity Details</h5>
+                          <div className="space-y-1 text-gray-600">
+                            <div><span className="font-medium">Type:</span> {entry.activity_type}</div>
+                            <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.date_of_activity)}</div>
+                            <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
+                            <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
+                          </div>
+                        </div>
+
+                        {/* Learning Information */}
+                        <div className="space-y-2">
+                          <h5 className="font-medium text-gray-700">Learning Details</h5>
+                          <div className="space-y-1 text-gray-600">
+                            <div><span className="font-medium">Details:</span> {entry.activity_details}</div>
+                            {entry.topics_covered && (
+                              <div><span className="font-medium">Topics:</span> {entry.topics_covered}</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Competencies */}
+                        <div className="md:col-span-2 space-y-2">
+                          <h5 className="font-medium text-gray-700">Competencies Covered</h5>
+                          <div className="flex flex-wrap gap-1">
+                            {entry.competencies_covered.map((comp, idx) => (
+                              <Badge key={idx} variant="outline" className="text-xs">
+                                {comp}
+                              </Badge>
+                            ))}
+              </div>
+                        </div>
+
+                        {/* Reflection */}
+                        {entry.reflection && (
+                          <div className="md:col-span-2 space-y-2">
+                            <h5 className="font-medium text-gray-700">Reflection</h5>
+                            <p className="text-gray-600 text-sm leading-relaxed bg-white p-3 rounded border">
+                              {entry.reflection}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+            </CardContent>
+          </Card>
+            ))
+          )}
+          
+          {/* No entries message */}
+          {filteredEntries.length === 0 && (
+            <div className="text-center py-12">
+              <div className="text-gray-500 text-lg mb-2">No PD activities found</div>
+              <p className="text-gray-400 text-sm">
+                {hasActiveFilters 
+                  ? "Try adjusting your filters or search criteria" 
+                  : "Create your first professional development activity to get started"
+                }
+              </p>
+            </div>
+          )}
+      </div>
+
+        {/* Pagination */}
+        {getTotalPages(groupByWeek ? getGroupedEntries().length : filteredEntries.length) > 1 && (
+          <Card className="mt-6">
+            <CardContent className="flex items-center justify-between py-4">
+              <div className="text-sm text-gray-600">
+                Showing {((currentPage - 1) * entriesPerPage) + 1} to{' '}
+                {Math.min(currentPage * entriesPerPage, groupByWeek ? getGroupedEntries().length : filteredEntries.length)} of{' '}
+                {groupByWeek ? getGroupedEntries().length : filteredEntries.length} {groupByWeek ? 'weeks' : 'records'}
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                
+                <div className="flex gap-1">
+                  {Array.from({ length: Math.min(5, getTotalPages(filteredEntries.length)) }, (_, i) => {
+                    let pageNum;
+                    const totalPages = getTotalPages(filteredEntries.length);
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handlePageChange(pageNum)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  })}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === getTotalPages(filteredEntries.length)}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>
+        )}
 
       {/* PD Form Modal */}
       {showForm && (

@@ -431,7 +431,7 @@ export default function WeeklyLogbookEditor() {
                       </td>
                       <td className="border border-gray-300 p-3">
                         <div className="text-sm">
-                          {entry.reflections || 'No reflections recorded'}
+                          {entry.reflections_on_experience || 'No reflections recorded'}
                         </div>
                       </td>
                     </tr>
@@ -464,14 +464,14 @@ export default function WeeklyLogbookEditor() {
                       {logbook.section_totals.section_a.cra?.weekly_hours || 0}h
                     </td>
                     <td className="border border-gray-300 p-3 font-medium">
-                      {(logbook.section_totals.section_a.dcc?.weekly_hours || 0) + (logbook.section_totals.section_a.cra?.weekly_hours || 0)}h
+                      {logbook.section_totals.section_a.weekly_hours || '0:00h'}
                     </td>
                   </tr>
                   <tr>
                     <td className="border border-gray-300 p-3 font-medium">Cumulative total</td>
                     <td className="border border-gray-300 p-3">{logbook.section_totals.section_a.dcc?.cumulative_hours || 0}h</td>
                     <td className="border border-gray-300 p-3">{logbook.section_totals.section_a.cra?.cumulative_hours || 0}h</td>
-                    <td className="border border-gray-300 p-3 font-medium">{(logbook.section_totals.section_a.dcc?.cumulative_hours || 0) + (logbook.section_totals.section_a.cra?.cumulative_hours || 0)}h</td>
+                    <td className="border border-gray-300 p-3 font-medium">{logbook.section_totals.section_a.cumulative_hours || '0:00h'}</td>
                   </tr>
                 </tbody>
               </table>

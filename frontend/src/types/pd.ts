@@ -8,6 +8,7 @@ export interface PDEntry {
   topics_covered: string
   competencies_covered: string[]
   week_starting: string
+  reflection?: string
   duration_display: string
   duration_hours_minutes: string
   created_at: string

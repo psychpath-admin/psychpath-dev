@@ -54,5 +54,5 @@ class PDEntryWithSummarySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'activity_type', 'date_of_activity', 'duration_minutes',
             'is_active_activity', 'activity_details', 'topics_covered',
-            'competencies_covered', 'reflection', 'duration_display', 'duration_hours_minutes'
+            'competencies_covered', 'reflection', 'week_starting', 'duration_display', 'duration_hours_minutes'
         ]
