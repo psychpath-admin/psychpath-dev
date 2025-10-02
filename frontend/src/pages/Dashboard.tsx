@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getSectionAEntries, getPDMetrics, getSupervisionMetrics, getProgramSummary } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
+import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 import type { PDMetrics } from '@/types/pd'
 import type { SupervisionMetrics } from '@/types/supervision'
 import type { ProgramSummary } from '@/types/program'
@@ -14,38 +15,33 @@ import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { 
-  Clock, 
   Users, 
   BookOpen, 
   Target, 
   CheckCircle, 
   AlertTriangle, 
   XCircle,
-  TrendingUp,
   FileText,
-  Download,
   Briefcase,
-  UserCheck,
-  Calendar,
-  Activity
+  UserCheck
 } from 'lucide-react'
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core'
-import type { DragEndEvent } from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+// import {
+//   DndContext,
+//   closestCenter,
+//   KeyboardSensor,
+//   PointerSensor,
+//   useSensor,
+//   useSensors,
+// } from '@dnd-kit/core'
+// import type { DragEndEvent } from '@dnd-kit/core'
+// import {
+//   arrayMove,
+//   SortableContext,
+//   sortableKeyboardCoordinates,
+//   verticalListSortingStrategy,
+//   useSortable,
+// } from '@dnd-kit/sortable'
+// import { CSS } from '@dnd-kit/utilities'
 
 type Entry = {
   id: number
@@ -56,7 +52,7 @@ type Entry = {
 
 type DashboardCard = {
   id: string
-  type: 'donut' | 'bar' | 'traffic-light'
+  type: 'donut' | 'bar' | 'traffic-light' | 'custom'
   title: string
   component: React.ReactNode
 }
@@ -85,6 +81,21 @@ interface SupervisionInvitation {
   can_be_accepted: boolean
 }
 
+interface LogbookStatus {
+  overall_status: 'red' | 'amber' | 'green'
+  status_message: string
+  status_counts: {
+    total: number
+    ready: number
+    submitted: number
+    approved: number
+    rejected: number
+    overdue: number
+    new: number
+  }
+  total_weeks: number
+}
+
 export default function Dashboard({ userRole }: DashboardProps) {
   console.log('Dashboard: Component rendering, userRole:', userRole)
   const { user } = useAuth()
@@ -94,9 +105,10 @@ export default function Dashboard({ userRole }: DashboardProps) {
   const [supervisionMetrics, setSupervisionMetrics] = useState<SupervisionMetrics | null>(null)
   const [programSummary, setProgramSummary] = useState<ProgramSummary | null>(null)
   const [cardOrder, setCardOrder] = useState<string[]>([])
-  const [refreshKey, setRefreshKey] = useState(0) // For triggering refreshes
+  // const [refreshKey, setRefreshKey] = useState(0) // For triggering refreshes
   const [pendingInvitations, setPendingInvitations] = useState<SupervisionInvitation[]>([])
   const [respondingToInvitation, setRespondingToInvitation] = useState<number | null>(null)
+  const [logbookStatus, setLogbookStatus] = useState<LogbookStatus | null>(null)
 
   // Centralized data fetcher so children can trigger a refresh safely
   const fetchData = () => {
@@ -139,13 +151,38 @@ export default function Dashboard({ userRole }: DashboardProps) {
       .catch(() => {
         setProgramSummary(null)
       })
+
+    // Load Logbook Status Summary (only for PROVISIONAL/REGISTRAR)
+    if (userRole === 'PROVISIONAL' || userRole === 'REGISTRAR') {
+      fetchLogbookStatus()
+    }
   }
 
   // Function to trigger dashboard refresh (called by child components)
   const handleSupervisionUpdate = () => {
-    setRefreshKey(prev => prev + 1)
-    // Also refresh data
+    // Refresh data
     fetchData()
+  }
+
+  // Fetch logbook status summary
+  const fetchLogbookStatus = async () => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/logbook/status-summary/`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setLogbookStatus(data)
+      } else {
+        setLogbookStatus(null)
+      }
+    } catch (error) {
+      console.error('Error fetching logbook status:', error)
+      setLogbookStatus(null)
+    }
   }
 
   // Fetch pending supervision invitations
@@ -244,8 +281,8 @@ export default function Dashboard({ userRole }: DashboardProps) {
         'ORG_ADMIN': []
       }
       
-      const requiredCards = essentialCards[userRole] || []
-      requiredCards.forEach(cardId => {
+      const requiredCards = essentialCards[userRole as keyof typeof essentialCards] || []
+      requiredCards.forEach((cardId: string) => {
         if (!parsed.includes(cardId)) {
           parsed.push(cardId)
         }
@@ -255,7 +292,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
     } else {
       // Use role-specific default order
       const userRole = programSummary?.role || 'PROVISIONAL'
-      cardOrderToSet = defaultCardOrders[userRole] || defaultCardOrders['PROVISIONAL']
+      cardOrderToSet = defaultCardOrders[userRole as keyof typeof defaultCardOrders] || defaultCardOrders['PROVISIONAL']
     }
     
     console.log('Dashboard: Setting card order:', cardOrderToSet)
@@ -377,10 +414,10 @@ export default function Dashboard({ userRole }: DashboardProps) {
     }
   }, [programSummary])
 
-  const percent = (value: number, target: number) => Math.max(0, Math.min(100, Math.round((value / target) * 100)))
+  // const percent = (value: number, target: number) => Math.max(0, Math.min(100, Math.round((value / target) * 100)))
   
   // Calculate supervision ratio status
-  const supervisionStatus = useMemo(() => {
+  const supervisionStatus = useMemo((): { status: 'red' | 'amber' | 'green'; message: string } => {
     const requiredSupervision = Math.ceil(metrics.prac / targets.supervisionRatio)
     const actualSupervision = supervisionMetrics ? minutesToHours(supervisionMetrics.total_supervision_minutes) : 0
     const ratio = actualSupervision > 0 ? metrics.prac / actualSupervision : 0
@@ -444,43 +481,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
     )
   }
 
-  // Drag and drop sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
-
-  // Handle drag end
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-
-    // Re-enable text selection after drag
-    document.body.style.userSelect = ''
-
-    if (active.id !== over?.id) {
-      setCardOrder((items) => {
-        const oldIndex = items.indexOf(active.id as string)
-        const newIndex = items.indexOf(over?.id as string)
-        const newOrder = arrayMove(items, oldIndex, newIndex)
-
-        // Save to localStorage
-        localStorage.setItem('dashboard-card-order', JSON.stringify(newOrder))
-        return newOrder
-      })
-    }
-  }
-
-  // Handle drag start
-  const handleDragStart = () => {
-    // Prevent text selection during drag
-    document.body.style.userSelect = 'none'
-  }
+  // Drag and drop functionality removed for now
 
   // Create dashboard cards
   const dashboardCards: Record<string, DashboardCard> = useMemo(() => ({
@@ -754,14 +755,14 @@ export default function Dashboard({ userRole }: DashboardProps) {
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Professional Development</span>
-                    <span>{pdMetrics ? minutesToHours(pdMetrics.total_pd_minutes).toFixed(1) : '0'} / {targets.pd}</span>
+                    <span>{pdMetrics ? formatDurationWithUnit(pdMetrics.total_pd_minutes) : '0:00h'} / {targets.pd}h</span>
                   </div>
                   <Progress value={pdMetrics ? (minutesToHours(pdMetrics.total_pd_minutes) / targets.pd) * 100 : 0} />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Supervision</span>
-                    <span>{supervisionMetrics ? minutesToHours(supervisionMetrics.total_supervision_minutes).toFixed(1) : '0'} / {targets.supervisionTotal}</span>
+                    <span>{supervisionMetrics ? formatDurationWithUnit(supervisionMetrics.total_supervision_minutes) : '0:00h'} / {targets.supervisionTotal}h</span>
                   </div>
                   <Progress value={supervisionMetrics ? (minutesToHours(supervisionMetrics.total_supervision_minutes) / targets.supervisionTotal) * 100 : 0} />
                 </div>
@@ -963,7 +964,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
                 <div>
                   <div className="font-medium">Professional Development</div>
                   <div className="text-sm text-gray-600">
-                    {pdMetrics ? minutesToHours(pdMetrics.total_pd_minutes).toFixed(1) : '0'} / {targets.pd}h
+                    {pdMetrics ? formatDurationWithUnit(pdMetrics.total_pd_minutes) : '0:00h'} / {targets.pd}h
                   </div>
                 </div>
               </div>
@@ -982,9 +983,9 @@ export default function Dashboard({ userRole }: DashboardProps) {
             <div className="p-3 bg-blue-50 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-blue-800">Annual PD Progress</span>
-                <span className="text-sm text-blue-600">{pdMetrics?.annual_pd_hours || 0} / {targets.pd}h</span>
+                <span className="text-sm text-blue-600">{pdMetrics ? formatDurationWithUnit(pdMetrics.total_pd_minutes) : '0:00h'} / {targets.pd}h</span>
               </div>
-              <Progress value={pdMetrics ? (pdMetrics.annual_pd_hours / targets.pd) * 100 : 0} className="h-2" />
+              <Progress value={pdMetrics ? (minutesToHours(pdMetrics.total_pd_minutes) / targets.pd) * 100 : 0} className="h-2" />
             </div>
           </CardContent>
         </Card>
@@ -1010,7 +1011,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
                 <div>
                   <div className="font-medium">Supervision Hours</div>
                   <div className="text-sm text-gray-600">
-                    {supervisionMetrics ? minutesToHours(supervisionMetrics.total_supervision_minutes).toFixed(1) : '0'} / {targets.supervisionTotal}h
+                    {supervisionMetrics ? formatDurationWithUnit(supervisionMetrics.total_supervision_minutes) : '0:00h'} / {targets.supervisionTotal}h
                   </div>
                 </div>
               </div>
@@ -1043,6 +1044,99 @@ export default function Dashboard({ userRole }: DashboardProps) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Weekly Logbook Status Group */}
+        {(userRole === 'PROVISIONAL' || userRole === 'REGISTRAR') && logbookStatus && (
+          <Card className="flex-1">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <FileText className="h-5 w-5 text-orange-600" />
+                Weekly Logbooks
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Overall Status */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-4 h-4 rounded-full ${
+                    logbookStatus.overall_status === 'red' ? 'bg-red-500' : 
+                    logbookStatus.overall_status === 'amber' ? 'bg-yellow-500' : 'bg-green-500'
+                  }`}></div>
+                  <div>
+                    <div className="font-medium">Logbook Status</div>
+                    <div className="text-sm text-gray-600">{logbookStatus.status_message}</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-gray-800">{logbookStatus.total_weeks}</div>
+                  <div className="text-xs text-gray-500">Total Weeks</div>
+                </div>
+              </div>
+
+              {/* Status Breakdown */}
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                {logbookStatus.status_counts.new > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                    <span className="text-blue-700">New</span>
+                    <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">
+                      {logbookStatus.status_counts.new}
+                    </Badge>
+                  </div>
+                )}
+                {logbookStatus.status_counts.ready > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <span className="text-gray-700">Ready</span>
+                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
+                      {logbookStatus.status_counts.ready}
+                    </Badge>
+                  </div>
+                )}
+                {logbookStatus.status_counts.submitted > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-yellow-50 rounded">
+                    <span className="text-yellow-700">Submitted</span>
+                    <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-200">
+                      {logbookStatus.status_counts.submitted}
+                    </Badge>
+                  </div>
+                )}
+                {logbookStatus.status_counts.approved > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-green-50 rounded">
+                    <span className="text-green-700">Approved</span>
+                    <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200">
+                      {logbookStatus.status_counts.approved}
+                    </Badge>
+                  </div>
+                )}
+                {logbookStatus.status_counts.rejected > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-red-50 rounded">
+                    <span className="text-red-700">Rejected</span>
+                    <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200">
+                      {logbookStatus.status_counts.rejected}
+                    </Badge>
+                  </div>
+                )}
+                {logbookStatus.status_counts.overdue > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-red-100 rounded">
+                    <span className="text-red-800 font-medium">Overdue</span>
+                    <Badge variant="outline" className="bg-red-200 text-red-800 border-red-300 font-medium">
+                      {logbookStatus.status_counts.overdue}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Action */}
+              <div className="pt-2">
+                <Link to="/logbook">
+                  <Button variant="outline" size="sm" className="w-full">
+                    <FileText className="h-4 w-4 mr-2" />
+                    View Logbooks
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Quick Actions */}
@@ -1126,13 +1220,13 @@ function Bar({ title, value, target, subtitle, state, description }: { title: st
   )
 }
 
-function ProgressBar({ percent }: { percent: number }) {
-  return (
-    <div className="h-2 w-full rounded bg-gray-100">
-      <div className="h-2 rounded bg-primaryBlue" style={{ width: `${percent}%` }} />
-    </div>
-  )
-}
+// function ProgressBar({ percent }: { percent: number }) {
+//   return (
+//     <div className="h-2 w-full rounded bg-gray-100">
+//       <div className="h-2 rounded bg-primaryBlue" style={{ width: `${percent}%` }} />
+//     </div>
+//   )
+// }
 
 function Donut({ percent }: { percent: number }) {
   const size = 72
@@ -1183,33 +1277,33 @@ function TrafficLight({ status }: { status: 'red' | 'amber' | 'green' }) {
   )
 }
 
-function SortableCard({ id, children }: { id: string; children: React.ReactNode }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id })
+// function SortableCard({ id, children }: { id: string; children: React.ReactNode }) {
+//   const {
+//     attributes,
+//     listeners,
+//     setNodeRef,
+//     transform,
+//     transition,
+//     isDragging,
+//   } = useSortable({ id })
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
+//   const style = {
+//     transform: CSS.Transform.toString(transform),
+//     transition,
+//     opacity: isDragging ? 0.5 : 1,
+//   }
 
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={`cursor-grab active:cursor-grabbing select-none hover:shadow-lg transition-shadow duration-200 ${isDragging ? 'z-50 shadow-2xl' : ''}`}
-    >
-      {children}
-    </div>
-  )
-}
+//   return (
+//     <div
+//       ref={setNodeRef}
+//       style={style}
+//       {...attributes}
+//       {...listeners}
+//       className={`cursor-grab active:cursor-grabbing select-none hover:shadow-lg transition-shadow duration-200 ${isDragging ? 'z-50 shadow-2xl' : ''}`}
+//     >
+//       {children}
+//     </div>
+//   )
+// }
 
 

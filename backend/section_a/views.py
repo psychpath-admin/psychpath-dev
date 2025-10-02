@@ -15,7 +15,14 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Return entries for the current user only"""
-        return SectionAEntry.objects.filter(trainee=self.request.user)
+        queryset = SectionAEntry.objects.filter(trainee=self.request.user)
+        
+        # Filter by week_starting if provided
+        week_starting = self.request.query_params.get('week_starting', None)
+        if week_starting:
+            queryset = queryset.filter(week_starting=week_starting)
+        
+        return queryset
     
     def perform_create(self, serializer):
         """Automatically set the trainee to the current user"""

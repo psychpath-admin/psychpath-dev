@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from utils.duration_utils import minutes_to_hours_minutes, minutes_to_display_format, minutes_to_decimal_hours
 import json
 
 
@@ -9,7 +10,7 @@ class WeeklyLogbook(models.Model):
     """Weekly logbook for trainees"""
     
     STATUS_CHOICES = [
-        ('draft', 'Draft'),
+        ('ready', 'Ready'),
         ('submitted', 'Submitted'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
@@ -19,7 +20,7 @@ class WeeklyLogbook(models.Model):
     week_start_date = models.DateField()
     week_end_date = models.DateField()
     week_number = models.PositiveIntegerField(default=1)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ready')
     section_a_entry_ids = models.JSONField(default=list, help_text="List of Section A entry IDs")
     section_b_entry_ids = models.JSONField(default=list, help_text="List of Section B entry IDs")
     section_c_entry_ids = models.JSONField(default=list, help_text="List of Section C entry IDs")
@@ -45,55 +46,88 @@ class WeeklyLogbook(models.Model):
         from section_b.models import ProfessionalDevelopmentEntry
         from section_c.models import SupervisionEntry
         
-        # Calculate Section A totals
+        # Calculate Section A totals (split by DCC and CRA/ICRA)
         section_a_entries = SectionAEntry.objects.filter(id__in=self.section_a_entry_ids)
-        section_a_total_minutes = sum(entry.duration_minutes for entry in section_a_entries)
         
-        # Calculate cumulative Section A (all previous weeks)
-        previous_section_a = SectionAEntry.objects.filter(
-            logbook__trainee=self.trainee,
-            logbook__week_start_date__lt=self.week_start_date
+        # Separate DCC and CRA/ICRA entries
+        dcc_entries = section_a_entries.filter(entry_type='client_contact')
+        cra_entries = section_a_entries.filter(entry_type__in=['cra', 'independent_activity'])
+        
+        dcc_total_minutes = sum(entry.duration_minutes or 0 for entry in dcc_entries)
+        cra_total_minutes = sum(entry.duration_minutes or 0 for entry in cra_entries)
+        section_a_total_minutes = dcc_total_minutes + cra_total_minutes
+        
+        # Calculate cumulative totals (all entries from previous weeks + current week)
+        # For the first week, this should equal the weekly total
+        all_previous_dcc = SectionAEntry.objects.filter(
+            trainee=self.trainee,
+            week_starting__lt=self.week_start_date,
+            entry_type='client_contact'
+            # Include ALL entries from previous weeks, not just locked ones
         )
-        cumulative_section_a = sum(entry.duration_minutes for entry in previous_section_a)
+        all_previous_cra = SectionAEntry.objects.filter(
+            trainee=self.trainee,
+            week_starting__lt=self.week_start_date,
+            entry_type__in=['cra', 'independent_activity']
+            # Include ALL entries from previous weeks, not just locked ones
+        )
+        
+        cumulative_dcc = sum(entry.duration_minutes or 0 for entry in all_previous_dcc) + dcc_total_minutes
+        cumulative_cra = sum(entry.duration_minutes or 0 for entry in all_previous_cra) + cra_total_minutes
         
         # Calculate Section B totals
         section_b_entries = ProfessionalDevelopmentEntry.objects.filter(id__in=self.section_b_entry_ids)
-        section_b_total_minutes = sum(entry.duration_minutes for entry in section_b_entries)
+        section_b_total_minutes = sum(entry.duration_minutes or 0 for entry in section_b_entries)
         
         # Calculate cumulative Section B
-        previous_section_b = ProfessionalDevelopmentEntry.objects.filter(
-            logbook__trainee=self.trainee,
-            logbook__week_start_date__lt=self.week_start_date
+        all_previous_section_b = ProfessionalDevelopmentEntry.objects.filter(
+            trainee=self.trainee,
+            week_starting__lt=self.week_start_date
+            # Include ALL entries from previous weeks, not just locked ones
         )
-        cumulative_section_b = sum(entry.duration_minutes for entry in previous_section_b)
+        cumulative_section_b = sum(entry.duration_minutes or 0 for entry in all_previous_section_b) + section_b_total_minutes
         
         # Calculate Section C totals
         section_c_entries = SupervisionEntry.objects.filter(id__in=self.section_c_entry_ids)
-        section_c_total_minutes = sum(entry.duration_minutes for entry in section_c_entries)
+        section_c_total_minutes = sum(entry.duration_minutes or 0 for entry in section_c_entries)
         
-        # Calculate cumulative Section C
-        previous_section_c = SupervisionEntry.objects.filter(
-            logbook__trainee=self.trainee,
-            logbook__week_start_date__lt=self.week_start_date
-        )
-        cumulative_section_c = sum(entry.duration_minutes for entry in previous_section_c)
+        # Calculate cumulative Section C (SupervisionEntry uses UserProfile, not User)
+        from api.models import UserProfile
+        try:
+            trainee_profile = UserProfile.objects.get(user=self.trainee)
+            all_previous_section_c = SupervisionEntry.objects.filter(
+                trainee=trainee_profile,
+                date_of_supervision__lt=self.week_start_date
+                # Include ALL entries from previous weeks, not just locked ones
+            )
+        except UserProfile.DoesNotExist:
+            all_previous_section_c = SupervisionEntry.objects.none()
+        cumulative_section_c = sum(entry.duration_minutes or 0 for entry in all_previous_section_c) + section_c_total_minutes
         
         return {
             'section_a': {
-                'weekly_hours': round(section_a_total_minutes / 60, 1),
-                'cumulative_hours': round((cumulative_section_a + section_a_total_minutes) / 60, 1)
+                'weekly_hours': minutes_to_hours_minutes(section_a_total_minutes),
+                'cumulative_hours': minutes_to_hours_minutes(cumulative_dcc + cumulative_cra),
+                'dcc': {
+                    'weekly_hours': minutes_to_hours_minutes(dcc_total_minutes),
+                    'cumulative_hours': minutes_to_hours_minutes(cumulative_dcc)
+                },
+                'cra': {
+                    'weekly_hours': minutes_to_hours_minutes(cra_total_minutes),
+                    'cumulative_hours': minutes_to_hours_minutes(cumulative_cra)
+                }
             },
             'section_b': {
-                'weekly_hours': round(section_b_total_minutes / 60, 1),
-                'cumulative_hours': round((cumulative_section_b + section_b_total_minutes) / 60, 1)
+                'weekly_hours': minutes_to_hours_minutes(section_b_total_minutes),
+                'cumulative_hours': minutes_to_hours_minutes(cumulative_section_b)
             },
             'section_c': {
-                'weekly_hours': round(section_c_total_minutes / 60, 1),
-                'cumulative_hours': round((cumulative_section_c + section_c_total_minutes) / 60, 1)
+                'weekly_hours': minutes_to_hours_minutes(section_c_total_minutes),
+                'cumulative_hours': minutes_to_hours_minutes(cumulative_section_c)
             },
             'total': {
-                'weekly_hours': round((section_a_total_minutes + section_b_total_minutes + section_c_total_minutes) / 60, 1),
-                'cumulative_hours': round((cumulative_section_a + cumulative_section_b + cumulative_section_c) / 60, 1)
+                'weekly_hours': minutes_to_hours_minutes(section_a_total_minutes + section_b_total_minutes + section_c_total_minutes),
+                'cumulative_hours': minutes_to_hours_minutes(cumulative_dcc + cumulative_cra + cumulative_section_b + cumulative_section_c)
             }
         }
     
@@ -105,21 +139,64 @@ class WeeklyLogbook(models.Model):
     def is_editable(self):
         """Check if this logbook is currently editable (unlocked)"""
         # Check if there's an active unlock request
-        active_unlock = self.unlock_requests.filter(
-            status='approved',
-            manually_relocked=False,
-            unlock_expires_at__gt=timezone.now()
-        ).first()
-        
-        return active_unlock is not None
+        try:
+            active_unlock = self.unlock_requests.filter(
+                status='approved',
+                manually_relocked=False,
+                unlock_expires_at__gt=timezone.now()
+            ).first()
+            return active_unlock is not None
+        except Exception:
+            # Handle case where unlock_requests table doesn't exist
+            return False
     
     def get_active_unlock(self):
         """Get the currently active unlock request if any"""
-        return self.unlock_requests.filter(
-            status='approved',
-            manually_relocked=False,
-            unlock_expires_at__gt=timezone.now()
-        ).first()
+        try:
+            return self.unlock_requests.filter(
+                status='approved',
+                manually_relocked=False,
+                unlock_expires_at__gt=timezone.now()
+            ).first()
+        except Exception:
+            # Handle case where unlock_requests table doesn't exist
+            return None
+    
+    def get_rag_status(self):
+        """Get RAG status for dashboard display"""
+        if self.status in ['rejected'] or self.is_overdue():
+            return 'red'  # Overdue or Rejected
+        elif self.status == 'ready':
+            return 'amber'  # Ready but not yet submitted
+        elif self.status == 'approved':
+            return 'green'  # Approved by supervisor
+        else:
+            return 'amber'  # Submitted (waiting for review)
+    
+    def is_overdue(self):
+        """Check if logbook is overdue (past week end date and not approved)"""
+        if self.status == 'approved':
+            return False
+        return timezone.now().date() > self.week_end_date
+    
+    def has_supervisor_comments(self):
+        """Check if supervisor has provided comments"""
+        return bool(self.supervisor_comments.strip()) if self.supervisor_comments else False
+    
+    def is_editable_by_user(self, user):
+        """Check if logbook can be edited by the given user"""
+        if user != self.trainee:
+            return False
+        
+        # Can edit if status is ready or rejected
+        if self.status in ['ready', 'rejected']:
+            return True
+        
+        # Can edit if there's an active unlock
+        if self.is_editable():
+            return True
+        
+        return False
 
 
 class LogbookEntry(models.Model):

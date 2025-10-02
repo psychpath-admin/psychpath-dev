@@ -11,7 +11,11 @@ MANAGE := USE_SQLITE=1 $(VENV_PY) $(BACKEND_DIR)/manage.py
 help:
 	@echo "Available targets:"
 	@echo "  setup             - Set up virtual environment and install dependencies"
-	@echo "  dev-up            - Run backend (SQLite) and frontend dev servers"
+	@echo "  dev-up            - Run backend (SQLite) and frontend dev servers (foreground)"
+	@echo "  dev-start         - Start development servers in background"
+	@echo "  dev-stop          - Stop development servers"
+	@echo "  dev-status        - Check status of development servers"
+	@echo "  dev-logs          - Show development server logs"
 	@echo "  db-backup         - Create timestamped SQLite backup"
 	@echo "  db-restore        - Restore SQLite from SNAPSHOT=path/to/file"
 	@echo "  db-reset          - Backup, reset DB, run migrations"
@@ -46,6 +50,65 @@ dev-up:
 	@sleep 1
 	@echo "Starting frontend on :5173..."
 	@cd $(FRONTEND_DIR) && npm run dev
+
+.PHONY: dev-start
+dev-start:
+	@echo "Starting development servers in background..."
+	@echo "Checking if virtual environment exists..."
+	@if [ ! -d "$(BACKEND_DIR)/venv" ]; then \
+		echo "Virtual environment not found. Running setup..."; \
+		$(MAKE) setup; \
+	fi
+	@echo "Starting backend (SQLite) on :8000..."
+	@cd $(BACKEND_DIR) && USE_SQLITE=1 ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 > ../logs/backend.log 2>&1 &
+	@echo $$! > .backend.pid
+	@sleep 2
+	@echo "Starting frontend on :5173..."
+	@cd $(FRONTEND_DIR) && npm run dev > ../logs/frontend.log 2>&1 &
+	@echo $$! > .frontend.pid
+	@echo "Development servers started!"
+	@echo "Backend: http://localhost:8000 (PID: $$(cat .backend.pid))"
+	@echo "Frontend: http://localhost:5173 (PID: $$(cat .frontend.pid))"
+	@echo "Logs: logs/backend.log and logs/frontend.log"
+	@echo "Use 'make dev-stop' to stop the servers"
+
+.PHONY: dev-stop
+dev-stop:
+	@echo "Stopping development servers..."
+	@if [ -f .backend.pid ]; then \
+		echo "Stopping backend (PID: $$(cat .backend.pid))..."; \
+		kill $$(cat .backend.pid) 2>/dev/null || true; \
+		rm -f .backend.pid; \
+	fi
+	@if [ -f .frontend.pid ]; then \
+		echo "Stopping frontend (PID: $$(cat .frontend.pid))..."; \
+		kill $$(cat .frontend.pid) 2>/dev/null || true; \
+		rm -f .frontend.pid; \
+	fi
+	@echo "Development servers stopped!"
+
+.PHONY: dev-status
+dev-status:
+	@echo "Development server status:"
+	@if [ -f .backend.pid ] && kill -0 $$(cat .backend.pid) 2>/dev/null; then \
+		echo "  Backend: Running (PID: $$(cat .backend.pid))"; \
+	else \
+		echo "  Backend: Not running"; \
+	fi
+	@if [ -f .frontend.pid ] && kill -0 $$(cat .frontend.pid) 2>/dev/null; then \
+		echo "  Frontend: Running (PID: $$(cat .frontend.pid))"; \
+	else \
+		echo "  Frontend: Not running"; \
+	fi
+
+.PHONY: dev-logs
+dev-logs:
+	@echo "Showing development server logs..."
+	@echo "=== Backend Logs ==="
+	@tail -n 20 logs/backend.log 2>/dev/null || echo "No backend logs found"
+	@echo ""
+	@echo "=== Frontend Logs ==="
+	@tail -n 20 logs/frontend.log 2>/dev/null || echo "No frontend logs found"
 
 .PHONY: db-backup
 db-backup:

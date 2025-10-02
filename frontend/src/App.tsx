@@ -16,6 +16,8 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import MyReflections from '@/pages/MyReflections'
 import LogbookDashboard from '@/pages/LogbookDashboard'
+import WeeklyLogbookDashboard from '@/pages/WeeklyLogbookDashboard'
+import WeeklyLogbookEditor from '@/pages/WeeklyLogbookEditor'
 import LogbookPage from '@/pages/LogbookPage'
 import LogbookEditor from '@/pages/LogbookEditor'
 import SectionA from '@/pages/SectionA'
@@ -149,7 +151,9 @@ function App() {
           <Route path="/section-c" element={<RequireAuth><SectionC /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><UserProfile /></RequireAuth>} />
           <Route path="/me/reflections" element={<RequireAuth><MyReflections /></RequireAuth>} />
-          <Route path="/logbook" element={<RequireAuth><LogbookPage /></RequireAuth>} />
+          <Route path="/logbook" element={<RequireAuth><WeeklyLogbookDashboard /></RequireAuth>} />
+          <Route path="/logbook/week/:weekStart" element={<RequireAuth><WeeklyLogbookEditor /></RequireAuth>} />
+          <Route path="/logbook/old" element={<RequireAuth><LogbookPage /></RequireAuth>} />
           <Route path="/logbook/:id" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
           <Route path="/logbook/:id/edit" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
           <Route path="/section-a/cra-edit" element={<RequireAuth><CRAEdit /></RequireAuth>} />

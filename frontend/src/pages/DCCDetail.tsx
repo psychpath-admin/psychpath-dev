@@ -3,6 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Edit, Plus, Trash2, Calendar, Clock, User, MapPin, FileText } from 'lucide-react'
+
+// Helper function to format dates in dd/mm/yyyy format
+const formatDateDDMMYYYY = (dateString: string) => {
+  const date = new Date(dateString)
+  const day = date.getDate().toString().padStart(2, '0')
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const year = date.getFullYear()
+  return `${day}/${month}/${year}`
+}
 import { useNavigate } from 'react-router-dom'
 
 interface DCCEntry {
@@ -75,7 +84,7 @@ export default function DCCDetail({ entry, onEdit, onAddCRA, onDelete }: DCCDeta
                 DCC Record: {entry.client_id}
               </h1>
               <p className="text-gray-600">
-                Session Date: {new Date(entry.session_date).toLocaleDateString()}
+                Session Date: {formatDateDDMMYYYY(entry.session_date)}
               </p>
             </div>
             
@@ -121,11 +130,11 @@ export default function DCCDetail({ entry, onEdit, onAddCRA, onDelete }: DCCDeta
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-gray-500">Session Date</label>
-                    <p className="text-lg">{new Date(entry.session_date).toLocaleDateString()}</p>
+                    <p className="text-lg">{formatDateDDMMYYYY(entry.session_date)}</p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-500">Week Starting</label>
-                    <p className="text-lg">{new Date(entry.week_starting).toLocaleDateString()}</p>
+                    <p className="text-lg">{formatDateDDMMYYYY(entry.week_starting)}</p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-500">Duration</label>
@@ -290,13 +299,13 @@ export default function DCCDetail({ entry, onEdit, onAddCRA, onDelete }: DCCDeta
                 <div>
                   <label className="text-sm font-medium text-gray-500">Created</label>
                   <p className="text-sm text-gray-600">
-                    {new Date(entry.created_at).toLocaleDateString()}
+                    {formatDateDDMMYYYY(entry.created_at)}
                   </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Last Updated</label>
                   <p className="text-sm text-gray-600">
-                    {new Date(entry.updated_at).toLocaleDateString()}
+                    {formatDateDDMMYYYY(entry.updated_at)}
                   </p>
                 </div>
               </CardContent>

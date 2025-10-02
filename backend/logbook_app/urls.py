@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    logbook_list, eligible_weeks, logbook_draft, logbook_submit, 
+    logbook_list, logbook_dashboard_list, logbook_status_summary, eligible_weeks, logbook_draft, logbook_create, logbook_submit, 
     logbook_detail, logbook_audit_logs, supervisor_logbooks,
     logbook_approve, logbook_reject, logbook_entries, logbook_review,
     logbook_messages, logbook_audit_trail, logbook_resubmit,
@@ -15,8 +15,11 @@ from .views import (
 urlpatterns = [
     # Logbook management endpoints
     path('', logbook_list, name='logbook-list'),
+    path('dashboard/', logbook_dashboard_list, name='logbook-dashboard-list'),
+    path('status-summary/', logbook_status_summary, name='logbook-status-summary'),
     path('eligible-weeks/', eligible_weeks, name='eligible-weeks'),
     path('draft/', logbook_draft, name='logbook-draft'),
+    path('create/', logbook_create, name='logbook-create'),
     path('submit/', logbook_submit, name='logbook-submit'),
     path('<int:logbook_id>/', logbook_detail, name='logbook-detail'),
     path('<int:logbook_id>/audit-logs/', logbook_audit_logs, name='logbook-audit-logs'),

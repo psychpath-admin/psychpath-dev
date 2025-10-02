@@ -20,6 +20,16 @@ import {
   deleteCustomActivityType
 } from '@/lib/api'
 import CRAForm from '@/components/CRAForm'
+import { minutesToHoursMinutes, formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
+
+// Helper function to format dates in dd/mm/yyyy format
+const formatDateDDMMYYYY = (dateString: string) => {
+  const date = new Date(dateString)
+  const day = date.getDate().toString().padStart(2, '0')
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const year = date.getFullYear()
+  return `${day}/${month}/${year}`
+}
 
 interface DCCEntry {
   id: number
@@ -58,6 +68,7 @@ export default function SectionADashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [dccEntries, setDccEntries] = useState<DCCEntry[]>([])
+  const [allEntries, setAllEntries] = useState<DCCEntry[]>([]) // Store unfiltered entries for cumulative totals
   const [pagination, setPagination] = useState<PaginationInfo>({
     current_page: 1,
     total_pages: 1,
@@ -72,6 +83,7 @@ export default function SectionADashboard() {
   const [editingEntry, setEditingEntry] = useState(false)
   const [editingCRAId, setEditingCRAId] = useState<number | null>(null)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
   
   // Custom activity types state
   const [customActivityTypes, setCustomActivityTypes] = useState<Array<{id: number, name: string}>>([])
@@ -109,10 +121,11 @@ export default function SectionADashboard() {
   const [sessionType, setSessionType] = useState('all')
   const [durationMin, setDurationMin] = useState('')
   const [durationMax, setDurationMax] = useState('')
+  const [groupByWeek, setGroupByWeek] = useState(false)
 
   useEffect(() => {
     loadDCCEntries()
-  }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax])
+  }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax, groupByWeek])
 
   // Load custom activity types from localStorage
   useEffect(() => {
@@ -138,19 +151,32 @@ export default function SectionADashboard() {
     try {
       // For now, we'll use the existing API and filter on frontend
       // TODO: Update backend to support pagination and filtering
-      const allEntries = await getSectionAEntries()
+      const fetchedEntries = await getSectionAEntries()
+      
+      // Store unfiltered entries for cumulative totals calculation
+      setAllEntries(fetchedEntries)
       
       // Filter for DCC and ICRA entries
-      let filteredEntries = allEntries.filter(entry => 
+      let filteredEntries = fetchedEntries.filter(entry => 
         entry.entry_type === 'client_contact' || entry.entry_type === 'independent_activity'
       )
       
       // Apply filters
       if (dateFrom) {
-        filteredEntries = filteredEntries.filter(entry => entry.session_date >= dateFrom)
+        filteredEntries = filteredEntries.filter(entry => {
+          // Parse dates properly for comparison
+          const entryDate = new Date(entry.session_date + 'T00:00:00') // Add time to avoid timezone issues
+          const fromDate = new Date(dateFrom + 'T00:00:00')
+          return entryDate >= fromDate
+        })
       }
       if (dateTo) {
-        filteredEntries = filteredEntries.filter(entry => entry.session_date <= dateTo)
+        filteredEntries = filteredEntries.filter(entry => {
+          // Parse dates properly for comparison
+          const entryDate = new Date(entry.session_date + 'T00:00:00') // Add time to avoid timezone issues
+          const toDate = new Date(dateTo + 'T23:59:59') // End of day
+          return entryDate <= toDate
+        })
       }
       if (sessionType && sessionType !== 'all') {
         filteredEntries = filteredEntries.filter(entry => 
@@ -430,13 +456,7 @@ export default function SectionADashboard() {
   }
 
   const formatDuration = (minutes: string) => {
-    const mins = parseInt(minutes)
-    if (mins >= 60) {
-      const hours = Math.floor(mins / 60)
-      const remainingMins = mins % 60
-      return remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`
-    }
-    return `${mins}m`
+    return formatDurationDisplay(minutes)
   }
 
   const truncateText = (text: string, maxLength: number = 100) => {
@@ -449,10 +469,84 @@ export default function SectionADashboard() {
     setSessionType('all')
     setDurationMin('')
     setDurationMax('')
+    setGroupByWeek(false)
     setPagination(prev => ({ ...prev, current_page: 1 }))
   }
 
-  const hasActiveFilters = dateFrom || dateTo || (sessionType && sessionType !== 'all') || durationMin || durationMax
+  const hasActiveFilters = dateFrom || dateTo || (sessionType && sessionType !== 'all') || durationMin || durationMax || groupByWeek
+
+  const toggleWeekExpansion = (weekStart: string) => {
+    setExpandedWeeks(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(weekStart)) {
+        newSet.delete(weekStart)
+      } else {
+        newSet.add(weekStart)
+      }
+      return newSet
+    })
+  }
+
+  // Group entries by week if groupByWeek is enabled
+  const getGroupedEntries = () => {
+    if (!groupByWeek) {
+      return dccEntries.map(entry => ({ entry, weekStart: null }))
+    }
+    
+    const grouped = dccEntries.reduce((groups, entry) => {
+      const weekStart = entry.week_starting
+      if (!groups[weekStart]) {
+        groups[weekStart] = []
+      }
+      groups[weekStart].push(entry)
+      return groups
+    }, {} as Record<string, DCCEntry[]>)
+    
+    // Sort entries within each group based on the current sort order
+    const sortEntries = (entries: DCCEntry[]) => {
+      switch (sortBy) {
+        case 'newest':
+          return entries.sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
+        case 'oldest':
+          return entries.sort((a, b) => new Date(a.session_date).getTime() - new Date(b.session_date).getTime())
+        case 'duration':
+          return entries.sort((a, b) => (parseInt(b.duration_minutes) || 0) - (parseInt(a.duration_minutes) || 0))
+        case 'client':
+          return entries.sort((a, b) => a.client_id.localeCompare(b.client_id))
+        default:
+          return entries.sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
+      }
+    }
+    
+    // Convert to array and sort by week start date based on the selected sort order
+    const sortedWeeks = Object.entries(grouped).sort(([a], [b]) => {
+      const dateA = new Date(a).getTime()
+      const dateB = new Date(b).getTime()
+      
+      // Apply the same sort logic as entries, but for week groups
+      switch (sortBy) {
+        case 'newest':
+          return dateB - dateA // Newest weeks first
+        case 'oldest':
+          return dateA - dateB // Oldest weeks first
+        case 'duration':
+          // For duration, sort by total duration of all entries in the week
+          const totalDurationA = grouped[a].reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
+          const totalDurationB = grouped[b].reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
+          return totalDurationB - totalDurationA // Longest duration weeks first
+        case 'client':
+          // For client, sort alphabetically by week start date string
+          return a.localeCompare(b)
+        default:
+          return dateB - dateA // Default to newest first
+      }
+    })
+    
+    return sortedWeeks.map(([weekStart, entries]) => ({ 
+      weekStart, 
+      entries: sortEntries(entries)
+    }))
+  }
 
   return (
     <div className="min-h-screen bg-bgSection">
@@ -509,83 +603,17 @@ export default function SectionADashboard() {
           </div>
         </div>
 
-        {/* Quick Stats Cards */}
-        {(() => {
-          const totalEntries = dccEntries.length
-          const totalHours = dccEntries.reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60
-          const uniqueClients = new Set(dccEntries.map(entry => entry.client_id)).size
-          const simulatedHours = dccEntries.filter(entry => entry.simulated).reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60
-
-          return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Total Entries</p>
-                      <p className="text-3xl font-bold text-primary">{totalEntries}</p>
-                    </div>
-                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <FileText className="h-6 w-6 text-primary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Total Hours</p>
-                      <p className="text-3xl font-bold text-secondary">{totalHours.toFixed(1)}h</p>
-                    </div>
-                    <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
-                      <Clock className="h-6 w-6 text-secondary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Unique Clients</p>
-                      <p className="text-3xl font-bold text-accent">{uniqueClients}</p>
-                    </div>
-                    <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
-                      <User className="h-6 w-6 text-accent" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Simulated Hours</p>
-                      <p className="text-3xl font-bold text-primary">{simulatedHours.toFixed(1)}h</p>
-                    </div>
-                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <Target className="h-6 w-6 text-primary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )
-        })()}
 
         {/* Hours Summary */}
         {(() => {
-          // Calculate hours summary
+          // Calculate hours summary - use ALL entries for cumulative totals, not filtered ones
           let totalDccHours = 0
           let totalCRAHours = 0
           let simulatedDccHours = 0
 
-          dccEntries.forEach(entry => {
-            const entryHours = parseInt(entry.duration_minutes) / 60
+          allEntries.forEach(entry => {
+            const entryMinutes = parseInt(entry.duration_minutes) || 0
+            const entryHours = entryMinutes / 60
             
             if (entry.entry_type === 'client_contact') {
               totalDccHours += entryHours
@@ -599,7 +627,8 @@ export default function SectionADashboard() {
             // Add CRA hours from nested entries
             if (entry.cra_entries) {
               entry.cra_entries.forEach(craEntry => {
-                const craHours = parseInt(craEntry.duration_minutes) / 60
+                const craMinutes = parseInt(craEntry.duration_minutes) || 0
+                const craHours = craMinutes / 60
                 totalCRAHours += craHours
               })
             }
@@ -636,13 +665,13 @@ export default function SectionADashboard() {
                           <Target className="h-5 w-5 text-white" />
                         </div>
                         <div className="text-2xl font-bold text-textDark mb-1">
-                          {totalDccHours.toFixed(1)}h
+                          {formatDurationWithUnit(totalDccHours * 60)}
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Direct Client Contact</div>
                         <div className="text-xs text-textLight mb-2">Target: 500h</div>
                         {remainingDcc > 0 ? (
                           <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
-                            {remainingDcc.toFixed(1)}h remaining
+                            {formatDurationWithUnit(remainingDcc * 60)} remaining
                           </Badge>
                         ) : (
                           <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
@@ -652,11 +681,11 @@ export default function SectionADashboard() {
                         {simulatedDccHours > 0 && (
                           <div className="mt-2 p-1 bg-primary/10 rounded text-xs border border-primary/20">
                             <div className="font-semibold text-primary">
-                              {simulatedDccHours.toFixed(1)}h simulated
+                              {formatDurationWithUnit(simulatedDccHours * 60)} simulated
                             </div>
                             {simulatedOverflow > 0 && (
                               <div className="text-accent font-semibold">
-                                +{simulatedOverflow.toFixed(1)}h over
+                                +{formatDurationWithUnit(simulatedOverflow * 60)} over
                               </div>
                             )}
                           </div>
@@ -669,7 +698,7 @@ export default function SectionADashboard() {
                           <FileText className="h-5 w-5 text-white" />
                         </div>
                         <div className="text-2xl font-bold text-textDark mb-1">
-                          {totalCRAHours.toFixed(1)}h
+                          {formatDurationWithUnit(totalCRAHours * 60)}
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Client Related Activities</div>
                         <div className="text-xs text-textLight mb-2">(includes ICRA)</div>
@@ -684,13 +713,13 @@ export default function SectionADashboard() {
                           <TrendingUp className="h-5 w-5 text-white" />
                         </div>
                         <div className="text-2xl font-bold text-textDark mb-1">
-                          {(totalDccHours + totalCRAHours).toFixed(1)}h
+                          {formatDurationWithUnit((totalDccHours + totalCRAHours) * 60)}
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Total Practice Hours</div>
                         <div className="text-xs text-textLight mb-2">Target: 1,360h</div>
                         {remainingPractice > 0 ? (
                           <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
-                            {remainingPractice.toFixed(1)}h remaining
+                            {formatDurationWithUnit(remainingPractice * 60)} remaining
                           </Badge>
                         ) : (
                           <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
@@ -725,6 +754,76 @@ export default function SectionADashboard() {
         })()}
 
         {/* Enhanced Filters and Controls */}
+        {/* Quick Stats Cards */}
+        {(() => {
+          const totalEntries = dccEntries.length
+          const totalMinutes = dccEntries.reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
+          const totalHours = totalMinutes / 60
+          const uniqueClients = new Set(dccEntries.map(entry => entry.client_id)).size
+          const simulatedMinutes = dccEntries.filter(entry => entry.simulated).reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
+          const simulatedHours = simulatedMinutes / 60
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Total Entries</p>
+                      <p className="text-3xl font-bold text-primary">{totalEntries}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <FileText className="h-6 w-6 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Total Hours</p>
+                      <p className="text-3xl font-bold text-secondary">{formatDurationWithUnit(totalMinutes)}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
+                      <Clock className="h-6 w-6 text-secondary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Unique Clients</p>
+                      <p className="text-3xl font-bold text-accent">{uniqueClients}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
+                      <User className="h-6 w-6 text-accent" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="brand-card hover:shadow-md transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="brand-label">Simulated Hours</p>
+                      <p className="text-3xl font-bold text-primary">{formatDurationWithUnit(simulatedMinutes)}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Target className="h-6 w-6 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )
+        })()}
+
         <Card className="mb-8 brand-card">
           <CardHeader className="pb-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -771,7 +870,7 @@ export default function SectionADashboard() {
                 <>
                   {dateFrom && (
                     <Badge variant="secondary" className="bg-primary/10 text-primary">
-                      From: {new Date(dateFrom).toLocaleDateString()}
+                      From: {formatDateDDMMYYYY(dateFrom)}
                       <button onClick={() => setDateFrom('')} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
                         <X className="h-3 w-3" />
                       </button>
@@ -779,7 +878,7 @@ export default function SectionADashboard() {
                   )}
                   {dateTo && (
                     <Badge variant="secondary" className="bg-primary/10 text-primary">
-                      To: {new Date(dateTo).toLocaleDateString()}
+                      To: {formatDateDDMMYYYY(dateTo)}
                       <button onClick={() => setDateTo('')} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
                         <X className="h-3 w-3" />
                       </button>
@@ -797,6 +896,14 @@ export default function SectionADashboard() {
                     <Badge variant="secondary" className="bg-accent/10 text-accent">
                       Duration: {durationMin || '0'} - {durationMax || '∞'} min
                       <button onClick={() => { setDurationMin(''); setDurationMax('') }} className="ml-2 hover:bg-accent/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {groupByWeek && (
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                      Grouped by Week
+                      <button onClick={() => setGroupByWeek(false)} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>
@@ -869,19 +976,34 @@ export default function SectionADashboard() {
             
             {/* Sort and Pagination Controls */}
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">Sort by:</label>
-                <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="newest">Newest to Oldest</SelectItem>
-                    <SelectItem value="oldest">Oldest to Newest</SelectItem>
-                    <SelectItem value="duration">Duration (Longest to Shortest)</SelectItem>
-                    <SelectItem value="client">Client Pseudonym (A-Z)</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Sort by:</label>
+                  <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Newest to Oldest</SelectItem>
+                      <SelectItem value="oldest">Oldest to Newest</SelectItem>
+                      <SelectItem value="duration">Duration (Longest to Shortest)</SelectItem>
+                      <SelectItem value="client">Client Pseudonym (A-Z)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="groupByWeek"
+                    checked={groupByWeek}
+                    onChange={(e) => setGroupByWeek(e.target.checked)}
+                    className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                  />
+                  <label htmlFor="groupByWeek" className="text-sm font-medium text-gray-700">
+                    Group by Week
+                  </label>
+                </div>
               </div>
               
               <div className="flex items-center gap-2">
@@ -958,8 +1080,13 @@ export default function SectionADashboard() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {dccEntries.map((entry, index) => {
-              // Create vibrant color variations using PsychPathway brand colors
+            {getGroupedEntries().map((group, groupIndex) => {
+              // If not grouped, render individual entries
+              if (!groupByWeek) {
+                const entry = group.entry!
+                const index = groupIndex
+                
+                // Create vibrant color variations using PsychPathway brand colors
               const colorVariations = [
                 'bg-blue-50 border-blue-200 hover:border-blue-300',
                 'bg-amber-50 border-amber-200 hover:border-amber-300', 
@@ -1035,7 +1162,7 @@ export default function SectionADashboard() {
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
                         <span className="text-sm font-medium text-gray-700 break-words">
-                          {new Date(entry.session_date).toLocaleDateString()}
+                          {formatDateDDMMYYYY(entry.session_date)}
                         </span>
                       </div>
                       
@@ -1110,7 +1237,7 @@ export default function SectionADashboard() {
                           <div className="space-y-2">
                             <h5 className="font-medium text-gray-700">Session Details</h5>
                             <div className="space-y-1 text-gray-600">
-                              <div><span className="font-medium">Date:</span> {new Date(entry.session_date).toLocaleDateString()}</div>
+                              <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.session_date)}</div>
                               <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
                               <div><span className="font-medium">Location:</span> {entry.place_of_practice}</div>
                               {entry.simulated && (
@@ -1249,6 +1376,259 @@ export default function SectionADashboard() {
                   )}
                 </Card>
               )
+              } else {
+                // Grouped by week - render week header and entries
+                return (
+                  <div key={group.weekStart} className="space-y-4">
+                    {/* Week Header */}
+                    <div 
+                      className="bg-primary/5 border border-primary/20 rounded-lg p-4 cursor-pointer hover:bg-primary/10 transition-colors duration-200"
+                      onClick={() => toggleWeekExpansion(group.weekStart)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Calendar className="h-5 w-5 text-primary" />
+                          <div>
+                            <h3 className="text-lg font-semibold text-primary">
+                              Week Starting {formatDateDDMMYYYY(group.weekStart)}
+                            </h3>
+                            <p className="text-sm text-primary/70">
+                              {group.entries.length} {group.entries.length === 1 ? 'entry' : 'entries'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className="flex gap-4 text-sm">
+                              {/* DCC Total */}
+                              <div className="text-center">
+                                <p className="font-medium text-primary">DCC</p>
+                                <p className="text-primary/70">
+                                  {formatDurationWithUnit(
+                                    group.entries
+                                      .filter(entry => entry.entry_type === 'client_contact')
+                                      .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
+                                  )}
+                                </p>
+                              </div>
+                              
+                              {/* CRA Total */}
+                              <div className="text-center">
+                                <p className="font-medium text-secondary">CRA</p>
+                                <p className="text-secondary/70">
+                                  {formatDurationWithUnit(
+                                    group.entries
+                                      .filter(entry => entry.entry_type === 'cra')
+                                      .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
+                                  )}
+                                </p>
+                              </div>
+                              
+                              {/* ICRA Total */}
+                              <div className="text-center">
+                                <p className="font-medium text-accent">ICRA</p>
+                                <p className="text-accent/70">
+                                  {formatDurationWithUnit(
+                                    group.entries
+                                      .filter(entry => entry.entry_type === 'independent_activity')
+                                      .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
+                                  )}
+                                </p>
+                              </div>
+                              
+                              {/* Total */}
+                              <div className="text-center border-l border-primary/20 pl-4">
+                                <p className="font-medium text-primary">Total</p>
+                                <p className="text-primary/70">
+                                  {formatDurationWithUnit(
+                                    group.entries.reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center">
+                            {expandedWeeks.has(group.weekStart) ? (
+                              <ChevronUp className="h-5 w-5 text-primary" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5 text-primary" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Week Entries */}
+                    {expandedWeeks.has(group.weekStart) && (
+                      <div className="space-y-3">
+                        {group.entries.map((entry, entryIndex) => {
+                        const colorVariations = [
+                          'bg-blue-50 border-blue-200 hover:border-blue-300',
+                          'bg-amber-50 border-amber-200 hover:border-amber-300', 
+                          'bg-orange-50 border-orange-200 hover:border-orange-300',
+                          'bg-green-50 border-green-200 hover:border-green-300',
+                          'bg-purple-50 border-purple-200 hover:border-purple-300',
+                          'bg-pink-50 border-pink-200 hover:border-pink-300',
+                          'bg-indigo-50 border-indigo-200 hover:border-indigo-300',
+                          'bg-teal-50 border-teal-200 hover:border-teal-300',
+                          'bg-rose-50 border-rose-200 hover:border-rose-300',
+                          'bg-cyan-50 border-cyan-200 hover:border-cyan-300'
+                        ]
+                        const cardColorClass = colorVariations[entryIndex % colorVariations.length]
+                        
+                        return (
+                          <Card key={entry.id} className={`hover:shadow-md transition-all duration-300 relative shadow-sm group rounded-card ${cardColorClass}`}>
+                            {/* Enhanced Action buttons */}
+                            <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleViewDetails(entry)}
+                                title={expandedEntries.has(entry.id.toString()) ? "Collapse Details" : "Expand Details"}
+                                className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
+                              >
+                                {expandedEntries.has(entry.id.toString()) ? (
+                                  <ChevronUp className="h-4 w-4 text-textDark" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-textDark" />
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEdit(entry)}
+                                title="Edit"
+                                className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
+                              >
+                                <Edit className="h-4 w-4 text-textDark" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleAddCRA(entry)}
+                                title="Add CRA"
+                                className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
+                              >
+                                <Plus className="h-4 w-4 text-textDark" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDelete(entry)}
+                                title="Delete"
+                                className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            <CardContent className="p-4 pr-32">
+                              {/* ICRA Identification */}
+                              {entry.entry_type === 'independent_activity' && (
+                                <div className="mb-3">
+                                  <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold">
+                                    📋 Independent Client Related Activity (ICRA)
+                                  </Badge>
+                                </div>
+                              )}
+                              
+                              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                                {/* Row 1: Basic Info */}
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                                  <span className="text-sm font-medium text-gray-700 break-words">
+                                    {formatDateDDMMYYYY(entry.session_date)}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex items-center gap-2">
+                                  <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                                  <span className="font-semibold text-gray-900 break-words">{entry.client_id}</span>
+                                  {entry.simulated && (
+                                    <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
+                                      Simulated
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                                  <span className="text-sm font-medium text-gray-700">
+                                    {formatDurationDisplay(entry.duration_minutes)}
+                                  </span>
+                                </div>
+                                
+                                {/* Row 2: Activity Types */}
+                                <div className="flex items-center gap-2 lg:col-span-2 xl:col-span-3">
+                                  <FileText className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                                  <div className="flex flex-wrap gap-1">
+                                    {entry.session_activity_types.map((activity, idx) => (
+                                      <Badge key={idx} variant="outline" className="text-xs">
+                                        {activity}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Expanded Details */}
+                              {expandedEntries.has(entry.id.toString()) && (
+                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <h4 className="font-semibold text-gray-900 mb-2">Session Details</h4>
+                                      <div className="space-y-2 text-sm">
+                                        <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.session_date)}</div>
+                                        <div><span className="font-medium">Duration:</span> {formatDurationDisplay(entry.duration_minutes)}</div>
+                                        <div><span className="font-medium">Location:</span> {entry.place_of_practice}</div>
+                                        {entry.simulated && (
+                                          <div><span className="font-medium">Type:</span> <Badge variant="secondary" className="text-xs ml-1">Simulated</Badge></div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <h4 className="font-semibold text-gray-900 mb-2">Presenting Issues</h4>
+                                      <p className="text-sm text-gray-700">{entry.presenting_issues || 'No issues recorded'}</p>
+                                    </div>
+                                  </div>
+                                  
+                                  {entry.reflections_on_experience && (
+                                    <div className="mt-4">
+                                      <h4 className="font-semibold text-gray-900 mb-2">Reflections</h4>
+                                      <p className="text-sm text-gray-700">{entry.reflections_on_experience}</p>
+                                    </div>
+                                  )}
+
+                                  {/* CRA Entries */}
+                                  {entry.cra_entries && entry.cra_entries.length > 0 && (
+                                    <div className="mt-4">
+                                      <h4 className="font-semibold text-gray-900 mb-2">Client Related Activities</h4>
+                                      <div className="space-y-2">
+                                        {entry.cra_entries.map((craEntry, craIndex) => (
+                                          <Card key={craEntry.id} className="bg-gray-50 border-gray-200">
+                                            <CardContent className="p-3">
+                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                                <div><span className="font-medium">Activity:</span> {craEntry.session_activity_types.join(', ')}</div>
+                                                <div><span className="font-medium">Duration:</span> {formatDurationDisplay(craEntry.duration_minutes)}</div>
+                                                <div className="md:col-span-2"><span className="font-medium">Description:</span> {craEntry.presenting_issues}</div>
+                                              </div>
+                                            </CardContent>
+                                          </Card>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
             })}
           </div>
         )}
@@ -1393,7 +1773,7 @@ export default function SectionADashboard() {
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
                               <span className="text-sm font-medium text-gray-700 break-words">
-                                {new Date(entry.session_date).toLocaleDateString()}
+                                {formatDateDDMMYYYY(entry.session_date)}
                               </span>
                             </div>
                             

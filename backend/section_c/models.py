@@ -50,7 +50,7 @@ class SupervisionEntry(models.Model):
     def duration_display(self):
         hours = self.duration_minutes // 60
         minutes = self.duration_minutes % 60
-        return f"{hours:02d}:{minutes:02d}"
+        return f"{hours}:{minutes:02d}"
 
     @property
     def duration_hours_minutes(self):

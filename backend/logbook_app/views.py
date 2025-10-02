@@ -16,6 +16,7 @@ from .serializers import (
 )
 from logging_utils import support_error_handler
 from rest_framework.parsers import JSONParser
+from utils.duration_utils import minutes_to_hours_minutes, minutes_to_display_format, minutes_to_decimal_hours
 
 
 @api_view(['GET'])
@@ -29,6 +30,320 @@ def logbook_list(request):
     logbooks = WeeklyLogbook.objects.filter(trainee=request.user).order_by('-week_start_date')
     serializer = LogbookSerializer(logbooks, many=True)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_dashboard_list(request):
+    """Get all weeks with entries for dashboard view, including weeks without logbooks"""
+    try:
+        print(f"DEBUG: Dashboard API called by user: {request.user.email}")
+        
+        if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
+            return Response({'error': 'Only trainees can view logbooks'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get current week start (Monday)
+        today = timezone.now().date()
+        current_week_start = today - timedelta(days=today.weekday())
+
+        # Optional query params to widen or constrain the range returned
+        # limit: max number of weeks returned (default 104, capped to 156)
+        # since: only include weeks on/after this ISO date (YYYY-MM-DD)
+        raw_limit = request.query_params.get('limit') or request.GET.get('limit')
+        try:
+            limit = int(raw_limit) if raw_limit else 104
+            limit = 10 if limit < 10 else limit
+            limit = 156 if limit > 156 else limit
+        except (TypeError, ValueError):
+            limit = 104
+
+        since = request.query_params.get('since') or request.GET.get('since')
+        since_date = None
+        if since:
+            try:
+                since_date = datetime.strptime(since, '%Y-%m-%d').date()
+            except ValueError:
+                since_date = None
+        
+        # Import section models
+        from section_a.models import SectionAEntry
+        from section_b.models import ProfessionalDevelopmentEntry
+        from section_c.models import SupervisionEntry
+        from django.db.models import Sum
+        
+        # Get all weeks that have entries
+        section_a_weeks = SectionAEntry.objects.filter(
+            trainee=request.user,
+            locked=False
+        ).values_list('week_starting', flat=True).distinct()
+        
+        section_b_weeks = ProfessionalDevelopmentEntry.objects.filter(
+            trainee=request.user,
+            locked=False
+        ).values_list('week_starting', flat=True).distinct()
+        
+        # For Section C, calculate week_starting from date_of_supervision
+        trainee_profile = request.user.profile
+        section_c_weeks = SupervisionEntry.objects.filter(
+            trainee=trainee_profile,
+            locked=False
+        ).values_list('date_of_supervision', flat=True).distinct()
+        
+        # Convert Section C dates to week starts
+        section_c_week_starts = set()
+        for date in section_c_weeks:
+            week_start = date - timedelta(days=date.weekday())
+            section_c_week_starts.add(week_start)
+        
+        # Combine all weeks
+        all_weeks = set(section_a_weeks) | set(section_b_weeks) | section_c_week_starts
+
+        # Apply optional lower bound filter
+        if since_date:
+            all_weeks = {w for w in all_weeks if w >= since_date}
+        
+        # Limit to last N weeks to prevent performance issues
+        sorted_weeks = sorted(all_weeks, reverse=True)[:limit]
+        
+        # Filter out current week and future weeks
+        available_weeks = []
+        for week_start in sorted_weeks:
+            if week_start < current_week_start:  # Only past weeks
+                week_end = week_start + timedelta(days=6)
+                
+                # Check if logbook exists for this week
+                try:
+                    logbook = WeeklyLogbook.objects.get(
+                        trainee=request.user,
+                        week_start_date=week_start
+                    )
+                    # Logbook exists - use its data
+                    totals = logbook.calculate_section_totals()
+                    active_unlock = logbook.get_active_unlock()
+                    
+                    available_weeks.append({
+                        'id': logbook.id,
+                        'week_start_date': logbook.week_start_date,
+                        'week_end_date': logbook.week_end_date,
+                        'week_display': logbook.week_display,
+                        'week_starting_display': f"Week of {logbook.week_start_date.strftime('%d %b %Y')}",
+                        'status': logbook.status,
+                        'rag_status': logbook.get_rag_status(),
+                        'is_overdue': logbook.is_overdue(),
+                        'has_supervisor_comments': logbook.has_supervisor_comments(),
+                        'is_editable': logbook.is_editable_by_user(request.user),
+                        'supervisor_comments': logbook.supervisor_comments,
+                        'submitted_at': logbook.submitted_at,
+                        'reviewed_at': logbook.reviewed_at,
+                        'reviewed_by_name': f"{logbook.reviewed_by.profile.first_name} {logbook.reviewed_by.profile.last_name}".strip() if logbook.reviewed_by and hasattr(logbook.reviewed_by, 'profile') and logbook.reviewed_by.profile else None,
+                        'section_totals': totals,
+                        'active_unlock': {
+                            'unlock_expires_at': active_unlock.unlock_expires_at,
+                            'duration_minutes': active_unlock.duration_minutes,
+                            'remaining_minutes': active_unlock.get_remaining_time_minutes()
+                        } if active_unlock else None,
+                        'has_logbook': True
+                    })
+                except WeeklyLogbook.DoesNotExist:
+                    # No logbook exists - create a "ready" entry with calculated stats
+                    
+                    # Calculate totals from entries
+                    section_a_entries = SectionAEntry.objects.filter(
+                        trainee=request.user,
+                        week_starting=week_start,
+                        locked=False
+                    )
+                    section_b_entries = ProfessionalDevelopmentEntry.objects.filter(
+                        trainee=request.user,
+                        week_starting=week_start,
+                        locked=False
+                    )
+                    section_c_entries = SupervisionEntry.objects.filter(
+                        trainee=trainee_profile,
+                        date_of_supervision__gte=week_start,
+                        date_of_supervision__lte=week_end,
+                        locked=False
+                    )
+                    
+                    # Create a temporary logbook to use its calculation method
+                    temp_logbook = WeeklyLogbook(
+                        trainee=request.user,
+                        week_start_date=week_start,
+                        week_end_date=week_end,
+                        section_a_entry_ids=[entry.id for entry in section_a_entries],
+                        section_b_entry_ids=[entry.id for entry in section_b_entries],
+                        section_c_entry_ids=[entry.id for entry in section_c_entries]
+                    )
+                    
+                    # Use the same calculation method as the model
+                    try:
+                        totals = temp_logbook.calculate_section_totals()
+                    except Exception as e:
+                        print(f"ERROR calculating totals for week {week_start}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        # Skip this week if calculation fails
+                        continue
+                    
+                    # Check if overdue (past week end date)
+                    is_overdue = today > week_end
+                    
+                    available_weeks.append({
+                        'id': None,  # No logbook ID yet
+                        'week_start_date': week_start,
+                        'week_end_date': week_end,
+                        'week_display': f"{week_start.strftime('%d %b %Y')} - {week_end.strftime('%d %b %Y')}",
+                        'week_starting_display': f"Week of {week_start.strftime('%d %b %Y')}",
+                        'status': 'ready',
+                        'rag_status': 'red' if is_overdue else 'amber',
+                        'is_overdue': is_overdue,
+                        'has_supervisor_comments': False,
+                        'is_editable': True,
+                        'supervisor_comments': None,
+                        'submitted_at': None,
+                        'reviewed_at': None,
+                        'reviewed_by_name': None,
+                        'section_totals': totals,
+                        'active_unlock': None,
+                        'has_logbook': False
+                    })
+        
+        # Sort by week start date (most recent first)
+        available_weeks.sort(key=lambda x: x['week_start_date'], reverse=True)
+        
+        print(f"DEBUG: Returning {len(available_weeks)} weeks")
+        return Response(available_weeks)
+        
+    except Exception as e:
+        print(f"ERROR in logbook_dashboard_list: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response({'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_status_summary(request):
+    """Get logbook status summary for dashboard display"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
+        return Response({'error': 'Only trainees can view logbook status'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Get current week start (Monday)
+    today = timezone.now().date()
+    current_week_start = today - timedelta(days=today.weekday())
+    
+    # Import section models
+    from section_a.models import SectionAEntry
+    from section_b.models import ProfessionalDevelopmentEntry
+    from section_c.models import SupervisionEntry
+    from django.db.models import Sum
+    
+    # Get all weeks that have entries
+    section_a_weeks = SectionAEntry.objects.filter(
+        trainee=request.user,
+        locked=False
+    ).values_list('week_starting', flat=True).distinct()
+    
+    section_b_weeks = ProfessionalDevelopmentEntry.objects.filter(
+        trainee=request.user,
+        locked=False
+    ).values_list('week_starting', flat=True).distinct()
+    
+    # For Section C, calculate week_starting from date_of_supervision
+    trainee_profile = request.user.profile
+    section_c_weeks = SupervisionEntry.objects.filter(
+        trainee=trainee_profile,
+        locked=False
+    ).values_list('date_of_supervision', flat=True).distinct()
+    
+    # Convert Section C dates to week starts
+    section_c_week_starts = set()
+    for date in section_c_weeks:
+        week_start = date - timedelta(days=date.weekday())
+        section_c_week_starts.add(week_start)
+    
+    # Combine all weeks
+    all_weeks = set(section_a_weeks) | set(section_b_weeks) | section_c_week_starts
+    
+    # Filter out current week and future weeks
+    available_weeks = []
+    for week_start in all_weeks:
+        if week_start < current_week_start:  # Only past weeks
+            week_end = week_start + timedelta(days=6)
+            
+            # Check if logbook exists for this week
+            try:
+                logbook = WeeklyLogbook.objects.get(
+                    trainee=request.user,
+                    week_start_date=week_start
+                )
+                # Logbook exists - use its data
+                available_weeks.append({
+                    'status': logbook.status,
+                    'rag_status': logbook.get_rag_status(),
+                    'is_overdue': logbook.is_overdue(),
+                    'has_logbook': True
+                })
+            except WeeklyLogbook.DoesNotExist:
+                # No logbook exists - treat as ready but check if overdue
+                is_overdue = today > week_end
+                available_weeks.append({
+                    'status': 'ready',
+                    'rag_status': 'red' if is_overdue else 'amber',
+                    'is_overdue': is_overdue,
+                    'has_logbook': False
+                })
+    
+    # Count by status
+    status_counts = {
+        'total': len(available_weeks),
+        'ready': 0,
+        'submitted': 0,
+        'approved': 0,
+        'rejected': 0,
+        'overdue': 0,
+        'new': 0  # weeks without logbooks
+    }
+    
+    for week in available_weeks:
+        if week['is_overdue']:
+            status_counts['overdue'] += 1
+        if week['status'] == 'ready':
+            status_counts['ready'] += 1
+        if week['status'] == 'submitted':
+            status_counts['submitted'] += 1
+        if week['status'] == 'approved':
+            status_counts['approved'] += 1
+        if week['status'] == 'rejected':
+            status_counts['rejected'] += 1
+        if not week['has_logbook']:
+            status_counts['new'] += 1
+    
+    # Determine overall RAG status
+    if status_counts['overdue'] > 0:
+        overall_status = 'red'
+        status_message = f"{status_counts['overdue']} logbook(s) overdue"
+    elif status_counts['rejected'] > 0:
+        overall_status = 'red'
+        status_message = f"{status_counts['rejected']} logbook(s) need revision"
+    elif status_counts['new'] > 0:
+        overall_status = 'amber'
+        status_message = f"{status_counts['new']} week(s) ready for logbook creation"
+    elif status_counts['submitted'] > 0:
+        overall_status = 'amber'
+        status_message = f"{status_counts['submitted']} logbook(s) awaiting review"
+    else:
+        overall_status = 'green'
+        status_message = "All logbooks up to date"
+    
+    return Response({
+        'overall_status': overall_status,
+        'status_message': status_message,
+        'status_counts': status_counts,
+        'total_weeks': len(available_weeks)
+    })
 
 
 @api_view(['GET'])
@@ -202,32 +517,133 @@ def logbook_draft(request):
             'section_a': {
                 'weekly_minutes': section_a_total_minutes,
                 'cumulative_minutes': cumulative_section_a,
-                'weekly_hours': round(section_a_total_minutes / 60, 1),
-                'cumulative_hours': round(cumulative_section_a / 60, 1)
+                'weekly_hours': minutes_to_hours_minutes(section_a_total_minutes),
+                'cumulative_hours': minutes_to_hours_minutes(cumulative_section_a)
             },
             'section_b': {
                 'weekly_minutes': section_b_total_minutes,
                 'cumulative_minutes': cumulative_section_b,
-                'weekly_hours': round(section_b_total_minutes / 60, 1),
-                'cumulative_hours': round(cumulative_section_b / 60, 1)
+                'weekly_hours': minutes_to_hours_minutes(section_b_total_minutes),
+                'cumulative_hours': minutes_to_hours_minutes(cumulative_section_b)
             },
             'section_c': {
                 'weekly_minutes': section_c_total_minutes,
                 'cumulative_minutes': cumulative_section_c,
-                'weekly_hours': round(section_c_total_minutes / 60, 1),
-                'cumulative_hours': round(cumulative_section_c / 60, 1)
+                'weekly_hours': minutes_to_hours_minutes(section_c_total_minutes),
+                'cumulative_hours': minutes_to_hours_minutes(cumulative_section_c)
             },
             'total': {
                 'weekly_minutes': section_a_total_minutes + section_b_total_minutes + section_c_total_minutes,
                 'cumulative_minutes': cumulative_section_a + cumulative_section_b + cumulative_section_c,
-                'weekly_hours': round((section_a_total_minutes + section_b_total_minutes + section_c_total_minutes) / 60, 1),
-                'cumulative_hours': round((cumulative_section_a + cumulative_section_b + cumulative_section_c) / 60, 1)
+                'weekly_hours': minutes_to_hours_minutes(section_a_total_minutes + section_b_total_minutes + section_c_total_minutes),
+                'cumulative_hours': minutes_to_hours_minutes(cumulative_section_a + cumulative_section_b + cumulative_section_c)
             }
         }
     }
     
     serializer = LogbookDraftSerializer(draft_data)
     return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_create(request):
+    """Create a new weekly logbook"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
+        return Response({'error': 'Only trainees can create logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    
+    week_start_date = request.data.get('week_start_date')
+    if not week_start_date:
+        return Response({'error': 'week_start_date is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Parse date
+    try:
+        if isinstance(week_start_date, str):
+            week_start_date = datetime.strptime(week_start_date, '%Y-%m-%d').date()
+    except ValueError:
+        return Response({'error': 'Invalid week_start_date format'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    week_end_date = week_start_date + timedelta(days=6)
+    
+    # Check if logbook already exists for this week
+    existing_logbook = WeeklyLogbook.objects.filter(
+        trainee=request.user,
+        week_start_date=week_start_date
+    ).first()
+    
+    if existing_logbook:
+        # If it exists and is approved or submitted, don't allow regeneration
+        if existing_logbook.status in ['approved', 'submitted']:
+            return Response({
+                'error': f'Cannot regenerate logbook with status: {existing_logbook.status}',
+                'existing_logbook_id': existing_logbook.id,
+                'status': existing_logbook.status
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # If it exists and is ready or rejected, delete it and create new one
+        existing_logbook.delete()
+    
+    # Import section models to get entry IDs
+    from section_a.models import SectionAEntry
+    from section_b.models import ProfessionalDevelopmentEntry
+    from section_c.models import SupervisionEntry
+    
+    # Get entries for this week
+    trainee_profile = request.user.profile
+    
+    section_a_entries = SectionAEntry.objects.filter(
+        trainee=request.user,
+        week_starting=week_start_date,
+        locked=False
+    )
+    
+    section_b_entries = ProfessionalDevelopmentEntry.objects.filter(
+        trainee=request.user,
+        week_starting=week_start_date,
+        locked=False
+    )
+    
+    section_c_entries = SupervisionEntry.objects.filter(
+        trainee=trainee_profile,
+        date_of_supervision__gte=week_start_date,
+        date_of_supervision__lte=week_end_date,
+        locked=False
+    )
+    
+    # Create the logbook
+    logbook = WeeklyLogbook.objects.create(
+        trainee=request.user,
+        week_start_date=week_start_date,
+        week_end_date=week_end_date,
+        status='ready',
+        section_a_entry_ids=[entry.id for entry in section_a_entries],
+        section_b_entry_ids=[entry.id for entry in section_b_entries],
+        section_c_entry_ids=[entry.id for entry in section_c_entries]
+    )
+    
+    # Calculate and return totals
+    totals = logbook.calculate_section_totals()
+    
+    return Response({
+        'id': logbook.id,
+        'week_start_date': logbook.week_start_date,
+        'week_end_date': logbook.week_end_date,
+        'week_display': logbook.week_display,
+        'week_starting_display': f"Week of {logbook.week_start_date.strftime('%d %b %Y')}",
+        'status': logbook.status,
+        'rag_status': logbook.get_rag_status(),
+        'is_overdue': logbook.is_overdue(),
+        'has_supervisor_comments': logbook.has_supervisor_comments(),
+        'is_editable': logbook.is_editable_by_user(request.user),
+        'supervisor_comments': logbook.supervisor_comments,
+        'submitted_at': logbook.submitted_at,
+        'reviewed_at': logbook.reviewed_at,
+        'reviewed_by_name': f"{logbook.reviewed_by.profile.first_name} {logbook.reviewed_by.profile.last_name}".strip() if logbook.reviewed_by and hasattr(logbook.reviewed_by, 'profile') else None,
+        'section_totals': totals,
+        'active_unlock': None,
+        'has_logbook': True
+    })
 
 
 @api_view(['POST'])

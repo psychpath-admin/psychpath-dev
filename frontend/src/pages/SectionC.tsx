@@ -11,6 +11,7 @@ import {
   deleteSupervisionEntry
 } from '@/lib/api'
 import type { SupervisionEntry, SupervisionWeeklyGroup } from '@/types/supervision'
+import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 
 const SectionC: React.FC = () => {
   const [weeklyGroups, setWeeklyGroups] = useState<SupervisionWeeklyGroup[]>([])
@@ -181,14 +182,17 @@ const SectionC: React.FC = () => {
         {/* Summary Cards */}
         {(() => {
           const totalEntries = weeklyGroups.reduce((sum, group) => sum + group.entries.length, 0)
-          const totalHours = weeklyGroups.reduce((sum, group) => 
-            sum + group.entries.reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
-          const individualHours = weeklyGroups.reduce((sum, group) => 
+          const totalMinutes = weeklyGroups.reduce((sum, group) => 
+            sum + group.entries.reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
+          const totalHours = totalMinutes / 60
+          const individualMinutes = weeklyGroups.reduce((sum, group) => 
             sum + group.entries.filter(entry => entry.supervision_type === 'INDIVIDUAL')
-              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
-          const groupHours = weeklyGroups.reduce((sum, group) => 
+              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
+          const individualHours = individualMinutes / 60
+          const groupMinutes = weeklyGroups.reduce((sum, group) => 
             sum + group.entries.filter(entry => entry.supervision_type === 'GROUP')
-              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0) / 60
+              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
+          const groupHours = groupMinutes / 60
 
           return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -211,7 +215,7 @@ const SectionC: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="brand-label">Total Hours</p>
-                      <p className="text-3xl font-bold text-secondary">{totalHours.toFixed(1)}h</p>
+                      <p className="text-3xl font-bold text-secondary">{formatDurationWithUnit(totalMinutes)}</p>
                     </div>
                     <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
                       <Clock className="h-6 w-6 text-secondary" />
@@ -225,7 +229,7 @@ const SectionC: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="brand-label">Individual Hours</p>
-                      <p className="text-3xl font-bold text-accent">{individualHours.toFixed(1)}h</p>
+                      <p className="text-3xl font-bold text-accent">{formatDurationWithUnit(individualMinutes)}</p>
                     </div>
                     <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
                       <User className="h-6 w-6 text-accent" />
@@ -239,7 +243,7 @@ const SectionC: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="brand-label">Group Hours</p>
-                      <p className="text-3xl font-bold text-primary">{groupHours.toFixed(1)}h</p>
+                      <p className="text-3xl font-bold text-primary">{formatDurationWithUnit(groupMinutes)}</p>
                     </div>
                     <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
                       <Users className="h-6 w-6 text-primary" />
@@ -411,7 +415,7 @@ const SectionC: React.FC = () => {
                                 })}
                               </div>
                               <div className="text-sm text-gray-600">
-                                {entry.duration_minutes} min
+                                {formatDurationDisplay(entry.duration_minutes)}
                               </div>
                               <div className="text-sm text-gray-900 font-medium">
                                 {entry.supervisor_name}

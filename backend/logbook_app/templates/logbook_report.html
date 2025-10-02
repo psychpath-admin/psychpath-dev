@@ -248,7 +248,14 @@
                         <td>{{ entry.client_id|default:"-" }}</td>
                         <td>{{ entry.client_age|default:"-" }}</td>
                         <td>{{ entry.presenting_issues|truncatewords:15 }}</td>
-                        <td>{{ entry.entry_type|upper }}{% if entry.simulated %} (SIM){% endif %}</td>
+                        <td>
+                            {% if entry.session_activity_types %}
+                                {{ entry.session_activity_types|join:", "|title }}
+                            {% else %}
+                                {{ entry.entry_type|upper }}
+                            {% endif %}
+                            {% if entry.simulated %} (SIM){% endif %}
+                        </td>
                         <td class="hours-cell">{{ entry.duration_minutes }} min</td>
                         <td class="reflection-cell">{{ entry.reflections_on_experience|truncatewords:40 }}</td>
                     </tr>
