@@ -22,6 +22,7 @@ help:
 	@echo "  db-reset          - Backup, reset DB, run migrations"
 	@echo "  migrate           - Apply migrations"
 	@echo "  makemigrations    - Create migrations"
+	@echo "  eod-complete      - Complete EOD workflow: checkpoint, push, update docs, shutdown"
 	@echo "  seed-demo         - Seed demo users/data"
 	@echo "  check             - Migrations check (dry-run)"
 	@echo "  eod               - End-of-day: code tag + DB snapshot (MSG='note')"
@@ -153,5 +154,10 @@ check:
 .PHONY: eod
 eod:
 	@bash $(BACKEND_DIR)/scripts/eod.sh "$(MSG)"
+
+.PHONY: eod-complete
+eod-complete:
+	@echo "Starting complete EOD workflow..."
+	@./scripts/eod_complete.sh
 
 
