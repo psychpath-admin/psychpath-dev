@@ -9,7 +9,7 @@ from .views import (
     review_unlock_request, force_relock_unlock_request,
     user_notifications, notification_stats, mark_notification_read,
     mark_all_notifications_read, create_notification,
-    logbook_html_report
+    logbook_html_report, notification_list, notification_mark_read
 )
 
 urlpatterns = [
@@ -48,10 +48,8 @@ urlpatterns = [
     path('unlock-requests/<int:unlock_request_id>/force-relock/', force_relock_unlock_request, name='force-relock-unlock-request'),
     
     # Notification endpoints
-    path('notifications/', user_notifications, name='user-notifications'),
+    path('notifications/', notification_list, name='notification-list'),
     path('notifications/stats/', notification_stats, name='notification-stats'),
-    path('notifications/<int:notification_id>/read/', mark_notification_read, name='mark-notification-read'),
-    path('notifications/read-all/', mark_all_notifications_read, name='mark-all-notifications-read'),
-    path('notifications/create/', create_notification, name='create-notification'),
+    path('notifications/<int:notification_id>/read/', notification_mark_read, name='notification-mark-read'),
 ]
 

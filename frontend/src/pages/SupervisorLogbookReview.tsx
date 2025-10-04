@@ -18,8 +18,11 @@ import {
   Filter,
   RefreshCw,
   Plus,
-  Activity
+  Activity,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
 import LogbookAuditTrailModal from '@/components/LogbookAuditTrailModal'
@@ -31,7 +34,7 @@ interface LogbookForReview {
   week_start_date: string
   week_end_date: string
   week_display: string
-  status: 'submitted' | 'approved' | 'rejected'
+  status: 'submitted' | 'approved' | 'rejected' | 'returned_for_edits'
   submitted_at: string
   reviewed_at?: string
   supervisor_comments?: string
@@ -51,7 +54,7 @@ export default function SupervisorLogbookReview() {
   const [generalComment, setGeneralComment] = useState('')
   const [entryComments, setEntryComments] = useState<Record<string, string>>({})
   const [entriesBySection, setEntriesBySection] = useState<any | null>(null)
-  const [statusFilter, setStatusFilter] = useState('submitted')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [showMessages, setShowMessages] = useState(false)
@@ -60,6 +63,10 @@ export default function SupervisorLogbookReview() {
   const [newComments, setNewComments] = useState<Record<string, string>>({})
   const [auditModalOpen, setAuditModalOpen] = useState(false)
   const [selectedLogbookId, setSelectedLogbookId] = useState<number | null>(null)
+  const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
+  const [rejectModalOpen, setRejectModalOpen] = useState(false)
+  const [rejectingLogbookId, setRejectingLogbookId] = useState<number | null>(null)
+  const [rejectionReason, setRejectionReason] = useState('')
 
   useEffect(() => {
     fetchLogbooksForReview()
@@ -74,13 +81,15 @@ export default function SupervisorLogbookReview() {
     setCommentThreads([])
     setShowCommentInput({})
     setNewComments({})
+    setExpandedComments({})
+    setRejectModalOpen(false)
+    setRejectingLogbookId(null)
+    setRejectionReason('')
   }, [statusFilter])
 
   const fetchLogbooksForReview = async () => {
     try {
-      const url = statusFilter === 'all' 
-        ? '/api/logbook/supervisor/' 
-        : `/api/logbook/supervisor/?status=${statusFilter}`
+      const url = `/api/logbook/supervisor/?status=${statusFilter}`
       const response = await apiFetch(url)
       if (response.ok) {
         const data = await response.json()
@@ -212,14 +221,30 @@ export default function SupervisorLogbookReview() {
     }
   }
 
-  const getEntryComments = (entryId: string) => {
-    return commentThreads.filter(thread => 
-      thread.thread_type === 'entry' && thread.entry_id === entryId
-    )
+  const getEntryComments = (entryId: number) => {
+    console.log('getEntryComments called with entryId:', entryId, 'type:', typeof entryId);
+    console.log('Available commentThreads:', commentThreads);
+    const filtered = commentThreads.filter(thread => {
+      console.log('Checking thread:', thread.id, 'thread_type:', thread.thread_type, 'entry_id:', thread.entry_id, 'entry_id type:', typeof thread.entry_id);
+      return thread.thread_type === 'entry' && thread.entry_id === entryId.toString();
+    });
+    console.log('Filtered comments for entry', entryId, ':', filtered);
+    return filtered;
   }
 
   const getGeneralComments = () => {
     return commentThreads.filter(thread => thread.thread_type === 'general')
+  }
+
+  const toggleCommentsExpanded = (key: string) => {
+    setExpandedComments(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+
+  const isCommentsExpanded = (key: string) => {
+    return expandedComments[key] || false
   }
 
   const handleApproveLogbook = async (logbookId: number) => {
@@ -249,14 +274,25 @@ export default function SupervisorLogbookReview() {
     }
   }
 
-  const handleRejectLogbook = async (logbookId: number, comments: string) => {
-    setReviewing(logbookId)
+  const openRejectModal = (logbookId: number) => {
+    setRejectingLogbookId(logbookId)
+    setRejectionReason('')
+    setRejectModalOpen(true)
+  }
+
+  const handleRejectLogbook = async () => {
+    if (!rejectingLogbookId || !rejectionReason.trim()) {
+      toast.error('Please provide a reason for rejection')
+      return
+    }
+
+    setReviewing(rejectingLogbookId)
     try {
-      const response = await apiFetch(`/api/logbook/${logbookId}/review/`, {
+      const response = await apiFetch(`/api/logbook/${rejectingLogbookId}/review/`, {
         method: 'POST',
         body: JSON.stringify({
           decision: 'reject',
-          generalComment: comments,
+          generalComment: rejectionReason.trim(),
           entryComments: Object.entries(entryComments).map(([entryId, comment]) => ({ entryId, comment }))
         })
       })
@@ -264,6 +300,9 @@ export default function SupervisorLogbookReview() {
       if (response.ok) {
         toast.success('Logbook rejected successfully!')
         fetchLogbooksForReview()
+        setRejectModalOpen(false)
+        setRejectingLogbookId(null)
+        setRejectionReason('')
       } else {
         const errorData = await response.json()
         toast.error(errorData.error || 'Failed to reject logbook')
@@ -276,10 +315,18 @@ export default function SupervisorLogbookReview() {
     }
   }
 
+  const cancelRejectModal = () => {
+    setRejectModalOpen(false)
+    setRejectingLogbookId(null)
+    setRejectionReason('')
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'submitted':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Waiting for Review</Badge>
+      case 'returned_for_edits':
+        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Returned for Edits</Badge>
       case 'approved':
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Approved</Badge>
       case 'rejected':
@@ -298,6 +345,8 @@ export default function SupervisorLogbookReview() {
     switch (status) {
       case 'submitted':
         return <Clock className="h-4 w-4 text-yellow-500" />
+      case 'returned_for_edits':
+        return <AlertCircle className="h-4 w-4 text-orange-500" />
       case 'approved':
         return <CheckCircle className="h-4 w-4 text-green-500" />
       case 'rejected':
@@ -356,6 +405,7 @@ export default function SupervisorLogbookReview() {
               <SelectContent>
                 <SelectItem value="submitted">Submitted</SelectItem>
                 <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="returned_for_edits">Returned for Edits</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="all">All</SelectItem>
               </SelectContent>
@@ -491,12 +541,7 @@ export default function SupervisorLogbookReview() {
                         </Button>
                         <Button
                           size="sm"
-                          onClick={() => {
-                            const comments = prompt('Please provide feedback for rejection:')
-                            if (comments) {
-                              handleRejectLogbook(logbook.id, comments)
-                            }
-                          }}
+                          onClick={() => openRejectModal(logbook.id)}
                           disabled={reviewing === logbook.id}
                           className="bg-red-600 hover:bg-red-700"
                         >
@@ -704,29 +749,52 @@ export default function SupervisorLogbookReview() {
                             )}
                           </div>
 
-                          {/* Existing Comments Display */}
-                          {getEntryComments(e.id).map((thread) => (
-                            <div key={thread.id} className="mt-4 p-3 bg-blue-50 rounded border-l-4 border-blue-200">
-                              <div className="space-y-2">
-                                {thread.messages.map((msg: any) => (
-                                  <div key={msg.id} className="text-sm">
-                                    <div className="flex justify-between items-start mb-1">
-                                      <span className="font-medium text-blue-800">
-                                        {msg.author_name} ({msg.author_role})
-                                      </span>
-                                      <span className="text-xs text-gray-500">
-                                        {new Date(msg.created_at).toLocaleString()}
-                                      </span>
-                                    </div>
-                                    <div className="text-gray-700">{msg.message}</div>
+                          {/* Comments Display - Cascading below entry details */}
+                          {(() => {
+                            const entryComments = getEntryComments(e.id);
+                            return entryComments.length > 0 && (
+                              <div className="mt-3 ml-4">
+                                <button
+                                  onClick={() => toggleCommentsExpanded(`entry-${e.id}`)}
+                                  className="flex items-center gap-2 text-xs font-medium text-blue-700 hover:text-blue-800 mb-2"
+                                >
+                                  {isCommentsExpanded(`entry-${e.id}`) ? (
+                                    <ChevronDown className="h-3 w-3" />
+                                  ) : (
+                                    <ChevronRight className="h-3 w-3" />
+                                  )}
+                                  Comments ({entryComments.reduce((total, thread) => total + thread.messages.length, 0)})
+                                </button>
+                                
+                                {isCommentsExpanded(`entry-${e.id}`) && (
+                                  <div className="ml-2 space-y-2">
+                                    {entryComments.map((thread) => (
+                                      <div key={thread.id} className="p-2 bg-blue-50 rounded border-l-2 border-blue-200">
+                                        <div className="space-y-1">
+                                          {thread.messages.map((msg: any, index: number) => (
+                                            <div key={msg.id} className={`text-xs ${index > 0 ? 'ml-3 border-l-2 border-blue-200 pl-2' : ''}`}>
+                                              <div className="flex justify-between items-start mb-1">
+                                                <span className="font-medium text-blue-800">
+                                                  {msg.author_name} ({msg.author_role})
+                                                </span>
+                                                <span className="text-xs text-gray-500">
+                                                  {new Date(msg.created_at).toLocaleString()}
+                                                </span>
+                                              </div>
+                                              <div className="text-gray-700">{msg.message}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
-                                ))}
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })()}
 
                           {/* Comment Input */}
-                          {showCommentInput[e.id] && (
+                          {showCommentInput[e.id] && logbooks.find(l => l.id === activeLogbookId)?.status !== 'rejected' && (
                             <div className="mt-4 p-3 bg-yellow-50 rounded border-l-4 border-yellow-200">
                               <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Add Comment for Entry #{e.id}:
@@ -767,71 +835,129 @@ export default function SupervisorLogbookReview() {
                               </div>
                             </div>
                           )}
+                          
+                          {showCommentInput[e.id] && logbooks.find(l => l.id === activeLogbookId)?.status === 'rejected' && (
+                            <div className="mt-4 p-3 bg-orange-50 rounded border-l-4 border-orange-200">
+                              <div className="flex items-center gap-2 text-orange-800">
+                                <AlertCircle className="h-4 w-4" />
+                                <span className="text-sm font-medium">Cannot Add Comments</span>
+                              </div>
+                              <p className="text-sm text-orange-700 mt-1">
+                                This logbook has been rejected and returned to the trainee for editing. 
+                                No additional comments can be added until the trainee resubmits the logbook.
+                              </p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => {
+                                  setShowCommentInput(prev => ({ ...prev, [`${e.id}`]: false }))
+                                }}
+                              >
+                                Close
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   </div>
                 ))}
 
-                {/* General Comments Section */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-lg">General Comments</h4>
+                {/* General Comments Section - Cascading below all entries */}
+                <div className="mt-6 ml-4">
+                  <h4 className="font-semibold text-lg mb-3">General Comments</h4>
                   
                   {/* Display existing general comments */}
-                  {getGeneralComments().map((thread) => (
-                    <div key={thread.id} className="p-3 bg-green-50 rounded border-l-4 border-green-200">
-                      <div className="space-y-2">
-                        {thread.messages.map((msg: any) => (
-                          <div key={msg.id} className="text-sm">
-                            <div className="flex justify-between items-start mb-1">
-                              <span className="font-medium text-green-800">
-                                {msg.author_name} ({msg.author_role})
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {new Date(msg.created_at).toLocaleString()}
-                              </span>
+                  {getGeneralComments().length > 0 && (
+                    <div>
+                      <button
+                        onClick={() => toggleCommentsExpanded('general')}
+                        className="flex items-center gap-2 text-xs font-medium text-green-700 hover:text-green-800 mb-2"
+                      >
+                        {isCommentsExpanded('general') ? (
+                          <ChevronDown className="h-3 w-3" />
+                        ) : (
+                          <ChevronRight className="h-3 w-3" />
+                        )}
+                        General Comments ({getGeneralComments().reduce((total, thread) => total + thread.messages.length, 0)})
+                      </button>
+                      
+                      {isCommentsExpanded('general') && (
+                        <div className="ml-2 space-y-2">
+                          {getGeneralComments().map((thread) => (
+                            <div key={thread.id} className="p-2 bg-green-50 rounded border-l-2 border-green-200">
+                              <div className="space-y-1">
+                                {thread.messages.map((msg: any, index: number) => (
+                                  <div key={msg.id} className={`text-xs ${index > 0 ? 'ml-3 border-l-2 border-green-200 pl-2' : ''}`}>
+                                    <div className="flex justify-between items-start mb-1">
+                                      <span className="font-medium text-green-800">
+                                        {msg.author_name} ({msg.author_role})
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {new Date(msg.created_at).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    <div className="text-gray-700">{msg.message}</div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                            <div className="text-gray-700">{msg.message}</div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  )}
 
                   {/* General comment input */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Add General Comment:</label>
-                    <Textarea 
-                      className="w-full border rounded px-3 py-2 text-sm" 
-                      rows={3} 
-                      placeholder="Add general feedback for this logbook..."
-                      value={generalComment} 
-                      onChange={(e) => setGeneralComment(e.target.value)} 
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => addGeneralComment(activeLogbookId!, generalComment)}
-                        disabled={!generalComment.trim()}
-                      >
-                        Add General Comment
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setGeneralComment('')}
-                      >
-                        Clear
-                      </Button>
+                  {logbooks.find(l => l.id === activeLogbookId)?.status !== 'rejected' && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Add General Comment:</label>
+                      <Textarea 
+                        className="w-full border rounded px-3 py-2 text-sm" 
+                        rows={3} 
+                        placeholder="Add general feedback for this logbook..."
+                        value={generalComment} 
+                        onChange={(e) => setGeneralComment(e.target.value)} 
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => addGeneralComment(activeLogbookId!, generalComment)}
+                          disabled={!generalComment.trim()}
+                        >
+                          Add General Comment
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setGeneralComment('')}
+                        >
+                          Clear
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  
+                  {logbooks.find(l => l.id === activeLogbookId)?.status === 'rejected' && (
+                    <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                      <div className="flex items-center gap-2 text-orange-800">
+                        <AlertCircle className="h-4 w-4" />
+                        <span className="text-sm font-medium">Logbook Rejected</span>
+                      </div>
+                      <p className="text-sm text-orange-700 mt-1">
+                        This logbook has been rejected and returned to the trainee for editing. 
+                        No additional comments can be added until the trainee resubmits the logbook.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     onClick={() => handleApproveLogbook(activeLogbookId)}
-                    disabled={reviewing === activeLogbookId}
+                    disabled={reviewing === activeLogbookId || logbooks.find(l => l.id === activeLogbookId)?.status === 'rejected'}
                     className="bg-green-600 hover:bg-green-700"
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />
@@ -839,11 +965,8 @@ export default function SupervisorLogbookReview() {
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => {
-                      if (!generalComment.trim()) { toast.error('General comment required to reject'); return }
-                      handleRejectLogbook(activeLogbookId, generalComment)
-                    }}
-                    disabled={reviewing === activeLogbookId}
+                    onClick={() => openRejectModal(activeLogbookId)}
+                    disabled={reviewing === activeLogbookId || logbooks.find(l => l.id === activeLogbookId)?.status === 'rejected'}
                     className="bg-red-600 hover:bg-red-700"
                   >
                     <XCircle className="h-4 w-4 mr-2" />
@@ -932,6 +1055,82 @@ export default function SupervisorLogbookReview() {
           setSelectedLogbookId(null)
         }}
       />
+
+      {/* Rejection Modal */}
+      <Dialog open={rejectModalOpen} onOpenChange={setRejectModalOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <XCircle className="h-5 w-5" />
+              Reject Logbook
+            </DialogTitle>
+            <DialogDescription>
+              Please provide a detailed reason for rejecting this logbook. This feedback will be shared with the trainee and added to the audit trail.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="rejection-reason" className="text-sm font-medium text-gray-700">
+                Rejection Reason <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                id="rejection-reason"
+                placeholder="Please provide specific feedback about what needs to be improved or corrected in this logbook..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                rows={6}
+                className="resize-none"
+              />
+              <div className="text-xs text-gray-500">
+                {rejectionReason.length} characters
+              </div>
+            </div>
+            
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-yellow-800">
+                  <p className="font-medium mb-1">Important:</p>
+                  <ul className="space-y-1 text-xs">
+                    <li>• This rejection will be recorded in the audit trail</li>
+                    <li>• The trainee will be notified of the rejection</li>
+                    <li>• The logbook will be unlocked for editing</li>
+                    <li>• The trainee can resubmit after making corrections</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={cancelRejectModal}
+                disabled={reviewing === rejectingLogbookId}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRejectLogbook}
+                disabled={!rejectionReason.trim() || reviewing === rejectingLogbookId}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {reviewing === rejectingLogbookId ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Rejecting...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Reject Logbook
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -2,286 +2,260 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import SupervisionManagement from '@/components/SupervisionManagement'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useNotifications } from '@/hooks/useNotifications'
-import { useAuth } from '@/context/AuthContext'
+import NotificationBell from '@/components/NotificationBell'
 import { 
   Users, 
   FileText, 
   AlertTriangle, 
   CheckCircle, 
-  Calendar,
-  MessageSquare,
   Plus,
   UserPlus,
-  Clock,
-  TrendingUp,
-  Bell,
   Settings,
-  BarChart3
+  BarChart3,
+  ClipboardCheck,
+  Eye,
+  User,
+  Mail,
+  Info,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react'
 
 interface Supervisee {
   id: string
   name: string
+  email: string
   status: 'on-track' | 'overdue' | 'at-risk'
   role: string
   supervisionId?: number
-  email?: string
-  progress: {
-    directClient: { current: number; target: number }
-    clientRelated: { current: number; target: number }
-    supervision: { current: number; target: number }
-    pd: { current: number; target: number }
-    individualSupervision: { current: number }
-  }
-  overdueDates: string[]
-  lastSubmission: string
+  supervision_type: 'PRIMARY' | 'SECONDARY'
+  rag_status: 'green' | 'amber' | 'red'
+  last_logbook_status: string
+  last_logbook_date: string
+  total_hours_logged: number
+  target_hours: number
+  supervision_ratio: number
+  next_epa_due: string
+}
+
+interface LogbookForReview {
+  id: number
+  trainee_name: string
+  trainee_email: string
+  week_start_date: string
+  week_end_date: string
+  week_display: string
+  status: string
+  submitted_at: string
+  section_totals: any
+  message_count: number
+}
+
+interface SupervisionInvitation {
+  id: number
+  name: string
+  email: string
+  type: string
+  status: string
+  expires: string
 }
 
 interface DashboardStats {
-  totalSupervisees: number
-  pendingReviews: number
+  superviseesOnTrack: number
+  logbooksNeedingReview: number
   overdueLogbooks: number
-  onTrack: number
+  totalActiveSupervisees: number
 }
 
 export default function SupervisorDashboard() {
   console.log('SupervisorDashboard: Component starting')
-  const { user } = useAuth()
   const [stats, setStats] = useState<DashboardStats>({
-    totalSupervisees: 0,
-    pendingReviews: 0,
+    superviseesOnTrack: 0,
+    logbooksNeedingReview: 0,
     overdueLogbooks: 0,
-    onTrack: 0
+    totalActiveSupervisees: 0
   })
   const [supervisees, setSupervisees] = useState<Supervisee[]>([])
+  const [logbooksForReview, setLogbooksForReview] = useState<LogbookForReview[]>([])
+  const [supervisionInvitations, setSupervisionInvitations] = useState<SupervisionInvitation[]>([])
   const [loading, setLoading] = useState(true)
+  const [invitationFilter, setInvitationFilter] = useState('All')
+  const [tooltipsEnabled, setTooltipsEnabled] = useState(true)
   
   // Notification data
-  const { notifications, stats: notificationStats, loading: notificationsLoading, markAsRead } = useNotifications(5)
+  const { } = useNotifications(5)
 
-  // Function to trigger dashboard refresh
-  const handleSupervisionUpdate = () => {
-    fetchSupervisorData()
-  }
-
-  // Function to remove a supervisee
-  const removeSupervisee = async (supervisionId: number, superviseeEmail: string) => {
-    if (!confirm(`Are you sure you want to remove ${superviseeEmail} from your supervision stable? This action cannot be undone.`)) {
-      return
-    }
-
+  // Fetch supervisees data
+  const fetchSupervisees = async () => {
     try {
-      const response = await fetch(`/api/supervisions/${supervisionId}/remove/`, {
-        method: 'DELETE',
+      const response = await fetch('/api/supervisions/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json',
         },
       })
-
+      
       if (response.ok) {
-        // Refresh the dashboard data
-        await fetchSupervisorData()
-        // Show success message
-        alert('Supervisee removed successfully')
-      } else {
-        const errorData = await response.json()
-        alert(errorData.error || 'Failed to remove supervisee')
+        const superviseesData = await response.json()
+        const active = superviseesData.filter((item: any) => item.status === 'ACCEPTED')
+        
+        const transformed = active.map((item: any) => ({
+          id: item.id.toString(),
+          name: item.supervisee_name || item.supervisee_email || 'Unknown User',
+          email: item.supervisee_email,
+          status: 'on-track' as const,
+          role: item.supervisee_role || 'Registrar',
+          supervisionId: item.id,
+          supervision_type: item.role,
+          rag_status: 'green' as const, // TODO: Calculate actual RAG status
+          last_logbook_status: 'No submissions',
+          last_logbook_date: 'Never',
+          total_hours_logged: 0, // TODO: Calculate from logbooks
+          target_hours: 1500,
+          supervision_ratio: 1,
+          next_epa_due: 'TBD'
+        }))
+        
+        setSupervisees(transformed)
+        return transformed
       }
     } catch (error) {
-      console.error('Error removing supervisee:', error)
-      alert('Error removing supervisee')
+      console.error('Error fetching supervisees:', error)
     }
+    return []
   }
 
-  // Fetch real supervisor data from API
-  const fetchSupervisorData = async (isBackgroundRefresh = false) => {
+  // Fetch logbooks for review
+  const fetchLogbooksForReview = async () => {
     try {
-      // Only show loading spinner on initial load, not background refreshes
-      if (!isBackgroundRefresh) {
-        setLoading(true)
-      }
-      
-      // Fetch supervision relationships (both pending and accepted)
-      const superviseesResponse = await fetch('/api/supervisions/', {
+      const response = await fetch('/api/logbook/supervisor/?status=submitted', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json',
         },
       })
       
-      if (superviseesResponse.ok) {
-        const superviseesData = await superviseesResponse.json()
-        console.log('SupervisorDashboard: /api/supervisions payload:', superviseesData)
-        // Transform API data to match Supervisee interface (use Supervision serializer fields)
-        const transformed = superviseesData.map((item: any, index: number) => {
-          const isAccepted = item?.status === 'ACCEPTED'
-          const isPrimary = item?.role === 'PRIMARY'
-          const isSecondary = item?.role === 'SECONDARY'
-          
-          return {
-            id: (item.id ?? index).toString(),
-            name: item.supervisee_name || item.supervisee_email || 'Unknown User',
-            status: isAccepted ? 'on-track' : 'pending',
-            role: item.supervisee_role || 'Registrar', // The supervisee's role from API
-            supervisionId: item.id,
-            email: item.supervisee_email,
-            progress: {
-              directClient: { current: 0, target: 15.16 },
-              clientRelated: { current: 0, target: 41.21 },
-              supervision: { current: 0, target: 2.42 },
-              pd: { current: 0, target: 1.81 },
-              individualSupervision: { current: 0 }
-            },
-            overdueDates: [],
-            lastSubmission: 'Never'
-          }
-        })
-
-        // Both accepted PRIMARY and SECONDARY supervisions are active
-        const active = transformed.filter((s: any) => s.status === 'on-track')
-        console.log('SupervisorDashboard: transformed items:', transformed)
-        console.log('SupervisorDashboard: active items:', active)
-        setSupervisees(active)
-        
-        // Reset poll interval on success
-        if (pollMs !== 5000) setPollMs(5000)
-
-        // Update stats based on active supervisions
-        const totalSupervisees = active.length
-        const pendingReviews = 0
-        const onTrack = active.length
-        const overdueLogbooks = 0
-        
-        // Prefer backend stats so header matches Supervision Management
-        try {
-          const statsRes = await fetch('/api/supervisions/stats/', {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-              'Content-Type': 'application/json',
-            },
-          })
-          if (statsRes.ok) {
-            const s = await statsRes.json()
-            setStats({
-              totalSupervisees: (s.primary_supervisions || 0) + (s.secondary_supervisions || 0),
-              pendingReviews,
-              overdueLogbooks,
-              onTrack: (s.primary_supervisions || 0) + (s.secondary_supervisions || 0)
-            })
-          } else {
-            setStats({ 
-              totalSupervisees: active.length, 
-              pendingReviews, 
-              overdueLogbooks, 
-              onTrack: active.length 
-            })
-          }
-        } catch {
-          setStats({ 
-            totalSupervisees: active.length, 
-            pendingReviews, 
-            overdueLogbooks, 
-            onTrack: active.length 
-          })
-        }
-      } else {
-        // If no supervisees, show empty state
-        setSupervisees([])
-        setStats({
-          totalSupervisees: 0,
-          pendingReviews: 0,
-          overdueLogbooks: 0,
-          onTrack: 0
-        })
+      if (response.ok) {
+        const data = await response.json()
+        setLogbooksForReview(data)
+        return data
       }
     } catch (error) {
-      console.error('Error fetching supervisor data:', error)
-      // Show empty state on error
-      setSupervisees([])
-      setStats({
-        totalSupervisees: 0,
-        pendingReviews: 0,
-        overdueLogbooks: 0,
-        onTrack: 0
-      })
-      // Exponential backoff on errors
-      setPollMs(Math.min(pollMs * 2, 60000)) // backoff up to 60s
-    } finally {
-      // Only hide loading spinner on initial load, not background refreshes
-      if (!isBackgroundRefresh) {
-        setLoading(false)
-      }
+      console.error('Error fetching logbooks for review:', error)
     }
+    return []
   }
 
-  // Auto-refresh state
-  const [pollMs, setPollMs] = useState(5000) // 5s, will backoff on errors
+  // Fetch supervision invitations
+  const fetchSupervisionInvitations = async () => {
+    try {
+      // This would need to be implemented in the backend
+      // For now, return empty array
+      setSupervisionInvitations([])
+      return []
+    } catch (error) {
+      console.error('Error fetching supervision invitations:', error)
+    }
+    return []
+  }
+
+  // Calculate dashboard stats
+  const calculateStats = async () => {
+    const superviseesData = await fetchSupervisees()
+    const logbooksData = await fetchLogbooksForReview()
+    
+    const stats = {
+      superviseesOnTrack: superviseesData.length, // All active supervisees are considered on track for now
+      logbooksNeedingReview: logbooksData.length,
+      overdueLogbooks: 0, // TODO: Calculate overdue logbooks
+      totalActiveSupervisees: superviseesData.length
+    }
+    
+    setStats(stats)
+  }
+
+  // Fetch all dashboard data
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    try {
+      await Promise.all([
+        calculateStats(),
+        fetchLogbooksForReview(),
+        fetchSupervisionInvitations()
+      ])
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Fetch data on component mount
   useEffect(() => {
-    fetchSupervisorData()
+    fetchDashboardData()
   }, [])
 
-  // Auto-refresh supervisor data on interval (pause when hidden)
+  // Auto-refresh every 30 seconds
   useEffect(() => {
-    if (document.hidden) return
-    const id = setInterval(() => {
-      fetchSupervisorData(true) // Background refresh - no loading spinner
-    }, pollMs)
-    return () => clearInterval(id)
-  }, [pollMs])
-
-  // Refresh immediately on tab focus or visibility change
-  useEffect(() => {
-    const onFocus = () => fetchSupervisorData(true) // Background refresh
-    const onVisibility = () => {
-      if (!document.hidden) fetchSupervisorData(true) // Background refresh
-    }
-    window.addEventListener('focus', onFocus)
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      window.removeEventListener('focus', onFocus)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
+    const interval = setInterval(() => {
+      fetchDashboardData()
+    }, 30000)
+    return () => clearInterval(interval)
   }, [])
+
+  const getRAGColor = (status: string) => {
+    switch (status) {
+      case 'green': return 'bg-green-100 text-green-800 border-green-200'
+      case 'amber': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'red': return 'bg-red-100 text-red-800 border-red-200'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'on-track':
-        return 'bg-green-100 text-green-800 border-green-200'
-      case 'overdue':
-        return 'bg-red-100 text-red-800 border-red-200'
-      case 'at-risk':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'submitted': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'approved': return 'bg-green-100 text-green-800 border-green-200'
+      case 'rejected': return 'bg-red-100 text-red-800 border-red-200'
+      case 'returned_for_edits': return 'bg-orange-100 text-orange-800 border-orange-200'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200'
     }
   }
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'on-track':
-        return <CheckCircle className="h-4 w-4" />
-      case 'overdue':
-        return <AlertTriangle className="h-4 w-4" />
-      case 'at-risk':
-        return <Clock className="h-4 w-4" />
-      default:
-        return <Clock className="h-4 w-4" />
-    }
+  const formatDate = (dateString: string) => {
+    if (!dateString || dateString === 'Never') return 'Never'
+    return new Date(dateString).toLocaleDateString()
   }
 
+  // Tooltip component
+  const Tooltip = ({ children, content, enabled }: { children: React.ReactNode, content: string, enabled: boolean }) => {
+    if (!enabled) return <>{children}</>
+    
+    return (
+      <div className="relative group">
+        {children}
+        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 w-64 text-center">
+          {content}
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+        </div>
+      </div>
+    )
+  }
+
+  const filteredInvitations = supervisionInvitations.filter(invitation => {
+    if (invitationFilter === 'All') return true
+    return invitation.status.toLowerCase() === invitationFilter.toLowerCase()
+  })
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading supervisor data...</p>
+          <p className="text-gray-600">Loading supervisor dashboard...</p>
         </div>
       </div>
     )
@@ -289,23 +263,24 @@ export default function SupervisorDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Clean Header Section */}
+      {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {user?.first_name && user?.last_name 
-                  ? `${user.first_name} ${user.last_name} Dashboard (${user.email})`
-                  : 'Supervisor Dashboard'
-                }
+                👥 Supervisor Overview
               </h1>
               <p className="text-gray-600 mt-1">
-                {supervisees.length > 0 ? `${supervisees.length} supervisee${supervisees.length === 1 ? '' : 's'}` : 'No supervisees yet'}
+                Manage your supervisees and review their progress
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.location.href = '/logbook/'}
+              >
                 <BarChart3 className="h-4 w-4 mr-2" />
                 Reports
               </Button>
@@ -315,217 +290,306 @@ export default function SupervisorDashboard() {
               </Button>
             </div>
           </div>
-          
-          {/* Quick Stats Bar */}
-          <div className="grid grid-cols-4 gap-6 pb-6">
-            <div className="text-center">
-              <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg mx-auto mb-2">
-                <Users className="h-6 w-6 text-blue-600" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalSupervisees}</p>
-              <p className="text-sm text-gray-600">Total Supervisees</p>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center w-12 h-12 bg-orange-100 rounded-lg mx-auto mb-2">
-                <FileText className="h-6 w-6 text-orange-600" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900">{stats.pendingReviews}</p>
-              <p className="text-sm text-gray-600">Pending Reviews</p>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center w-12 h-12 bg-red-100 rounded-lg mx-auto mb-2">
-                <AlertTriangle className="h-6 w-6 text-red-600" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900">{stats.overdueLogbooks}</p>
-              <p className="text-sm text-gray-600">Overdue Logbooks</p>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-lg mx-auto mb-2">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900">{stats.onTrack}</p>
-              <p className="text-sm text-gray-600">On Track</p>
-            </div>
-          </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Main Layout - 2 Column */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          
-          {/* Left Column - Quick Actions (25%) */}
-          <div className="lg:col-span-1 space-y-6">
-            
-
-            {/* Quick Actions */}
-            <Card>
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2">
-                  <Plus className="h-5 w-5" />
-                  Quick Actions
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button className="w-full justify-start" variant="outline">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Enrol New Supervisee
-                </Button>
-                <Button className="w-full justify-start" variant="outline">
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Send Message
-                </Button>
-                <Button className="w-full justify-start" variant="outline">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Schedule Meeting
-                </Button>
-                <Button className="w-full justify-start" variant="outline">
-                  <FileText className="h-4 w-4 mr-2" />
-                  View Reports
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Notifications */}
-            <Card>
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Notifications
-                  {notificationStats.unread > 0 && (
-                    <Badge variant="destructive" className="ml-2">
-                      {notificationStats.unread}
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {notificationsLoading ? (
-                  <div className="space-y-3">
-                    <div className="animate-pulse">
-                      <div className="h-16 bg-gray-200 rounded-lg"></div>
-                      <div className="h-16 bg-gray-200 rounded-lg mt-3"></div>
-                    </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        
+        {/* Header with Tooltip Toggle and Notification Bell */}
+        <div className="flex justify-between items-center">
+          <div></div>
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTooltipsEnabled(!tooltipsEnabled)}
+              className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
+            >
+              {tooltipsEnabled ? (
+                <ToggleRight className="h-4 w-4 text-green-600" />
+              ) : (
+                <ToggleLeft className="h-4 w-4 text-gray-400" />
+              )}
+              <Info className="h-4 w-4" />
+              Tooltips {tooltipsEnabled ? 'On' : 'Off'}
+            </Button>
+          </div>
+        </div>
+        
+        {/* Stat Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Tooltip 
+            content="Supervisees who have submitted a logbook within the past 7 days, indicating they are actively engaged and on track with their supervision requirements."
+            enabled={tooltipsEnabled}
+          >
+            <Card className="hover:shadow-md transition-shadow cursor-pointer" 
+                  onClick={() => window.location.href = '/supervisees?filter=onTrack'}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Supervisees On Track</p>
+                    <p className="text-3xl font-bold text-green-600">{stats.superviseesOnTrack}</p>
+                    <p className="text-xs text-gray-500 mt-1">Supervisees who submitted a logbook in the past 7 days</p>
                   </div>
-                ) : notifications.length === 0 ? (
-                  <div className="text-center py-6 text-gray-500">
-                    <Bell className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                    <p className="text-sm">No notifications</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {notifications.slice(0, 3).map((notification) => {
-                      const isUrgent = notification.notification_type.includes('overdue') || 
-                                      notification.notification_type.includes('expiry') ||
-                                      notification.notification_type.includes('denied')
-                      const isInfo = notification.notification_type.includes('approved') ||
-                                   notification.notification_type.includes('meeting') ||
-                                   notification.notification_type.includes('submitted')
-                      
-                      return (
-                        <div
-                          key={notification.id}
-                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:shadow-sm transition-shadow ${
-                            isUrgent 
-                              ? 'bg-red-50 border-red-200' 
-                              : isInfo 
-                                ? 'bg-blue-50 border-blue-200' 
-                                : 'bg-gray-50 border-gray-200'
-                          } ${!notification.read ? 'ring-2 ring-blue-200' : ''}`}
-                          onClick={() => {
-                            if (notification.action_url) {
-                              window.location.href = notification.action_url
-                            }
-                            if (!notification.read) {
-                              markAsRead(notification.id)
-                            }
-                          }}
-                        >
-                          {isUrgent ? (
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                          ) : isInfo ? (
-                            <Clock className="h-4 w-4 text-blue-600" />
-                          ) : (
-                            <Bell className="h-4 w-4 text-gray-600" />
-                          )}
-                          <div className="flex-1">
-                            <p className={`text-sm font-medium ${
-                              isUrgent ? 'text-red-800' : isInfo ? 'text-blue-800' : 'text-gray-800'
-                            }`}>
-                              {notification.type_display}
-                            </p>
-                            <p className={`text-xs ${
-                              isUrgent ? 'text-red-600' : isInfo ? 'text-blue-600' : 'text-gray-600'
-                            }`}>
-                              {notification.message}
-                            </p>
-                          </div>
-                          {!notification.read && (
-                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          )}
-                        </div>
-                      )
-                    })}
-                    {notifications.length > 3 && (
-                      <div className="text-center pt-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => window.location.href = '/notifications'}
-                        >
-                          View all notifications ({notifications.length})
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Upcoming Meetings */}
-            <Card>
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Upcoming Meetings
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-6 text-gray-500">
-                  <Calendar className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm">No upcoming meetings</p>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="mt-2"
-                    onClick={() => window.location.href = '/calendar'}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Schedule Meeting
-                  </Button>
+                  <CheckCircle className="h-12 w-12 text-green-600" />
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </Tooltip>
 
-          {/* Right Column - Main Content (75%) */}
-          <div className="lg:col-span-3 space-y-6">
-            
-            {/* Supervision Management - Primary Focus */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserPlus className="h-5 w-5" />
-                  Supervision Management
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SupervisionManagement onUpdate={handleSupervisionUpdate} />
+          <Tooltip 
+            content="Logbooks that have been submitted by supervisees and are awaiting your review and feedback. These require your attention to provide guidance and ensure quality supervision."
+            enabled={tooltipsEnabled}
+          >
+            <Card className="hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => window.location.href = '/logbook/review'}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Logbooks Needing Review</p>
+                    <p className="text-3xl font-bold text-amber-600">{stats.logbooksNeedingReview}</p>
+                    <p className="text-xs text-gray-500 mt-1">Logbooks submitted but not yet reviewed</p>
+                  </div>
+                  <ClipboardCheck className="h-12 w-12 text-amber-600" />
+                </div>
               </CardContent>
             </Card>
+          </Tooltip>
 
-          </div>
+          <Tooltip 
+            content="Supervisees who have not submitted their weekly logbooks within the expected timeframe (7+ days). These require immediate attention and follow-up to ensure compliance with supervision requirements."
+            enabled={tooltipsEnabled}
+          >
+            <Card className="hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => window.location.href = '/supervisees?filter=overdue'}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Overdue Logbooks</p>
+                    <p className="text-3xl font-bold text-red-600">{stats.overdueLogbooks}</p>
+                    <p className="text-xs text-gray-500 mt-1">Supervisees who haven't submitted logbooks within 7 days</p>
+                  </div>
+                  <AlertTriangle className="h-12 w-12 text-red-600" />
+                </div>
+              </CardContent>
+            </Card>
+          </Tooltip>
+
+          <Tooltip 
+            content="The total number of supervisees who have an active, accepted supervision agreement with you. This includes both primary and secondary supervision relationships."
+            enabled={tooltipsEnabled}
+          >
+            <Card className="hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => window.location.href = '/supervisees'}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Active Supervisees</p>
+                    <p className="text-3xl font-bold text-blue-600">{stats.totalActiveSupervisees}</p>
+                    <p className="text-xs text-gray-500 mt-1">All supervisees with an accepted, active supervision agreement</p>
+                  </div>
+                  <Users className="h-12 w-12 text-blue-600" />
+                </div>
+              </CardContent>
+            </Card>
+          </Tooltip>
         </div>
+
+        {/* This Week's Logbook Review Tasks */}
+        {logbooksForReview.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                📋 This Week's Logbook Review Tasks
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Week Beginning</TableHead>
+                    <TableHead>Total Hours</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logbooksForReview.map((logbook) => (
+                    <TableRow key={logbook.id}>
+                      <TableCell className="font-medium">{logbook.trainee_name}</TableCell>
+                      <TableCell>{logbook.week_display}</TableCell>
+                      <TableCell>
+                        {logbook.section_totals ? 
+                          `${(logbook.section_totals.total_hours || 0).toFixed(1)}h` : 
+                          '0.0h'
+                        }
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(logbook.status)}>
+                          {logbook.status.replace('_', ' ').toUpperCase()}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button 
+                          size="sm" 
+                          onClick={() => window.location.href = `/logbook/review/${logbook.id}`}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Review
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Supervisee Tracker */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              🧑‍🎓 Supervisee Tracker
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {supervisees.map((supervisee) => (
+                <Card key={supervisee.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold text-lg">{supervisee.name}</h3>
+                        <p className="text-sm text-gray-600">{supervisee.email}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
+                          {supervisee.supervision_type}
+                        </Badge>
+                        <Badge className={getRAGColor(supervisee.rag_status)}>
+                          {supervisee.rag_status.toUpperCase()}
+                        </Badge>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2 text-sm text-gray-600 mb-4">
+                      <p>Last Logbook: {supervisee.last_logbook_status} on {formatDate(supervisee.last_logbook_date)}</p>
+                      <p>Total Hours: {supervisee.total_hours_logged} / {supervisee.target_hours}</p>
+                      <p>Supervision Ratio: 1:{supervisee.supervision_ratio}</p>
+                      <p>Next EPA Checkpoint: {formatDate(supervisee.next_epa_due)}</p>
+                    </div>
+                    
+                    <div className="flex gap-2">
+       <Button 
+         size="sm" 
+         className="bg-blue-600 hover:bg-blue-700 text-white"
+         onClick={() => window.location.href = `/logbooks/${supervisee.id}/review`}
+       >
+         <FileText className="h-4 w-4 mr-2" />
+         Review Logbook
+       </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
+                        onClick={() => window.location.href = `/supervisees/${supervisee.id}`}
+                      >
+                        <User className="h-4 w-4 mr-2" />
+                        View Profile
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            
+            {supervisees.length === 0 && (
+              <div className="text-center py-12">
+                <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Supervisees Yet</h3>
+                <p className="text-gray-600 mb-4">Start by inviting supervisees to join your supervision program.</p>
+                <Button>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Invite Supervisee
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Supervision Invitations */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                📬 Supervision Invitations
+              </CardTitle>
+              <Select value={invitationFilter} onValueChange={setInvitationFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Filter by Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All</SelectItem>
+                  <SelectItem value="Accepted">Accepted</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Rejected">Rejected</SelectItem>
+                  <SelectItem value="Expired">Expired</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {filteredInvitations.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Expires</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredInvitations.map((invitation) => (
+                    <TableRow key={invitation.id}>
+                      <TableCell className="font-medium">{invitation.name}</TableCell>
+                      <TableCell>{invitation.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{invitation.type}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(invitation.status)}>
+                          {invitation.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{formatDate(invitation.expires)}</TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="outline" className="bg-white hover:bg-gray-50 text-gray-700 border-gray-300">
+                          Remove
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-center py-12">
+                <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Invitations</h3>
+                <p className="text-gray-600 mb-4">No supervision invitations found.</p>
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Send Invitation
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

@@ -9,6 +9,7 @@ import {
   Lock,
   Edit,
   AlertTriangle,
+  AlertCircle,
   CheckCircle,
   Clock,
   User,
@@ -25,7 +26,7 @@ interface LogbookEntry {
   week_end_date: string
   week_display: string
   week_starting_display: string
-  status: 'ready' | 'submitted' | 'approved' | 'rejected'
+  status: 'draft' | 'submitted' | 'returned_for_edits' | 'approved' | 'rejected'
   rag_status: 'red' | 'amber' | 'green'
   is_overdue: boolean
   has_supervisor_comments: boolean
@@ -223,7 +224,7 @@ export default function WeeklyLogbookEditor() {
       return
     }
 
-    if (logbook.has_logbook && (logbook.status === 'ready' || logbook.status === 'rejected')) {
+    if (logbook.has_logbook && (logbook.status === 'draft' || logbook.status === 'returned_for_edits' || logbook.status === 'rejected')) {
       setShowRegenerateModal(true)
       return
     }
@@ -456,6 +457,45 @@ export default function WeeklyLogbookEditor() {
           )}
         </div>
       </div>
+
+      {/* Supervisor Comments */}
+      {logbook.supervisor_comments && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-800">
+              <AlertCircle className="h-5 w-5" />
+              Supervisor Feedback
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="p-4 bg-white border border-orange-200 rounded-lg">
+              <p className="text-sm whitespace-pre-wrap text-gray-800">{logbook.supervisor_comments}</p>
+              {logbook.reviewed_by_name && (
+                <div className="mt-3 text-xs text-gray-600">
+                  Feedback from: {logbook.reviewed_by_name}
+                  {logbook.reviewed_at && ` on ${new Date(logbook.reviewed_at).toLocaleDateString()}`}
+                </div>
+              )}
+            </div>
+            {logbook.status === 'rejected' && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 text-red-800">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="text-sm font-medium">This logbook has been rejected. Please address the feedback above and resubmit.</span>
+                </div>
+              </div>
+            )}
+            {logbook.status === 'returned_for_edits' && (
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center gap-2 text-yellow-800">
+                  <Edit className="h-4 w-4" />
+                  <span className="text-sm font-medium">This logbook has been returned for edits. Please review the feedback above and make necessary changes.</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Logbook Header Panel */}
       <Card>
@@ -887,9 +927,10 @@ export default function WeeklyLogbookEditor() {
               <Edit className="h-4 w-4 mr-2" />
               {creating ? 'Saving...' : 'Save Draft'}
             </Button>
-            {logbook.status === 'ready' && (
+            {(logbook.status === 'draft' || logbook.status === 'returned_for_edits' || logbook.status === 'rejected') && (
               <Button onClick={handleSubmitToSupervisor} disabled={creating || submitting} variant="default">
-                {submitting ? 'Submitting...' : 'Submit to Supervisor'}
+                {submitting ? 'Submitting...' : 
+                 logbook.status === 'rejected' ? 'Resubmit to Supervisor' : 'Submit to Supervisor'}
               </Button>
             )}
           </div>

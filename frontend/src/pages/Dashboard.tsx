@@ -108,6 +108,7 @@ interface LogbookStatus {
     new: number
   }
   total_weeks: number
+  submitted?: number // For supervisor compatibility
 }
 
 // Widget Components
@@ -672,8 +673,8 @@ export default function Dashboard({ userRole }: DashboardProps) {
         setProgramSummary(null)
       })
 
-    // Load Logbook Status Summary (only for PROVISIONAL/REGISTRAR)
-    if (userRole === 'PROVISIONAL' || userRole === 'REGISTRAR') {
+    // Load Logbook Status Summary (for PROVISIONAL/REGISTRAR and SUPERVISOR)
+    if (userRole === 'PROVISIONAL' || userRole === 'REGISTRAR' || userRole === 'SUPERVISOR') {
       fetchLogbookStatus()
     }
   }
@@ -1577,6 +1578,37 @@ export default function Dashboard({ userRole }: DashboardProps) {
           </CardContent>
         </Card>
 
+        {/* Logbook Review Notifications for Supervisors */}
+        {userRole === 'SUPERVISOR' && (
+          <Card className="flex-1">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <FileText className="h-5 w-5 text-orange-600" />
+                Logbook Reviews
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-yellow-600" />
+                  <span className="text-sm text-gray-600">Pending Reviews</span>
+                </div>
+                <Link to="/logbook">
+                  <Button variant="outline" size="sm" className="text-xs">
+                    View All
+                  </Button>
+                </Link>
+              </div>
+              <div className="text-2xl font-bold text-orange-600">
+                {logbookStatus?.status_counts?.submitted || 0}
+              </div>
+              <div className="text-xs text-gray-500">
+                Logbooks awaiting your review
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Weekly Logbook Status Group */}
         {(userRole === 'PROVISIONAL' || userRole === 'REGISTRAR') && logbookStatus && (
           <Card className="flex-1">
@@ -1615,11 +1647,11 @@ export default function Dashboard({ userRole }: DashboardProps) {
                     </Badge>
                   </div>
                 )}
-                {logbookStatus.status_counts.ready > 0 && (
+                {logbookStatus.status_counts.draft > 0 && (
                   <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-gray-700">Ready</span>
+                    <span className="text-gray-700">Draft</span>
                     <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
-                      {logbookStatus.status_counts.ready}
+                      {logbookStatus.status_counts.draft}
                     </Badge>
                   </div>
                 )}
@@ -1699,10 +1731,12 @@ export default function Dashboard({ userRole }: DashboardProps) {
                 <span className="text-sm">Add PD Entry</span>
               </Button>
             </Link>
-            <Button variant="outline" className="h-auto p-4 flex flex-col items-center gap-2">
-              <FileText className="h-6 w-6" />
-              <span className="text-sm">View Reports</span>
-            </Button>
+            <Link to="/logbook">
+              <Button variant="outline" className="h-auto p-4 flex flex-col items-center gap-2 w-full">
+                <FileText className="h-6 w-6" />
+                <span className="text-sm">View Reports</span>
+              </Button>
+            </Link>
           </div>
         </CardContent>
       </Card>

@@ -28,6 +28,11 @@ class ProfessionalDevelopmentEntryListCreateView(generics.ListCreateAPIView):
             trainee=self.request.user
         )
         
+        # Filter by locked status if provided
+        include_locked = self.request.query_params.get('include_locked', 'false').lower() == 'true'
+        if not include_locked:
+            queryset = queryset.filter(locked=False)
+        
         # Filter by week_starting if provided
         week_starting = self.request.query_params.get('week_starting', None)
         if week_starting:

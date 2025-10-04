@@ -16,13 +16,13 @@ class LogbookSerializer(serializers.ModelSerializer):
     class Meta:
         model = WeeklyLogbook
         fields = [
-            'id', 'trainee', 'trainee_name', 'week_start_date', 'week_end_date', 
-            'week_display', 'status', 'section_a_entry_ids', 'section_b_entry_ids', 
+            'id', 'trainee', 'trainee_name', 'role_type', 'week_start_date', 'week_end_date', 
+            'week_display', 'status', 'is_editable', 'section_a_entry_ids', 'section_b_entry_ids', 
             'section_c_entry_ids', 'supervisor', 'supervisor_name', 'submitted_at', 
-            'reviewed_by', 'reviewed_by_name', 'reviewed_at', 'supervisor_comments',
+            'reviewed_by', 'reviewed_by_name', 'reviewed_at', 'review_comments', 'supervisor_decision_at',
             'section_totals', 'active_unlock', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'trainee', 'submitted_at', 'reviewed_at', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'trainee', 'submitted_at', 'reviewed_at', 'created_at', 'updated_at', 'is_editable']
     
     def get_trainee_name(self, obj):
         return f"{obj.trainee.profile.first_name} {obj.trainee.profile.last_name}".strip() or obj.trainee.email
@@ -364,3 +364,12 @@ class NotificationSerializer(serializers.ModelSerializer):
             if remaining_hours > 0:
                 return f"{days}d {remaining_hours}h"
             return f"{days} days"
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    """Serializer for Notification model"""
+    
+    class Meta:
+        model = Notification
+        fields = ['id', 'message', 'link', 'read', 'type', 'created_at']
+        read_only_fields = ['id', 'created_at']

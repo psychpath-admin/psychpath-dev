@@ -1,7 +1,7 @@
 from django.http import JsonResponse, HttpResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest
@@ -2486,6 +2486,20 @@ def disconnection_request_cancel(request, request_id):
     
     disconnection_request.cancel()
     return Response({'message': 'Disconnection request cancelled successfully'})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health_check(request):
+    """
+    Health check endpoint that returns basic application status.
+    No authentication required.
+    """
+    return Response({
+        "status": "ok",
+        "app": "PsychPath Backend",
+        "version": "1.0.0"
+    }, status=status.HTTP_200_OK)
 
 
 # Create your views here.

@@ -32,6 +32,7 @@ import RegisterDetails from '@/pages/RegisterDetails'
 import RegisterVerify from '@/pages/RegisterVerify'
 import RegisterSubscribe from '@/pages/RegisterSubscribe'
 import SupervisorDashboard from '@/pages/SupervisorDashboard'
+import LogbookReview from '@/pages/LogbookReview'
 import NotificationCenter from '@/pages/NotificationCenter'
 import CalendarPage from '@/pages/CalendarPage'
 import ErrorHelp from '@/pages/ErrorHelp'
@@ -171,6 +172,8 @@ function App() {
                     {me?.role === 'REGISTRAR' && <Route path="/registrar/reports" element={<RequireAuth><RegistrarReports /></RequireAuth>} />}
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
+          {me?.role === 'SUPERVISOR' && <Route path="/supervisor/dashboard" element={<RequireAuth><SupervisorDashboard /></RequireAuth>} />}
+          {me?.role === 'SUPERVISOR' && <Route path="/logbooks/:id/review" element={<RequireAuth><LogbookReview /></RequireAuth>} />}
           {me?.role === 'ORG_ADMIN' && <Route path="/org" element={<RequireAuth><OrgDashboard /></RequireAuth>} />}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

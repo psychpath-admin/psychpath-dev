@@ -22,6 +22,11 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
         if week_starting:
             queryset = queryset.filter(week_starting=week_starting)
         
+        # Filter by locked status if provided
+        include_locked = self.request.query_params.get('include_locked', 'false').lower() == 'true'
+        if not include_locked:
+            queryset = queryset.filter(locked=False)
+        
         return queryset
     
     def perform_create(self, serializer):

@@ -228,8 +228,60 @@ def logbook_dashboard_list(request):
 @support_error_handler
 def logbook_status_summary(request):
     """Get logbook status summary for dashboard display"""
-    if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
-        return Response({'error': 'Only trainees can view logbook status'}, status=status.HTTP_403_FORBIDDEN)
+    if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR', 'SUPERVISOR']:
+        return Response({'error': 'Only trainees and supervisors can view logbook status'}, status=status.HTTP_403_FORBIDDEN)
+    
+    user_role = request.user.profile.role
+    
+    # For supervisors, return submitted logbooks count
+    if user_role == 'SUPERVISOR':
+        from api.models import Supervision
+        
+        # Get supervisees for this supervisor
+        supervisee_relationships = Supervision.objects.filter(
+            supervisor=request.user,
+            role='PRIMARY',
+            status='ACCEPTED'
+        )
+        supervisee_users = [rel.supervisee for rel in supervisee_relationships if rel.supervisee]
+        
+        if not supervisee_users:
+            return Response({
+                'overall_status': 'green',
+                'status_message': 'No supervisees assigned',
+                'status_counts': {
+                    'total': 0,
+                    'ready': 0,
+                    'submitted': 0,
+                    'approved': 0,
+                    'rejected': 0,
+                    'overdue': 0,
+                    'new': 0
+                },
+                'total_weeks': 0
+            })
+        
+        # Get submitted logbooks from supervisees
+        submitted_logbooks = WeeklyLogbook.objects.filter(
+            trainee__in=supervisee_users,
+            status='submitted'
+        ).count()
+        
+        return Response({
+            'overall_status': 'green' if submitted_logbooks == 0 else 'amber',
+            'status_message': f'{submitted_logbooks} logbook(s) awaiting review' if submitted_logbooks > 0 else 'All logbooks up to date',
+                'status_counts': {
+                    'total': submitted_logbooks,
+                    'draft': 0,
+                    'submitted': submitted_logbooks,
+                    'returned_for_edits': 0,
+                    'approved': 0,
+                    'rejected': 0,
+                    'overdue': 0,
+                    'new': 0
+                },
+            'total_weeks': submitted_logbooks
+        })
     
     # Get current week start (Monday)
     today = timezone.now().date()
@@ -300,8 +352,9 @@ def logbook_status_summary(request):
     # Count by status
     status_counts = {
         'total': len(available_weeks),
-        'ready': 0,
+        'draft': 0,
         'submitted': 0,
+        'returned_for_edits': 0,
         'approved': 0,
         'rejected': 0,
         'overdue': 0,
@@ -311,8 +364,10 @@ def logbook_status_summary(request):
     for week in available_weeks:
         if week['is_overdue']:
             status_counts['overdue'] += 1
-        if week['status'] == 'ready':
-            status_counts['ready'] += 1
+        if week['status'] == 'draft':
+            status_counts['draft'] += 1
+        if week['status'] == 'returned_for_edits':
+            status_counts['returned_for_edits'] += 1
         if week['status'] == 'submitted':
             status_counts['submitted'] += 1
         if week['status'] == 'approved':
@@ -694,39 +749,32 @@ def logbook_submit(request):
     if existing_logbook.status in ['submitted', 'approved']:
         return Response({'error': f'Logbook already {existing_logbook.status}'}, status=status.HTTP_400_BAD_REQUEST)
     
-    with transaction.atomic():
-        # Update existing logbook to submitted status
-        existing_logbook.status = 'submitted'
-        existing_logbook.submitted_at = timezone.now()
-        existing_logbook.save()
-        
-        # Lock all entries
-        from section_a.models import SectionAEntry
-        from section_b.models import ProfessionalDevelopmentEntry
-        from section_c.models import SupervisionEntry
-        
-        SectionAEntry.objects.filter(
-            id__in=existing_logbook.section_a_entry_ids,
-            trainee=request.user
-        ).update(locked=True)
-        
-        ProfessionalDevelopmentEntry.objects.filter(
-            id__in=existing_logbook.section_b_entry_ids,
-            trainee=request.user
-        ).update(locked=True)
-        
-        SupervisionEntry.objects.filter(
-            id__in=existing_logbook.section_c_entry_ids,
-            trainee=request.user.profile
-        ).update(locked=True)
-        
-        # Create audit log entry
-        LogbookAuditLog.objects.create(
-            logbook=existing_logbook,
-            action='submitted',
-            user=request.user,
-            new_status='submitted'
-        )
+    try:
+        with transaction.atomic():
+            # Use the new workflow method
+            existing_logbook.submit_for_review(request.user)
+            
+            # Lock all entries
+            from section_a.models import SectionAEntry
+            from section_b.models import ProfessionalDevelopmentEntry
+            from section_c.models import SupervisionEntry
+            
+            SectionAEntry.objects.filter(
+                id__in=existing_logbook.section_a_entry_ids,
+                trainee=request.user
+            ).update(locked=True)
+            
+            ProfessionalDevelopmentEntry.objects.filter(
+                id__in=existing_logbook.section_b_entry_ids,
+                trainee=request.user
+            ).update(locked=True)
+            
+            SupervisionEntry.objects.filter(
+                id__in=existing_logbook.section_c_entry_ids,
+                trainee=request.user.profile
+            ).update(locked=True)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         # Return updated logbook data
         return Response({
@@ -772,8 +820,33 @@ def logbook_detail(request, logbook_id):
     if user_role in ['PROVISIONAL', 'REGISTRAR'] and logbook.trainee != request.user:
         return Response({'error': 'Can only view your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
     
-    serializer = LogbookSerializer(logbook)
-    return Response(serializer.data)
+    # Get detailed logbook data including entries for supervisors
+    if user_role == 'SUPERVISOR':
+        from section_a.models import SectionAEntry
+        from section_b.models import ProfessionalDevelopmentEntry
+        from section_c.models import SupervisionEntry
+        
+        # Fetch entries
+        section_a_entries = SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids)
+        section_b_entries = ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids)
+        section_c_entries = SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids)
+        
+        # Serialize entries
+        from section_a.serializers import SectionAEntrySerializer
+        from section_b.serializers import ProfessionalDevelopmentEntrySerializer
+        from section_c.serializers import SupervisionEntrySerializer
+        
+        logbook_data = LogbookSerializer(logbook).data
+        logbook_data['entries'] = {
+            'section_a': SectionAEntrySerializer(section_a_entries, many=True).data,
+            'section_b': ProfessionalDevelopmentEntrySerializer(section_b_entries, many=True).data,
+            'section_c': SupervisionEntrySerializer(section_c_entries, many=True).data,
+        }
+        
+        return Response(logbook_data)
+    else:
+        serializer = LogbookSerializer(logbook)
+        return Response(serializer.data)
 
 
 @api_view(['GET'])
@@ -828,7 +901,7 @@ def supervisor_logbooks(request):
     # Build queryset based on filter and supervisees
     if status_filter == 'all':
         logbooks = WeeklyLogbook.objects.filter(trainee__in=supervisee_users)
-    elif status_filter in ['submitted', 'rejected', 'approved']:
+    elif status_filter in ['submitted', 'rejected', 'approved', 'returned_for_edits']:
         logbooks = WeeklyLogbook.objects.filter(
             trainee__in=supervisee_users,
             status=status_filter
@@ -1057,32 +1130,20 @@ def logbook_resubmit(request, logbook_id):
     if logbook.trainee != request.user:
         return Response({'error': 'Can only resubmit your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
     
-    if logbook.status != 'rejected':
-        return Response({'error': 'Can only resubmit rejected logbooks'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Update status and timestamps
-    logbook.status = 'submitted'
-    logbook.submitted_at = timezone.now()
-    logbook.save()
-    
-    # Lock entries again
-    from section_a.models import SectionAEntry
-    from section_b.models import ProfessionalDevelopmentEntry
-    from section_c.models import SupervisionEntry
-    
-    SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=True)
-    ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=True)
-    SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=True)
-    
-    # Log resubmission
-    LogbookAuditLog.objects.create(
-        logbook=logbook,
-        action='resubmitted',
-        user=request.user,
-        user_role='trainee',
-        previous_status='rejected',
-        new_status='submitted'
-    )
+    try:
+        logbook.resubmit(request.user)
+        
+        # Lock entries again
+        from section_a.models import SectionAEntry
+        from section_b.models import ProfessionalDevelopmentEntry
+        from section_c.models import SupervisionEntry
+        
+        SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=True)
+        ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=True)
+        SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=True)
+        
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     return Response({'message': 'Logbook resubmitted successfully'})
 
@@ -1121,6 +1182,12 @@ def logbook_comment_threads(request, logbook_id):
         return Response(serializer.data)
     
     elif request.method == 'POST':
+        # Check if supervisor is trying to comment on rejected logbook
+        if user_role == 'SUPERVISOR' and logbook.status == 'rejected':
+            return Response({
+                'error': 'Cannot add comments to rejected logbooks. The logbook has been returned to the trainee for editing.'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
         # Create a new comment thread
         thread_type = request.data.get('thread_type', 'general')
         entry_id = request.data.get('entry_id', '')
@@ -1201,6 +1268,12 @@ def comment_message_reply(request, comment_id):
     # Trainees can only reply to their own logbooks
     if user_role in ['PROVISIONAL', 'REGISTRAR'] and logbook.trainee != request.user:
         return Response({'error': 'Can only reply to your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Check if supervisor is trying to reply to comments on rejected logbook
+    if user_role == 'SUPERVISOR' and logbook.status == 'rejected':
+        return Response({
+            'error': 'Cannot reply to comments on rejected logbooks. The logbook has been returned to the trainee for editing.'
+        }, status=status.HTTP_403_FORBIDDEN)
     
     message_text = request.data.get('message', '').strip()
     if not message_text:
@@ -1748,6 +1821,12 @@ def comment_message_detail(request, comment_id):
     if user_role in ['PROVISIONAL', 'REGISTRAR'] and logbook.trainee != request.user:
         return Response({'error': 'Can only modify comments on your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
     
+    # Check if supervisor is trying to modify comments on rejected logbook
+    if user_role == 'SUPERVISOR' and logbook.status == 'rejected':
+        return Response({
+            'error': 'Cannot modify comments on rejected logbooks. The logbook has been returned to the trainee for editing.'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
     if request.method == 'PUT':
         # Edit comment
         if not comment.can_edit(request.user):
@@ -1878,46 +1957,49 @@ def logbook_review(request, logbook_id):
                 it.save(update_fields=['supervisor_comment'])
 
     if decision == 'approve':
-        logbook.status = 'approved'
-        logbook.reviewed_at = timezone.now()
-        logbook.reviewed_by = request.user
-        logbook.supervisor_comments = general_comment
-        logbook.save()
-
-        # Lock entries
-        SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=True)
-        ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=True)
-        SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=True)
-
-        LogbookAuditLog.objects.create(
-            logbook=logbook,
-            action='approved',
-            user=request.user,
-            new_status='approved',
-            comments=general_comment
-        )
-        return Response({'message': 'Approved'})
+        try:
+            logbook.approve(request.user, general_comment)
+            
+            # Lock entries
+            SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=True)
+            ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=True)
+            SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=True)
+            
+            return Response({'message': 'Approved'})
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     if decision == 'reject':
-        logbook.status = 'rejected'
-        logbook.reviewed_at = timezone.now()
-        logbook.reviewed_by = request.user
-        logbook.supervisor_comments = general_comment or ''
-        logbook.save()
+        if not general_comment.strip():
+            return Response({'error': 'Rejection reason is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            logbook.reject(request.user, general_comment)
+            
+            # Unlock entries for editing
+            SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=False)
+            ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=False)
+            SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=False)
+            
+            return Response({'message': 'Rejected'})
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Unlock entries for editing
-        SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=False)
-        ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=False)
-        SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=False)
-
-        LogbookAuditLog.objects.create(
-            logbook=logbook,
-            action='rejected',
-            user=request.user,
-            new_status='rejected',
-            comments=general_comment
-        )
-        return Response({'message': 'Rejected'})
+    if decision == 'return_for_edits':
+        if not general_comment.strip():
+            return Response({'error': 'Comments are required when returning for edits'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            logbook.return_for_edits(request.user, general_comment)
+            
+            # Unlock entries for editing
+            SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=False)
+            ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=False)
+            SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=False)
+            
+            return Response({'message': 'Returned for edits'})
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response({'error': 'Invalid decision'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2015,3 +2097,53 @@ def logbook_html_report(request, logbook_id):
     }
     
     return render(request, 'logbook_report.html', context)
+
+
+# Notification API endpoints
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def notification_list(request):
+    """Get notifications for the current user"""
+    limit = request.GET.get('limit', 10)
+    try:
+        limit = int(limit)
+    except (ValueError, TypeError):
+        limit = 10
+    
+    notifications = Notification.objects.filter(
+        recipient=request.user
+    ).order_by('-created_at')[:limit]
+    
+    serializer = NotificationSerializer(notifications, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def notification_stats(request):
+    """Get notification statistics for the current user"""
+    total_count = Notification.objects.filter(recipient=request.user).count()
+    unread_count = Notification.objects.filter(recipient=request.user, read=False).count()
+    
+    return Response({
+        'total': total_count,
+        'unread': unread_count
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def notification_mark_read(request, notification_id):
+    """Mark a notification as read"""
+    try:
+        notification = Notification.objects.get(
+            id=notification_id,
+            recipient=request.user
+        )
+        notification.mark_as_read()
+        return Response({'message': 'Notification marked as read'})
+    except Notification.DoesNotExist:
+        return Response({'error': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)

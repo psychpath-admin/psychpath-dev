@@ -35,7 +35,7 @@ interface LogbookEntry {
   week_end_date: string
   week_display: string
   week_starting_display: string
-  status: 'ready' | 'submitted' | 'approved' | 'rejected'
+  status: 'draft' | 'submitted' | 'returned_for_edits' | 'approved' | 'rejected'
   rag_status: 'red' | 'amber' | 'green'
   is_overdue: boolean
   has_supervisor_comments: boolean
@@ -194,8 +194,12 @@ export default function WeeklyLogbookDashboard() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'draft':
+        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Draft</Badge>
       case 'submitted':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Waiting for Review</Badge>
+      case 'returned_for_edits':
+        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Returned for Edits</Badge>
       case 'approved':
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Approved</Badge>
       case 'rejected':
@@ -262,6 +266,25 @@ export default function WeeklyLogbookDashboard() {
     if (logbook.id) {
       setSelectedLogbookId(logbook.id)
       setAuditModalOpen(true)
+    }
+  }
+
+  const handleSubmit = async (logbookId: number) => {
+    try {
+      const response = await apiFetch(`/api/logbook/${logbookId}/submit/`, {
+        method: 'POST',
+      })
+      
+      if (response.ok) {
+        toast.success('Logbook submitted successfully')
+        fetchLogbooks() // Refresh the list
+      } else {
+        const errorData = await response.json()
+        toast.error(errorData.error || 'Failed to submit logbook')
+      }
+    } catch (error) {
+      console.error('Error submitting logbook:', error)
+      toast.error('Failed to submit logbook')
     }
   }
 
@@ -870,12 +893,13 @@ export default function WeeklyLogbookDashboard() {
                         <Activity className="h-4 w-4" />
                       </Button>
                       
-                      {logbook.status === 'ready' && (
+                      {(logbook.status === 'draft' || logbook.status === 'returned_for_edits' || logbook.status === 'rejected') && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 p-0"
-                          title="Submit"
+                          title={logbook.status === 'rejected' ? 'Resubmit' : 'Submit'}
+                          onClick={() => logbook.id && handleSubmit(logbook.id)}
                         >
                           <Send className="h-4 w-4" />
                         </Button>
@@ -888,9 +912,9 @@ export default function WeeklyLogbookDashboard() {
                           className="h-8 w-8 p-0"
                           title="Lock"
                         >
-                          <Lock className="h-4 w-4" />
+                              <Lock className="h-4 w-4" />
                         </Button>
-                      )}
+                        )}
                       </div>
                     </div>
                 </div>

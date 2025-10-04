@@ -10,17 +10,20 @@ class WeeklyLogbook(models.Model):
     """Weekly logbook for trainees"""
     
     STATUS_CHOICES = [
-        ('ready', 'Ready'),
+        ('draft', 'Draft'),
         ('submitted', 'Submitted'),
+        ('returned_for_edits', 'Returned for Edits'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
+        ('locked', 'Locked'),
     ]
     
     trainee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='logbooks')
+    role_type = models.CharField(max_length=20, choices=[('Provisional', 'Provisional'), ('Registrar', 'Registrar')], default='Provisional')
     week_start_date = models.DateField()
     week_end_date = models.DateField()
     week_number = models.PositiveIntegerField(default=1)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ready')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     section_a_entry_ids = models.JSONField(default=list, help_text="List of Section A entry IDs")
     section_b_entry_ids = models.JSONField(default=list, help_text="List of Section B entry IDs")
     section_c_entry_ids = models.JSONField(default=list, help_text="List of Section C entry IDs")
@@ -28,7 +31,11 @@ class WeeklyLogbook(models.Model):
     submitted_at = models.DateTimeField(null=True, blank=True)
     reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_logbooks')
     reviewed_at = models.DateTimeField(null=True, blank=True)
-    supervisor_comments = models.TextField(blank=True)
+    review_comments = models.TextField(blank=True)
+    supervisor_decision_at = models.DateTimeField(null=True, blank=True)
+    resubmitted_at = models.DateTimeField(null=True, blank=True)
+    returned_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -185,8 +192,8 @@ class WeeklyLogbook(models.Model):
         """Get RAG status for dashboard display"""
         if self.status in ['rejected'] or self.is_overdue():
             return 'red'  # Overdue or Rejected
-        elif self.status == 'ready':
-            return 'amber'  # Ready but not yet submitted
+        elif self.status == 'draft':
+            return 'amber'  # Draft but not yet submitted
         elif self.status == 'approved':
             return 'green'  # Approved by supervisor
         else:
@@ -202,20 +209,217 @@ class WeeklyLogbook(models.Model):
         """Check if supervisor has provided comments"""
         return bool(self.supervisor_comments.strip()) if self.supervisor_comments else False
     
+    @property
+    def is_editable(self):
+        """Computed property: check if logbook is editable based on status"""
+        return self.status in ['draft', 'returned_for_edits', 'rejected']
+    
     def is_editable_by_user(self, user):
         """Check if logbook can be edited by the given user"""
         if user != self.trainee:
             return False
         
-        # Can edit if status is ready or rejected
-        if self.status in ['ready', 'rejected']:
-            return True
+        # Can edit if status is draft, returned_for_edits, or rejected
+        return self.is_editable
+    
+    def is_complete(self):
+        """Check if logbook is complete and ready for submission"""
+        # Basic checks - can be expanded based on requirements
+        has_entries = (
+            len(self.section_a_entry_ids) > 0 or 
+            len(self.section_b_entry_ids) > 0 or 
+            len(self.section_c_entry_ids) > 0
+        )
+        return has_entries
+    
+    def submit_for_review(self, user):
+        """Submit logbook for supervisor review"""
+        if not self.is_complete():
+            raise ValueError("Logbook must be complete before submission")
         
-        # Can edit if there's an active unlock
-        if self.is_editable():
-            return True
+        if self.status != 'draft':
+            raise ValueError("Only draft logbooks can be submitted")
         
-        return False
+        self.status = 'submitted'
+        self.submitted_at = timezone.now()
+        self.save()
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='submitted',
+            user=user,
+            user_role=self._get_user_role(user),
+            comments='Logbook submitted for review',
+            previous_status='draft',
+            new_status='submitted'
+        )
+        
+        # Send notification to supervisor if assigned
+        if self.supervisor:
+            self._send_notification_to_supervisor('submitted')
+    
+    def approve(self, supervisor, comments=''):
+        """Approve logbook by supervisor"""
+        if self.status != 'submitted':
+            raise ValueError("Only submitted logbooks can be approved")
+        
+        self.status = 'approved'
+        self.reviewed_by = supervisor
+        self.reviewed_at = timezone.now()
+        self.supervisor_decision_at = timezone.now()
+        if comments:
+            self.review_comments = comments
+        self.save()
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='approved',
+            user=supervisor,
+            user_role='supervisor',
+            comments=comments or 'Logbook approved',
+            previous_status='submitted',
+            new_status='approved'
+        )
+        
+        # Send notification to trainee
+        self._send_notification_to_trainee('approved')
+    
+    def return_for_edits(self, supervisor, comments):
+        """Return logbook to trainee for edits"""
+        if self.status != 'submitted':
+            raise ValueError("Only submitted logbooks can be returned for edits")
+        
+        self.status = 'returned_for_edits'
+        self.reviewed_by = supervisor
+        self.returned_at = timezone.now()
+        self.supervisor_decision_at = timezone.now()
+        self.review_comments = comments
+        self.save()
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='returned_for_edits',
+            user=supervisor,
+            user_role='supervisor',
+            comments=comments,
+            previous_status='submitted',
+            new_status='returned_for_edits'
+        )
+        
+        # Send notification to trainee
+        self._send_notification_to_trainee('returned_for_edits')
+    
+    def reject(self, supervisor, comments):
+        """Reject logbook by supervisor"""
+        if self.status != 'submitted':
+            raise ValueError("Only submitted logbooks can be rejected")
+        
+        self.status = 'rejected'
+        self.reviewed_by = supervisor
+        self.rejected_at = timezone.now()
+        self.supervisor_decision_at = timezone.now()
+        self.review_comments = comments
+        self.save()
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='rejected',
+            user=supervisor,
+            user_role='supervisor',
+            comments=comments,
+            previous_status='submitted',
+            new_status='rejected'
+        )
+        
+        # Send notification to trainee
+        self._send_notification_to_trainee('rejected')
+    
+    def resubmit(self, user):
+        """Resubmit logbook after edits"""
+        if self.status != 'returned_for_edits':
+            raise ValueError("Only returned logbooks can be resubmitted")
+        
+        self.status = 'submitted'
+        self.resubmitted_at = timezone.now()
+        self.save()
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='resubmitted',
+            user=user,
+            user_role=self._get_user_role(user),
+            comments='Logbook resubmitted after edits',
+            previous_status='returned_for_edits',
+            new_status='submitted'
+        )
+        
+        # Send notification to supervisor
+        if self.supervisor:
+            self._send_notification_to_supervisor('resubmitted')
+    
+    def _get_user_role(self, user):
+        """Get user role for audit logging"""
+        try:
+            from api.models import UserProfile
+            profile = UserProfile.objects.get(user=user)
+            return profile.role.lower()
+        except:
+            return 'provisional'
+    
+    def _send_notification_to_supervisor(self, action):
+        """Send notification to supervisor"""
+        if not self.supervisor:
+            return
+            
+        # Create notification based on action
+        if action == 'submitted':
+            message = f"{self.trainee.first_name} {self.trainee.last_name} submitted a logbook for the week of {self.week_start_date.strftime('%B %d, %Y')}"
+            notification_type = 'logbook_submission'
+            link = f"/logbooks/{self.id}/review"
+        elif action == 'resubmitted':
+            message = f"{self.trainee.first_name} {self.trainee.last_name} resubmitted a logbook for the week of {self.week_start_date.strftime('%B %d, %Y')}"
+            notification_type = 'logbook_submission'
+            link = f"/logbooks/{self.id}/review"
+        else:
+            message = f"Logbook update: {action}"
+            notification_type = 'system_alert'
+            link = f"/logbooks/{self.id}/review"
+        
+        # Create the notification
+        Notification.create_notification(
+            recipient=self.supervisor,
+            message=message,
+            notification_type=notification_type,
+            link=link
+        )
+        
+        # Log in audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='notification_sent',
+            user=self.supervisor,
+            user_role='supervisor',
+            comments=f'Notification sent to supervisor for {action}',
+            metadata={'action': action, 'recipient': 'supervisor'}
+        )
+    
+    def _send_notification_to_trainee(self, action):
+        """Send notification to trainee"""
+        # This would integrate with your notification system
+        # For now, we'll just log it
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='notification_sent',
+            user=self.trainee,
+            user_role=self._get_user_role(self.trainee),
+            comments=f'Notification sent to trainee for {action}',
+            metadata={'action': action, 'recipient': 'trainee'}
+        )
 
 
 class LogbookEntry(models.Model):
@@ -249,9 +453,10 @@ class LogbookAuditLog(models.Model):
         ('submitted', 'Submitted'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
+        ('returned_for_edits', 'Returned for Edits'),
+        ('resubmitted', 'Resubmitted'),
         ('unlocked', 'Unlocked'),
         ('locked', 'Locked'),
-        ('resubmitted', 'Resubmitted'),
         ('message_sent', 'Message Sent'),
         ('entry_edited', 'Entry Edited'),
         ('comment_added', 'Comment Added'),
@@ -503,35 +708,35 @@ class UnlockRequest(models.Model):
 
 
 class Notification(models.Model):
-    """In-app notifications for platform events"""
+    """System notifications for users"""
     
-    TYPE_CHOICES = [
-        ('logbook_submitted', 'Logbook Submitted'),
-        ('logbook_status_updated', 'Logbook Status Updated'),
-        ('comment_added', 'Comment Added'),
-        ('unlock_requested', 'Unlock Requested'),
-        ('unlock_approved', 'Unlock Approved'),
-        ('unlock_denied', 'Unlock Denied'),
-        ('unlock_expiry_warning', 'Unlock Expiry Warning'),
-        ('supervision_invite_pending', 'Supervision Invite Pending'),
-        ('system_message', 'System Message'),
+    NOTIFICATION_TYPES = [
+        ('logbook_submission', 'Logbook Submission'),
+        ('logbook_approved', 'Logbook Approved'),
+        ('logbook_rejected', 'Logbook Rejected'),
+        ('logbook_returned', 'Logbook Returned for Edits'),
+        ('supervision_invite', 'Supervision Invitation'),
+        ('supervision_accepted', 'Supervision Accepted'),
+        ('supervision_rejected', 'Supervision Rejected'),
+        ('system_alert', 'System Alert'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
-    notification_type = models.CharField(max_length=30, choices=TYPE_CHOICES)
-    payload = models.JSONField(default=dict, help_text="Additional data for the notification")
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    message = models.TextField()
+    link = models.URLField(blank=True, null=True, help_text="Direct link to related page")
     read = models.BooleanField(default=False)
+    type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['user', 'read', '-created_at']),
-            models.Index(fields=['notification_type']),
+            models.Index(fields=['recipient', 'read', '-created_at']),
+            models.Index(fields=['type']),
         ]
     
     def __str__(self):
-        return f"{self.user.email} - {self.notification_type} at {self.created_at}"
+        return f"{self.recipient.email} - {self.type} at {self.created_at}"
     
     def mark_as_read(self):
         """Mark this notification as read"""
@@ -539,49 +744,12 @@ class Notification(models.Model):
         self.save()
     
     @classmethod
-    def create_notification(cls, user, notification_type, payload=None, actor=None):
-        """Create a notification and log it in audit trail"""
-        if payload is None:
-            payload = {}
-        
+    def create_notification(cls, recipient, message, notification_type, link=None):
+        """Create a notification"""
         notification = cls.objects.create(
-            user=user,
-            notification_type=notification_type,
-            payload=payload
+            recipient=recipient,
+            message=message,
+            type=notification_type,
+            link=link
         )
-        
-        # Log notification creation in audit trail if we have context
-        if actor and hasattr(actor, 'profile'):
-            # Try to find associated logbook from payload
-            logbook_id = payload.get('logbookId')
-            if logbook_id:
-                try:
-                    from .models import WeeklyLogbook
-                    logbook = WeeklyLogbook.objects.get(id=logbook_id)
-                    
-                    # Determine actor role
-                    role_mapping = {
-                        'SUPERVISOR': 'supervisor',
-                        'PROVISIONAL': 'provisional',
-                        'REGISTRAR': 'registrar',
-                        'ORG_ADMIN': 'org_admin'
-                    }
-                    actor_role = role_mapping.get(actor.profile.role, 'provisional')
-                    
-                    LogbookAuditLog.objects.create(
-                        logbook=logbook,
-                        action='notification_sent',
-                        user=actor,
-                        user_role=actor_role,
-                        comments=f"Notification sent to {user.email}: {notification_type}",
-                        target_id=str(notification.id),
-                        metadata={
-                            'notification_type': notification_type,
-                            'recipient': user.email,
-                            'payload': payload
-                        }
-                    )
-                except WeeklyLogbook.DoesNotExist:
-                    pass
-        
         return notification

@@ -14,6 +14,7 @@ help:
 	@echo "  dev-up            - Run backend (SQLite) and frontend dev servers (foreground)"
 	@echo "  dev-start         - Start development servers in background"
 	@echo "  dev-stop          - Stop development servers"
+	@echo "  dev-restart       - Stop and restart development servers"
 	@echo "  dev-status        - Check status of development servers"
 	@echo "  dev-logs          - Show development server logs"
 	@echo "  db-backup         - Create timestamped SQLite backup"
@@ -86,6 +87,13 @@ dev-stop:
 		rm -f .frontend.pid; \
 	fi
 	@echo "Development servers stopped!"
+
+.PHONY: dev-restart
+dev-restart:
+	@echo "Restarting development servers..."
+	@$(MAKE) dev-stop
+	@sleep 2
+	@$(MAKE) dev-start
 
 .PHONY: dev-status
 dev-status:
