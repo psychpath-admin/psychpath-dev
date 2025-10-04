@@ -73,23 +73,25 @@ def logbook_dashboard_list(request):
         from section_c.models import SupervisionEntry
         from django.db.models import Sum
         
-        # Get all weeks that have entries
+        # Get all weeks that have entries (both locked and unlocked)
         section_a_weeks = SectionAEntry.objects.filter(
-            trainee=request.user,
-            locked=False
+            trainee=request.user
         ).values_list('week_starting', flat=True).distinct()
         
         section_b_weeks = ProfessionalDevelopmentEntry.objects.filter(
-            trainee=request.user,
-            locked=False
+            trainee=request.user
         ).values_list('week_starting', flat=True).distinct()
         
         # For Section C, calculate week_starting from date_of_supervision
         trainee_profile = request.user.profile
         section_c_weeks = SupervisionEntry.objects.filter(
-            trainee=trainee_profile,
-            locked=False
+            trainee=trainee_profile
         ).values_list('date_of_supervision', flat=True).distinct()
+        
+        # Also include weeks that have logbooks (even if entries are locked)
+        logbook_weeks = WeeklyLogbook.objects.filter(
+            trainee=request.user
+        ).values_list('week_start_date', flat=True).distinct()
         
         # Convert Section C dates to week starts
         section_c_week_starts = set()
@@ -97,8 +99,8 @@ def logbook_dashboard_list(request):
             week_start = date - timedelta(days=date.weekday())
             section_c_week_starts.add(week_start)
         
-        # Combine all weeks
-        all_weeks = set(section_a_weeks) | set(section_b_weeks) | section_c_week_starts
+        # Combine all weeks (entries + logbooks)
+        all_weeks = set(section_a_weeks) | set(section_b_weeks) | section_c_week_starts | set(logbook_weeks)
 
         # Apply optional lower bound filter
         if since_date:
@@ -149,21 +151,18 @@ def logbook_dashboard_list(request):
                 except WeeklyLogbook.DoesNotExist:
                     # No logbook exists - create a "ready" entry with calculated stats
                     
-                    # Calculate totals from entries
+                    # Calculate totals from entries (both locked and unlocked)
                     section_a_entries = SectionAEntry.objects.filter(
                         trainee=request.user,
-                        week_starting=week_start,
-                        locked=False
+                        week_starting=week_start
                     )
                     section_b_entries = ProfessionalDevelopmentEntry.objects.filter(
                         trainee=request.user,
-                        week_starting=week_start,
-                        locked=False
+                        week_starting=week_start
                     )
                     section_c_entries = SupervisionEntry.objects.filter(
                         trainee=trainee_profile,
-                        week_starting=week_start,
-                        locked=False
+                        week_starting=week_start
                     )
                     
                     # Create a temporary logbook to use its calculation method
@@ -645,7 +644,7 @@ def logbook_create(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-# @support_error_handler  # Temporarily removed to see full traceback
+@support_error_handler
 def logbook_submit(request):
     """Submit a logbook for supervisor review"""
     if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
