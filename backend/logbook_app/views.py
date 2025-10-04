@@ -146,7 +146,8 @@ def logbook_dashboard_list(request):
                             'duration_minutes': active_unlock.duration_minutes,
                             'remaining_minutes': active_unlock.get_remaining_time_minutes()
                         } if active_unlock else None,
-                        'has_logbook': True
+                        'has_logbook': True,
+                        'audit_log_count': logbook.audit_logs.count()
                     })
                 except WeeklyLogbook.DoesNotExist:
                     # No logbook exists - create a "ready" entry with calculated stats
@@ -205,7 +206,8 @@ def logbook_dashboard_list(request):
                         'reviewed_by_name': None,
                         'section_totals': totals,
                         'active_unlock': None,
-                        'has_logbook': False
+                        'has_logbook': False,
+                        'audit_log_count': 0
                     })
         
         # Sort by week start date (most recent first)

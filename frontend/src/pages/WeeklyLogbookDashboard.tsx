@@ -59,6 +59,7 @@ interface LogbookEntry {
     remaining_minutes: number
   }
   has_logbook: boolean
+  audit_log_count: number
 }
 
 interface LogbookMetrics {
@@ -864,7 +865,7 @@ export default function WeeklyLogbookDashboard() {
                         size="sm"
                         className="h-8 w-8 p-0"
                         onClick={() => handleViewAuditTrail(logbook)}
-                        title="View Audit Trail"
+                        title={logbook.audit_log_count > 0 ? `View Audit Trail (${logbook.audit_log_count} entries)` : "No audit trail available yet"}
                       >
                         <Activity className="h-4 w-4" />
                       </Button>
