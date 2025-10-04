@@ -151,7 +151,7 @@ function App() {
           <Route path="/section-c" element={<RequireAuth><SectionC /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><UserProfile /></RequireAuth>} />
           <Route path="/me/reflections" element={<RequireAuth><MyReflections /></RequireAuth>} />
-          <Route path="/logbook" element={<RequireAuth><WeeklyLogbookDashboard /></RequireAuth>} />
+          <Route path="/logbook" element={<RequireAuth><LogbookPage /></RequireAuth>} />
           <Route path="/logbook/week/:weekStart" element={<RequireAuth><WeeklyLogbookEditor /></RequireAuth>} />
           <Route path="/logbook/old" element={<RequireAuth><LogbookPage /></RequireAuth>} />
           <Route path="/logbook/:id" element={<RequireAuth><LogbookEditor /></RequireAuth>} />

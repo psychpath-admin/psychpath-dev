@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { 
   BookOpen, 
-  Calendar, 
   Clock, 
   CheckCircle, 
   XCircle, 
@@ -18,10 +17,12 @@ import {
   MessageSquare,
   Filter,
   RefreshCw,
-  Plus
+  Plus,
+  Activity
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
+import LogbookAuditTrailModal from '@/components/LogbookAuditTrailModal'
 
 interface LogbookForReview {
   id: number
@@ -57,6 +58,8 @@ export default function SupervisorLogbookReview() {
   const [commentThreads, setCommentThreads] = useState<any[]>([])
   const [showCommentInput, setShowCommentInput] = useState<Record<string, boolean>>({})
   const [newComments, setNewComments] = useState<Record<string, string>>({})
+  const [auditModalOpen, setAuditModalOpen] = useState(false)
+  const [selectedLogbookId, setSelectedLogbookId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchLogbooksForReview()
@@ -112,9 +115,6 @@ export default function SupervisorLogbookReview() {
     }
   }
 
-  const updateEntryComment = (entryId: number, value: string) => {
-    setEntryComments(prev => ({ ...prev, [entryId]: value }))
-  }
 
   const fetchMessages = async (logbookId: number) => {
     try {
@@ -289,6 +289,11 @@ export default function SupervisorLogbookReview() {
     }
   }
 
+  const handleViewAuditTrail = (logbookId: number) => {
+    setSelectedLogbookId(logbookId)
+    setAuditModalOpen(true)
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'submitted':
@@ -448,6 +453,15 @@ export default function SupervisorLogbookReview() {
                       Review
                     </Button>
                     
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewAuditTrail(logbook.id)}
+                      title="View Audit Trail"
+                    >
+                      <Activity className="h-4 w-4" />
+                    </Button>
+                    
                     {logbook.status === 'rejected' && (
                       <Button
                         variant="outline"
@@ -460,7 +474,7 @@ export default function SupervisorLogbookReview() {
                         }}
                       >
                         <MessageSquare className="h-4 w-4 mr-2" />
-                        Messages ({logbook.message_count || 0})
+                        Messages
                       </Button>
                     )}
                     
@@ -908,6 +922,16 @@ export default function SupervisorLogbookReview() {
           </CardContent>
         </Card>
       )}
+
+      {/* Audit Trail Modal */}
+      <LogbookAuditTrailModal
+        logbookId={selectedLogbookId}
+        isOpen={auditModalOpen}
+        onClose={() => {
+          setAuditModalOpen(false)
+          setSelectedLogbookId(null)
+        }}
+      />
     </div>
   )
 }
