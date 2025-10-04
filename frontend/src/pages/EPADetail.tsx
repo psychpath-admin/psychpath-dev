@@ -73,7 +73,7 @@ export default function EPADetail() {
       <div className="font-labels text-textLight">Milestones</div>
       <ul className="grid gap-2">
         {milestones.map((m) => (
-          <li key={m.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-cape">
+          <li key={m.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-psychpath">
             <div className="font-labels text-sm text-textDark">{m.code}</div>
             <div className="font-body text-sm text-textLight">{m.description || '—'}</div>
             {selectedUserId && (

@@ -177,3 +177,4 @@ class Command(BaseCommand):
         
         self.stdout.write(f"Django Server: {django_status}")
         self.stdout.write(f"Frontend Server: {frontend_status}")
+

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Plus, X, Mail, UserPlus, AlertCircle, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
+import ErrorOverlay from '@/components/ErrorOverlay'
+import { useErrorHandler } from '@/hooks/useErrorHandler'
 
 interface EnrolSuperviseesModalProps {
   trigger: React.ReactNode
@@ -37,6 +40,7 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
   const [role, setRole] = useState<'PRIMARY' | 'SECONDARY'>('PRIMARY')
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<InviteResponse | null>(null)
+  const { showError, showErrorOverlay, currentError, dismissError } = useErrorHandler()
 
   const addEmailField = () => {
     if (emails.length < 10) {
@@ -61,7 +65,7 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
     
     const validEmails = emails.filter(email => email.trim() !== '')
     if (validEmails.length === 0) {
-      toast.error('Please enter at least one email address')
+      toast.error('Please enter at least one email address to send invitations')
       return
     }
 
@@ -69,7 +73,7 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     const invalidEmails = validEmails.filter(email => !emailRegex.test(email))
     if (invalidEmails.length > 0) {
-      toast.error(`Invalid email addresses: ${invalidEmails.join(', ')}`)
+      toast.error(`The following email addresses are not valid: ${invalidEmails.join(', ')}. Please check the format and try again.`)
       return
     }
 
@@ -94,20 +98,116 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
           setEmails([''])
           onEnrolmentComplete?.()
         } else {
-          toast.warning(`Sent ${data.results.length} invitations with ${data.errors.length} errors`)
+          // Debug: Log the errors to see what we're getting
+          console.log('Invitation errors:', data.errors)
+          
+          // Check for endorsement validation errors
+          const endorsementErrors = data.errors.filter(error => 
+            error.includes('You need') && error.includes('endorsement')
+          )
+          
+          // Check for existing supervision relationship errors
+          const existingSupervisionErrors = data.errors.filter(error => 
+            error.includes('already has an active supervision relationship') ||
+            error.includes('already has a secondary supervisor') ||
+            error.includes('must first have a Primary Supervisor')
+          )
+          
+          // Check for database schema errors
+          const databaseErrors = data.errors.filter(error => 
+            error.includes('no such column') || 
+            error.includes('database') || 
+            error.includes('schema') ||
+            error.includes('api_supervisorendorsement') ||
+            (error.includes('endorsement') && !error.includes('You need'))
+          )
+          
+          console.log('Database errors detected:', databaseErrors)
+          
+          if (endorsementErrors.length > 0) {
+            // Show error overlay for endorsement validation errors
+            showError(
+              new Error('Endorsement Required for Supervision'),
+              {
+                title: 'Supervision Invitation Failed',
+                errorId: 'ENDORSEMENT-001'
+              }
+            )
+          } else if (existingSupervisionErrors.length > 0) {
+            // Show error overlay for existing supervision relationship errors
+            showError(
+              new Error('Registrar Already Has Supervisor'),
+              {
+                title: 'Supervision Invitation Failed',
+                errorId: 'EXISTING-SUPERVISION-001'
+              }
+            )
+          } else if (databaseErrors.length > 0) {
+            // Show error overlay for database/schema errors
+            showError(
+              new Error('System Configuration Error'),
+              {
+                title: 'Supervision Invitation Failed',
+                errorId: 'DATABASE-001'
+              }
+            )
+          } else {
+            toast.warning(`Sent ${data.results.length} invitations with ${data.errors.length} errors`)
+          }
         }
       } else {
         const errorText = await response.text()
         try {
           const errorData = JSON.parse(errorText)
-          toast.error(errorData.error || 'Failed to send invitations')
+          const errorMessage = errorData.error || 'Unable to send invitations. Please check your connection and try again.'
+          
+          // Check for supervisor profile completion errors
+          if (errorMessage.includes('complete your supervisor profile') || 
+              errorMessage.includes('Board-approved supervisor') ||
+              errorMessage.includes('supervisor registration date') ||
+              errorMessage.includes('supervision scope')) {
+            
+            // Determine specific error ID based on message content
+            let errorId = 'SUPERVISOR-PROFILE-001'
+            let summary = 'Supervisor Profile Incomplete'
+            let explanation = 'You cannot invite supervisees because your supervisor profile is not complete.'
+            let userAction = 'Please complete your supervisor profile by filling in all required fields.'
+            
+            if (errorMessage.includes('Board-approved supervisor')) {
+              errorId = 'SUPERVISOR-PROFILE-002'
+              summary = 'Board Approval Required'
+              explanation = 'You must confirm that you are a Board-approved supervisor before inviting supervisees.'
+              userAction = 'Please update your profile to indicate your Board approval status by selecting "Yes" for "Are you a Board-approved supervisor?"'
+            } else if (errorMessage.includes('supervisor registration date')) {
+              errorId = 'SUPERVISOR-PROFILE-003'
+              summary = 'Supervisor Registration Date Required'
+              explanation = 'You must provide your supervisor registration date before inviting supervisees.'
+              userAction = 'Please add your supervisor registration date in your profile. This is the date when you were approved as a supervisor by the Psychology Board.'
+            } else if (errorMessage.includes('supervision scope')) {
+              errorId = 'SUPERVISOR-PROFILE-004'
+              summary = 'Supervision Scope Required'
+              explanation = 'You must select at least one supervision scope before inviting supervisees.'
+              userAction = 'Please update your profile to indicate what you can supervise (provisionals or registrars) by selecting the appropriate checkboxes.'
+            }
+            
+          // Show error overlay for supervisor profile errors
+          showError(
+            new Error(summary),
+            {
+              title: 'Supervision Invitation Failed',
+              errorId
+            }
+          )
+          } else {
+            toast.error(errorMessage)
+          }
         } catch {
-          toast.error(`Failed to send invitations: ${response.status} ${response.statusText}`)
+          toast.error(`Unable to send invitations due to a server error (${response.status}). Please try again later.`)
         }
       }
     } catch (error) {
       console.error('Error sending invitations:', error)
-      toast.error(`Error sending invitations: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      toast.error(`Unable to send invitations due to a network error. Please check your internet connection and try again.`)
     } finally {
       setLoading(false)
     }
@@ -134,10 +234,8 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      console.log('Dialog open state changed:', open)
-      setIsOpen(open)
-    }}>
+    <>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white text-gray-900">
         <DialogHeader>
@@ -148,6 +246,8 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
           <DialogDescription>
             Invite provisional psychologists or registrars to establish a supervision relationship.
             You can invite up to 10 supervisees at once.
+            <br />
+            <strong>Note:</strong> For registrars, you must have the same endorsement as their Area of Practice Endorsement (AOPE).
           </DialogDescription>
         </DialogHeader>
 
@@ -270,6 +370,17 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
         </form>
       </DialogContent>
     </Dialog>
+    
+    {/* Error Overlay - rendered via portal to ensure proper z-index */}
+    {showErrorOverlay && currentError && createPortal(
+      <ErrorOverlay
+        isOpen={showErrorOverlay}
+        error={currentError}
+        onClose={dismissError}
+      />,
+      document.body
+    )}
+  </>
   )
 }
 

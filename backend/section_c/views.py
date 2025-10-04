@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, serializers
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.db.models import Sum
@@ -6,33 +6,47 @@ from datetime import timedelta, datetime
 from .models import SupervisionEntry, SupervisionWeeklySummary
 from api.models import UserProfile
 from .serializers import SupervisionEntrySerializer, SupervisionWeeklySummarySerializer
-from permissions import TenantPermissionMixin, RoleBasedPermission
+from permissions import TenantPermissionMixin, RoleBasedPermission, DenyOrgAdmin
 from logging_utils import support_error_handler, audit_data_access, log_data_access
 
 class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
     queryset = SupervisionEntry.objects.all()
     serializer_class = SupervisionEntrySerializer
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [RoleBasedPermission, DenyOrgAdmin]
 
     def get_queryset(self):
         user = self.request.user
         if user.is_authenticated and hasattr(user, 'profile'):
-            if user.profile.role in ['INTERN', 'REGISTRAR']:
-                return SupervisionEntry.objects.filter(trainee=user.profile).order_by('-date_of_supervision')
+            if user.profile.role in ['PROVISIONAL', 'INTERN', 'REGISTRAR']:
+                queryset = SupervisionEntry.objects.filter(trainee=user.profile)
             elif user.profile.role == 'SUPERVISOR':
                 trainee_ids = user.profile.supervising.values_list('id', flat=True)
-                return SupervisionEntry.objects.filter(trainee__id__in=trainee_ids).order_by('-date_of_supervision')
+                queryset = SupervisionEntry.objects.filter(trainee__id__in=trainee_ids)
             elif user.profile.role == 'ORG_ADMIN':
-                org_trainee_ids = UserProfile.objects.filter(organization=user.profile.organization, role__in=['INTERN', 'REGISTRAR']).values_list('id', flat=True)
-                return SupervisionEntry.objects.filter(trainee__id__in=org_trainee_ids).order_by('-date_of_supervision')
+                org_trainee_ids = UserProfile.objects.filter(organization=user.profile.organization, role__in=['PROVISIONAL', 'INTERN', 'REGISTRAR']).values_list('id', flat=True)
+                queryset = SupervisionEntry.objects.filter(trainee__id__in=org_trainee_ids)
+            else:
+                return SupervisionEntry.objects.none()
+            
+            # Filter by week_starting if provided
+            week_starting = self.request.query_params.get('week_starting', None)
+            if week_starting:
+                queryset = queryset.filter(week_starting=week_starting)
+            
+            return queryset.order_by('-date_of_supervision')
         return SupervisionEntry.objects.none()
 
     def perform_create(self, serializer):
-        if not hasattr(self.request.user, 'profile') or self.request.user.profile.role not in ['INTERN', 'REGISTRAR']:
-            raise serializers.ValidationError("Only interns and registrars can create supervision entries.")
-        serializer.save(trainee=self.request.user.profile)
+        if not hasattr(self.request.user, 'profile') or self.request.user.profile.role not in ['PROVISIONAL', 'INTERN', 'REGISTRAR']:
+            raise serializers.ValidationError("Only provisional psychologists, interns and registrars can create supervision entries.")
+        
+        # Calculate week_starting from date_of_supervision
+        date_of_supervision = serializer.validated_data['date_of_supervision']
+        week_starting = date_of_supervision - timedelta(days=date_of_supervision.weekday())
+        
+        serializer.save(trainee=self.request.user.profile, week_starting=week_starting)
 
-    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    @action(detail=False, methods=['get'], url_path='grouped-by-week', permission_classes=[permissions.IsAuthenticated])
     def grouped_by_week(self, request):
         queryset = self.get_queryset()
         
@@ -57,7 +71,7 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
             # Use the same filtering logic as get_queryset()
             user = request.user
             if user.is_authenticated and hasattr(user, 'profile'):
-                if user.profile.role in ['INTERN', 'REGISTRAR']:
+                if user.profile.role in ['PROVISIONAL', 'INTERN', 'REGISTRAR']:
                     all_entries_up_to_week = SupervisionEntry.objects.filter(
                         trainee=user.profile,
                         date_of_supervision__lt=week_start + timedelta(days=7)
@@ -69,7 +83,7 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
                         date_of_supervision__lt=week_start + timedelta(days=7)
                     )
                 elif user.profile.role == 'ORG_ADMIN':
-                    org_trainee_ids = UserProfile.objects.filter(organization=user.profile.organization, role__in=['INTERN', 'REGISTRAR']).values_list('id', flat=True)
+                    org_trainee_ids = UserProfile.objects.filter(organization=user.profile.organization, role__in=['PROVISIONAL', 'INTERN', 'REGISTRAR']).values_list('id', flat=True)
                     all_entries_up_to_week = SupervisionEntry.objects.filter(
                         trainee__id__in=org_trainee_ids,
                         date_of_supervision__lt=week_start + timedelta(days=7)

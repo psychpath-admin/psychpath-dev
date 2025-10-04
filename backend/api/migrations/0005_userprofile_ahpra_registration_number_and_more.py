@@ -48,7 +48,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='userprofile',
             name='prior_hours',
-            field=models.JSONField(blank=True, default=dict, help_text='Prior hours completed before using CAPE'),
+            field=models.JSONField(blank=True, default=dict, help_text='Prior hours completed before using PsychPATH'),
         ),
         migrations.AddField(
             model_name='userprofile',

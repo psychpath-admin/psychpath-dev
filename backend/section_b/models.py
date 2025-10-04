@@ -28,7 +28,14 @@ class ProfessionalDevelopmentEntry(models.Model):
     activity_details = models.TextField(help_text="E.g. name of course, presenter, institution etc")
     topics_covered = models.TextField(help_text="E.g. behavioural interventions for ADHD in adolescents")
     competencies_covered = models.JSONField(default=list, help_text="List of selected competencies")
+    reflection = models.TextField(blank=True, default="", help_text="Reflection on learning and application")
     week_starting = models.DateField(help_text="Week starting date for grouping")
+    
+    # Logbook integration
+    locked = models.BooleanField(default=False, help_text="True if this entry is part of a submitted logbook")
+    supervisor_comment = models.TextField(blank=True, default="", help_text="Supervisor comment for this entry when reviewing a logbook")
+    trainee_response = models.TextField(blank=True, default="", help_text="Trainee response to supervisor comment when resubmitting")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

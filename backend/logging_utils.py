@@ -1,20 +1,21 @@
 import logging
 import traceback
+from datetime import datetime
 from functools import wraps
 from django.http import JsonResponse
 from django.contrib.auth.models import User
 
 def get_support_logger():
     """Get logger for support team issues"""
-    return logging.getLogger('cape.support')
+    return logging.getLogger('psychpath.support')
 
 def get_audit_logger():
     """Get logger for data access auditing"""
-    return logging.getLogger('cape.audit')
+    return logging.getLogger('psychpath.audit')
 
 def get_app_logger():
     """Get logger for general application errors"""
-    return logging.getLogger('cape.app')
+    return logging.getLogger('psychpath.app')
 
 def log_support_error(user_id=None, function_name=None, error=None, additional_context=None):
     """
@@ -34,7 +35,7 @@ def log_support_error(user_id=None, function_name=None, error=None, additional_c
     context = {
         'user': user_email,
         'function': function_name or 'Unknown',
-        'message': str(error) if error else 'Unknown error',
+        'error_message': str(error) if error else 'Unknown error',
         'traceback': traceback.format_exc(),
     }
     
@@ -167,3 +168,59 @@ class DataAccessLogger:
             result=result,
             details={'duration_seconds': duration, 'exception': str(exc_val) if exc_val else None}
         )
+
+
+def log_logbook_action(user, action, entry_id=None, details=None):
+    """
+    Log logbook-related actions for audit purposes
+    """
+    audit_logger = get_audit_logger()
+    
+    context = {
+        'user': user.email if user else 'Anonymous',
+        'action': action,
+        'resource': 'LOGBOOK',
+        'entry_id': entry_id,
+        'timestamp': datetime.now().isoformat(),
+        'details': details or {}
+    }
+    
+    audit_logger.info(f'Logbook action: {action}', extra=context)
+
+
+def log_supervision_action(user, action, supervisor_email=None, provisional_email=None, details=None):
+    """
+    Log supervision-related actions for audit purposes
+    """
+    audit_logger = get_audit_logger()
+    
+    context = {
+        'user': user.email if user else 'Anonymous',
+        'action': action,
+        'resource': 'SUPERVISION',
+        'supervisor_email': supervisor_email,
+        'provisional_email': provisional_email,
+        'timestamp': datetime.now().isoformat(),
+        'details': details or {}
+    }
+    
+    audit_logger.info(f'Supervision action: {action}', extra=context)
+
+
+def log_sdcc_violation(user, current_hours, attempted_hours, details=None):
+    """
+    Log SDCC hour limit violations for audit purposes
+    """
+    audit_logger = get_audit_logger()
+    
+    context = {
+        'user': user.email if user else 'Anonymous',
+        'action': 'SDCC_LIMIT_VIOLATION',
+        'resource': 'LOGBOOK_SDCC',
+        'current_hours': current_hours,
+        'attempted_hours': attempted_hours,
+        'timestamp': datetime.now().isoformat(),
+        'details': details or {}
+    }
+    
+    audit_logger.warning(f'SDCC limit violation attempted', extra=context)

@@ -54,20 +54,55 @@ export const SupervisionManagement: React.FC<SupervisionManagementProps> = ({ on
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [refreshing, setRefreshing] = useState(false)
+  const [pollMs, setPollMs] = useState(5000) // 5s, will backoff on errors
 
   useEffect(() => {
     fetchData()
   }, [])
 
-  const fetchData = async () => {
-    setRefreshing(true)
+  // Auto-refresh supervision data on interval (pause when hidden)
+  useEffect(() => {
+    if (document.hidden) return
+    const id = setInterval(() => {
+      fetchData(true) // Background refresh - no refreshing indicator
+    }, pollMs)
+    return () => clearInterval(id)
+  }, [pollMs])
+
+  // Refresh immediately on tab focus or visibility change
+  useEffect(() => {
+    const onFocus = () => fetchData(true) // Background refresh
+    const onVisibility = () => {
+      if (!document.hidden) fetchData(true) // Background refresh
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
+
+  const fetchData = async (isBackgroundRefresh = false) => {
+    // Only show refreshing indicator on manual refresh, not background refreshes
+    if (!isBackgroundRefresh) {
+      setRefreshing(true)
+    }
     try {
       await Promise.all([
         fetchStats(),
         fetchSupervisions()
       ])
+      // Reset poll interval on success
+      if (pollMs !== 5000) setPollMs(5000)
+    } catch (error) {
+      console.error('Error fetching supervision data:', error)
+      // Exponential backoff on errors
+      setPollMs(Math.min(pollMs * 2, 60000)) // backoff up to 60s
     } finally {
-      setRefreshing(false)
+      if (!isBackgroundRefresh) {
+        setRefreshing(false)
+      }
     }
   }
 
@@ -116,6 +151,29 @@ export const SupervisionManagement: React.FC<SupervisionManagementProps> = ({ on
     } catch (error) {
       console.error('Error cancelling invitation:', error)
       toast.error('Error cancelling invitation')
+    }
+  }
+
+  const removeSupervisee = async (supervisionId: number, superviseeEmail: string) => {
+    if (!confirm(`Are you sure you want to remove ${superviseeEmail} from your supervision stable? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const response = await apiFetch(`/api/supervisions/${supervisionId}/remove/`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        toast.success('Supervisee removed successfully')
+        await fetchData()
+      } else {
+        const errorData = await response.json()
+        toast.error(errorData.error || 'Failed to remove supervisee')
+      }
+    } catch (error) {
+      console.error('Error removing supervisee:', error)
+      toast.error('Error removing supervisee')
     }
   }
 
@@ -286,49 +344,52 @@ export const SupervisionManagement: React.FC<SupervisionManagementProps> = ({ on
               <p>No supervision invitations found</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Supervisee</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Invited</TableHead>
-                  <TableHead>Expires</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredSupervisions.map((supervision) => (
-                  <TableRow key={supervision.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{supervision.supervisee_name}</p>
-                        <p className="text-sm text-gray-600">{supervision.supervisee_email}</p>
+            <div className="space-y-3">
+              {filteredSupervisions.map((supervision) => (
+                <div key={supervision.id} className="border rounded-lg p-4 bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div>
+                          <p className="font-medium text-sm truncate">{supervision.supervisee_name}</p>
+                          <p className="text-xs text-gray-600 truncate">{supervision.supervisee_email}</p>
+                        </div>
+                        {getRoleBadge(supervision.role)}
+                        {getStatusBadge(supervision.status)}
                       </div>
-                    </TableCell>
-                    <TableCell>{getRoleBadge(supervision.role)}</TableCell>
-                    <TableCell>{getStatusBadge(supervision.status)}</TableCell>
-                    <TableCell>{formatDate(supervision.created_at)}</TableCell>
-                    <TableCell>
-                      <span className={supervision.is_expired ? 'text-red-600' : ''}>
-                        {formatDate(supervision.expires_at)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        <span>Invited: {formatDate(supervision.created_at)}</span>
+                        <span className={supervision.is_expired ? 'text-red-600' : ''}>
+                          Expires: {formatDate(supervision.expires_at)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 ml-4">
                       {supervision.status === 'PENDING' && (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => cancelInvitation(supervision.id)}
+                          className="text-xs px-3 py-1 h-7"
                         >
                           Cancel
                         </Button>
                       )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      {supervision.status === 'ACCEPTED' && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => removeSupervisee(supervision.id, supervision.supervisee_email)}
+                          className="text-xs px-3 py-1 h-7"
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

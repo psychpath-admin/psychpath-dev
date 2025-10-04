@@ -1,6 +1,7 @@
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from permissions import DenyOrgAdmin
 from rest_framework.response import Response
 from django.db.models import Sum, Q
 from django.utils import timezone
@@ -20,27 +21,65 @@ from .serializers import (
 class ProfessionalDevelopmentEntryListCreateView(generics.ListCreateAPIView):
     """List and create PD entries for the authenticated user"""
     serializer_class = ProfessionalDevelopmentEntrySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DenyOrgAdmin]
     
     def get_queryset(self):
-        return ProfessionalDevelopmentEntry.objects.filter(
+        queryset = ProfessionalDevelopmentEntry.objects.filter(
             trainee=self.request.user
-        ).order_by('-date_of_activity', '-created_at')
+        )
+        
+        # Filter by week_starting if provided
+        week_starting = self.request.query_params.get('week_starting', None)
+        if week_starting:
+            queryset = queryset.filter(week_starting=week_starting)
+        
+        return queryset.order_by('-date_of_activity', '-created_at')
     
     def perform_create(self, serializer):
         # Calculate week starting date
         date_of_activity = serializer.validated_data['date_of_activity']
         week_starting = date_of_activity - timedelta(days=date_of_activity.weekday())
-        serializer.save(trainee=self.request.user, week_starting=week_starting)
+        instance = serializer.save(trainee=self.request.user, week_starting=week_starting)
         
         # Update weekly summary
         self.update_weekly_summary(self.request.user, week_starting)
+    
+    def update_weekly_summary(self, user, week_starting):
+        """Update or create weekly summary for the given week"""
+        # Calculate totals for the week
+        week_entries = ProfessionalDevelopmentEntry.objects.filter(
+            trainee=user,
+            week_starting=week_starting
+        )
+        week_total = week_entries.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+        
+        # Calculate cumulative total (all weeks up to and including this week)
+        cumulative_entries = ProfessionalDevelopmentEntry.objects.filter(
+            trainee=user,
+            week_starting__lte=week_starting
+        )
+        cumulative_total = cumulative_entries.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+        
+        # Update or create weekly summary
+        summary, created = PDWeeklySummary.objects.get_or_create(
+            trainee=user,
+            week_starting=week_starting,
+            defaults={
+                'week_total_minutes': week_total,
+                'cumulative_total_minutes': cumulative_total
+            }
+        )
+        
+        if not created:
+            summary.week_total_minutes = week_total
+            summary.cumulative_total_minutes = cumulative_total
+            summary.save()
 
 
 class ProfessionalDevelopmentEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update, or delete a PD entry"""
     serializer_class = ProfessionalDevelopmentEntrySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DenyOrgAdmin]
     
     def get_queryset(self):
         return ProfessionalDevelopmentEntry.objects.filter(trainee=self.request.user)
@@ -99,11 +138,11 @@ class PDCompetencyListView(generics.ListAPIView):
     """List all available PD competencies"""
     queryset = PDCompetency.objects.filter(is_active=True)
     serializer_class = PDCompetencySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DenyOrgAdmin]
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DenyOrgAdmin])
 def pd_entries_grouped_by_week(request):
     """Get PD entries grouped by week with summary data"""
     entries = ProfessionalDevelopmentEntry.objects.filter(
@@ -165,7 +204,7 @@ def pd_entries_grouped_by_week(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DenyOrgAdmin])
 def pd_summary_metrics(request):
     """Get PD summary metrics for dashboard"""
     # Get current week starting date

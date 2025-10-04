@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
-from api.models import UserProfile, UserRole, Organization, Supervision
+from api.models import UserProfile, UserRole, Organization
 
 
 class Command(BaseCommand):
@@ -31,5 +31,3 @@ class Command(BaseCommand):
         org_admin = mk("admin@demo.test", UserRole.ORG_ADMIN, "Demo", "Admin", "ADM001")
 
         self.stdout.write(self.style.SUCCESS("Demo users created successfully."))
-
-

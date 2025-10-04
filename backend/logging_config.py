@@ -64,17 +64,17 @@ LOGGING_CONFIG = {
         },
     },
     'loggers': {
-        'cape.support': {
+        'psychpath.support': {
             'handlers': ['support_file', 'console'],
             'level': 'ERROR',
             'propagate': False,
         },
-        'cape.audit': {
+        'psychpath.audit': {
             'handlers': ['audit_file'],
             'level': 'INFO',
             'propagate': False,
         },
-        'cape.app': {
+        'psychpath.app': {
             'handlers': ['app_file', 'console'],
             'level': 'ERROR',
             'propagate': False,
@@ -89,15 +89,16 @@ LOGGING_CONFIG = {
 
 def get_support_logger():
     """Get logger for support team issues"""
-    return logging.getLogger('cape.support')
+    return logging.getLogger('psychpath.support')
 
 def get_audit_logger():
     """Get logger for data access auditing"""
-    return logging.getLogger('cape.audit')
+    return logging.getLogger('psychpath.audit')
 
 def get_app_logger():
     """Get logger for general application errors"""
-    return logging.getLogger('cape.app')
+    return logging.getLogger('psychpath.app')
+
 
 
 

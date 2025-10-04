@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import UserProfile, EPA, Milestone, Reflection
+from .models import UserProfile, EPA, Milestone, Reflection, SupervisionAssignment
 
 
 @admin.register(UserProfile)
@@ -26,5 +26,13 @@ class ReflectionAdmin(admin.ModelAdmin):
     list_display = ("title", "author", "epa", "milestone", "created_at")
     search_fields = ("title", "author__username")
     list_filter = ("epa", "milestone")
+
+
+@admin.register(SupervisionAssignment)
+class SupervisionAssignmentAdmin(admin.ModelAdmin):
+    list_display = ("provisional", "supervisor_name", "supervisor_email", "role", "status", "created_at")
+    search_fields = ("provisional__username", "supervisor_name", "supervisor_email")
+    list_filter = ("role", "status", "created_at")
+    readonly_fields = ("created_at",)
 
 # Register your models here.

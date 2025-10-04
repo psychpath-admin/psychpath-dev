@@ -161,3 +161,111 @@ PsychPATH System
         'body': body.strip()
     }
 
+def get_supervision_removal_email_template(supervision, supervisee_email):
+    """Generate email content for supervision removal notifications"""
+    supervisor_name = f"{supervision.supervisor.profile.first_name} {supervision.supervisor.profile.last_name}"
+    role_text = "Primary" if supervision.role == "PRIMARY" else "Secondary"
+    
+    subject = f"Supervision Relationship Ended - {supervisor_name}"
+    body = f"""
+Dear Trainee,
+
+Your supervision relationship with {supervisor_name} as your {role_text} Supervisor has been ended.
+
+This means:
+- You will no longer receive supervision from {supervisor_name}
+- Your profile has been updated to remove this supervisor relationship
+- You may need to find a new {role_text.lower()} supervisor to continue your training
+
+Relationship Details:
+- Supervisor: {supervisor_name}
+- Role: {role_text} Supervisor
+- Ended: {supervision.rejected_at.strftime('%d %B %Y')}
+
+If you have any questions about this change, please contact your supervisor directly or reach out to our support team.
+
+Best regards,
+PsychPATH System
+    """
+    
+    return {
+        'subject': subject,
+        'body': body.strip()
+    }
+
+def get_disconnection_request_email_template(disconnection_request):
+    """Generate email content for disconnection requests"""
+    supervisee_name = f"{disconnection_request.supervisee.profile.first_name} {disconnection_request.supervisee.profile.last_name}"
+    supervisor_name = f"{disconnection_request.supervisor.profile.first_name} {disconnection_request.supervisor.profile.last_name}"
+    role_text = "Primary" if disconnection_request.role == "PRIMARY" else "Secondary"
+    
+    subject = f"Disconnection Request from {supervisee_name}"
+    body = f"""
+Dear {supervisor_name},
+
+You have received a disconnection request from {supervisee_name} regarding your {role_text} supervision relationship.
+
+Request Details:
+- Supervisee: {supervisee_name}
+- Role: {role_text} Supervisor
+- Requested: {disconnection_request.requested_at.strftime('%d %B %Y at %H:%M')}
+- Message: {disconnection_request.message or 'No message provided'}
+
+Please log in to your PsychPATH dashboard to review and respond to this request.
+
+Best regards,
+PsychPATH System
+    """
+    
+    return {
+        'subject': subject,
+        'body': body.strip()
+    }
+
+def get_disconnection_response_email_template(disconnection_request, action):
+    """Generate email content for disconnection responses"""
+    supervisee_name = f"{disconnection_request.supervisee.profile.first_name} {disconnection_request.supervisee.profile.last_name}"
+    supervisor_name = f"{disconnection_request.supervisor.profile.first_name} {disconnection_request.supervisor.profile.last_name}"
+    role_text = "Primary" if disconnection_request.role == "PRIMARY" else "Secondary"
+    
+    if action == 'approved':
+        subject = f"Disconnection Request Approved - {supervisor_name}"
+        body = f"""
+Dear {supervisee_name},
+
+Your disconnection request from {supervisor_name} has been approved.
+
+Details:
+- Supervisor: {supervisor_name}
+- Role: {role_text} Supervisor
+- Approved: {disconnection_request.responded_at.strftime('%d %B %Y at %H:%M')}
+- Response: {disconnection_request.response_notes or 'No additional notes'}
+
+Your supervision relationship with {supervisor_name} has been ended. You may now seek a new {role_text.lower()} supervisor if needed.
+
+Best regards,
+PsychPATH System
+        """
+    else:  # declined
+        subject = f"Disconnection Request Declined - {supervisor_name}"
+        body = f"""
+Dear {supervisee_name},
+
+Your disconnection request from {supervisor_name} has been declined.
+
+Details:
+- Supervisor: {supervisor_name}
+- Role: {role_text} Supervisor
+- Declined: {disconnection_request.responded_at.strftime('%d %B %Y at %H:%M')}
+- Response: {disconnection_request.response_notes or 'No additional notes'}
+
+Your supervision relationship with {supervisor_name} will continue as before.
+
+Best regards,
+PsychPATH System
+        """
+    
+    return {
+        'subject': subject,
+        'body': body.strip()
+    }

@@ -9,7 +9,7 @@ export type EPACardProps = {
 
 export function EPACard({ code, title, description, milestone }: EPACardProps) {
   return (
-    <Card className="rounded-card border borderLight bg-backgroundCard shadow-cape">
+    <Card className="rounded-card border borderLight bg-backgroundCard shadow-psychpath">
       <CardHeader>
         <CardTitle className="flex items-baseline justify-between">
           <span className="font-headings text-2xl text-textDark">{code}</span>

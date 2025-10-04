@@ -22,6 +22,7 @@ interface CRAFormProps {
   showClientIdInput?: boolean
   onClientIdChange?: (value: string) => void
   clientSuggestions?: string[]
+  isEditing?: boolean
 }
 
 export default function CRAForm({
@@ -40,9 +41,11 @@ export default function CRAForm({
   title = 'Section A: Client Related Activity',
   showClientIdInput = false,
   onClientIdChange,
-  clientSuggestions = []
+  clientSuggestions = [],
+  isEditing = false
 }: CRAFormProps) {
   const [validationError, setValidationError] = useState('')
+  const [showReflections, setShowReflections] = useState((entryForm.reflections_on_experience || '').length > 0)
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <Card className="w-full max-w-md">
@@ -66,21 +69,21 @@ export default function CRAForm({
               setValidationError('Please select at least one activity type')
               return
             }
-            onSubmit(e)
+            onSubmit(entryForm)
           }} className="space-y-6">
-            {/* Client Pseudonym (ICRA only) */}
+            {/* Client Pseudonym (CRA/ICRA) */}
             {showClientIdInput && (
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Client ID (Pseudonym) <span className="text-red-500">*</span>
+                  Client Pseudonym <span className="text-red-500">*</span>
                 </label>
                 <Input
-                  value={entryForm.client_id}
+                  value={entryForm.client_pseudonym || entryForm.client_id}
                   onChange={(e) => {
-                    setEntryForm({ ...entryForm, client_id: e.target.value })
+                    setEntryForm({ ...entryForm, client_pseudonym: e.target.value })
                     if (onClientIdChange) onClientIdChange(e.target.value)
                   }}
-                  placeholder="e.g., BM-1961-M"
+                  placeholder="e.g., Client A, BM-1961-M"
                   required
                   list="cra-client-suggestions"
                 />
@@ -98,7 +101,7 @@ export default function CRAForm({
               </label>
               <Input
                 type="date"
-                value={entryForm.session_date}
+                value={entryForm.session_date || ''}
                 onChange={(e) => {
                   const newDate = e.target.value
                   setEntryForm({ 
@@ -126,7 +129,7 @@ export default function CRAForm({
                 placeholder="Enter activity type..."
                 required
               />
-              {/* Quick selection buttons */}
+              {/* Standard activity types */}
               <div className="flex flex-wrap gap-2 mt-2">
                 {['report writing', 'case formulation', 'test scoring', 'documentation', 'file review'].map((type) => (
                   <button
@@ -147,6 +150,72 @@ export default function CRAForm({
                   </button>
                 ))}
               </div>
+
+              {/* Custom activity types */}
+              {customActivityTypes.length > 0 && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium mb-2 text-gray-600">
+                    Your Custom Activity Types
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {customActivityTypes.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => {
+                          const currentTypes = entryForm.session_activity_types.filter(t => t !== type.name)
+                          const newTypes = entryForm.session_activity_types.includes(type.name) ? currentTypes : [...currentTypes, type.name]
+                          setEntryForm({ ...entryForm, session_activity_types: newTypes })
+                        }}
+                        className={`px-2 py-1 text-xs rounded border flex items-center gap-1 ${
+                          entryForm.session_activity_types.includes(type.name)
+                            ? 'bg-green-100 text-green-800 border-green-300'
+                            : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                        }`}
+                      >
+                        {type.name}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteCustomActivityType(type.id)
+                          }}
+                          className="ml-1 text-red-500 hover:text-red-700"
+                          title="Delete custom type"
+                        >
+                          ×
+                        </button>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add custom activity type */}
+              <div className="mt-3">
+                <label className="block text-sm font-medium mb-2 text-gray-600">
+                  Add Custom Activity Type
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    value={newCustomActivityType}
+                    onChange={(e) => setNewCustomActivityType(e.target.value)}
+                    placeholder="Enter custom activity type..."
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddCustomActivityType}
+                    disabled={!newCustomActivityType.trim()}
+                    className="px-3"
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
             </div>
 
             {/* Duration (Minutes) */}
@@ -157,7 +226,7 @@ export default function CRAForm({
                 </label>
                 <Input
                   type="number"
-                  value={entryForm.duration_minutes}
+                  value={entryForm.duration_minutes || ''}
                   onChange={(e) => setEntryForm({ ...entryForm, duration_minutes: e.target.value })}
                   placeholder="15"
                   min="1"
@@ -168,12 +237,11 @@ export default function CRAForm({
                 <input
                   type="checkbox"
                   id="addReflections"
-                  checked={entryForm.reflections_on_experience.length > 0}
+                  checked={showReflections}
                   onChange={(e) => {
-                    if (e.target.checked) {
-                      // When checked, add a placeholder text
-                      setEntryForm({ ...entryForm, reflections_on_experience: 'Enter reflections...' })
-                    } else {
+                    setShowReflections(e.target.checked)
+                    if (!e.target.checked) {
+                      // Only clear the text when unchecking
                       setEntryForm({ ...entryForm, reflections_on_experience: '' })
                     }
                   }}
@@ -202,13 +270,13 @@ export default function CRAForm({
             {/* ICRA has the same fields as CRA; only difference is no parent DCC link */}
 
             {/* Reflections - conditional based on checkbox */}
-            {entryForm.reflections_on_experience.length > 0 && (
+            {showReflections && (
               <div>
                 <label className="block text-sm font-medium mb-2">
                   Reflections <span className="text-red-500">*</span>
                 </label>
                 <Textarea
-                  value={entryForm.reflections_on_experience}
+                  value={entryForm.reflections_on_experience || ''}
                   onChange={(e) => setEntryForm({ ...entryForm, reflections_on_experience: e.target.value })}
                   placeholder="Enter your reflections on this client related activity..."
                   rows={4}
@@ -223,22 +291,47 @@ export default function CRAForm({
             <input type="hidden" name="week_starting" value={entryForm.week_starting} />
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button
+              <button
                 type="button"
-                variant="outline"
                 onClick={onCancel}
                 disabled={saving}
-                className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+                className="px-6 py-3 rounded-lg"
+                style={{ 
+                  color: '#000000 !important', 
+                  backgroundColor: '#ff0000 !important',
+                  border: '5px solid #000000 !important',
+                  fontSize: '20px !important',
+                  fontWeight: '900 !important',
+                  textShadow: '2px 2px 4px rgba(0,0,0,1) !important',
+                  fontFamily: 'Arial, sans-serif !important',
+                  zIndex: '9999 !important',
+                  position: 'relative !important'
+                }}
               >
-                Cancel
-              </Button>
-              <Button
+                <span style={{ color: '#000000 !important', fontSize: '20px !important', fontWeight: '900 !important' }}>
+                  CANCEL
+                </span>
+              </button>
+              <button
                 type="submit"
                 disabled={saving}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="px-6 py-3 rounded-lg"
+                style={{ 
+                  color: '#000000 !important', 
+                  backgroundColor: '#00ff00 !important',
+                  border: '5px solid #000000 !important',
+                  fontSize: '20px !important',
+                  fontWeight: '900 !important',
+                  textShadow: '2px 2px 4px rgba(0,0,0,1) !important',
+                  fontFamily: 'Arial, sans-serif !important',
+                  zIndex: '9999 !important',
+                  position: 'relative !important'
+                }}
               >
-                {saving ? 'Creating...' : 'Create'}
-              </Button>
+                <span style={{ color: '#000000 !important', fontSize: '20px !important', fontWeight: '900 !important' }}>
+                  SUBMIT
+                </span>
+              </button>
             </div>
           </form>
         </CardContent>

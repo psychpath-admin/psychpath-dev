@@ -28,6 +28,7 @@ urlpatterns = [
     path('api/section-a/', include('section_a.urls')),
     path('api/section-b/', include('section_b.urls')),
     path('api/section-c/', include('section_c.urls')),
+    path('api/registrar/', include('registrar_logbook.urls')),
     path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('support/', include('support.urls')),

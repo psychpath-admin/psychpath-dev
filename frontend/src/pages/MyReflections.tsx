@@ -15,7 +15,7 @@ export default function MyReflections() {
       <div className="font-headings text-2xl text-textDark">My Reflections</div>
       <ul className="grid gap-2">
         {items.map((r) => (
-          <li key={r.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-cape">
+          <li key={r.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-psychpath">
             <div className="font-labels text-sm text-textDark">{r.title}</div>
             <div className="text-sm text-textLight">{new Date(r.created_at).toLocaleString()} • {r.is_approved ? 'Approved' : 'Pending'}</div>
             <p className="mt-2 text-sm text-textDark">{r.content}</p>

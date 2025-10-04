@@ -4,29 +4,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CalendarIcon } from 'lucide-react'
-import { format } from 'date-fns'
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { API_URL } from '@/lib/api'
+import CitySelect from '@/components/CitySelect'
+import { getCityInfo } from '@/lib/cityMapping'
 
 const designations = [
-  { value: 'PROVISIONAL', label: 'Provisional Psychologist (Intern)' },
+  { value: 'PROVISIONAL', label: 'Provisional Psychologist' },
   { value: 'REGISTRAR', label: 'Registrar' },
   { value: 'SUPERVISOR', label: 'Supervisor' },
 ]
 
-const reportDays = [
-  { value: 'MONDAY', label: 'Monday' },
-  { value: 'TUESDAY', label: 'Tuesday' },
-  { value: 'WEDNESDAY', label: 'Wednesday' },
-  { value: 'THURSDAY', label: 'Thursday' },
-  { value: 'FRIDAY', label: 'Friday' },
-  { value: 'SATURDAY', label: 'Saturday' },
-  { value: 'SUNDAY', label: 'Sunday' },
-]
 
 export default function RegisterDetails() {
   const [formData, setFormData] = useState({
@@ -38,8 +27,11 @@ export default function RegisterDetails() {
     confirm_password: '',
     ahpra_registration_number: '',
     designation: '',
-    internship_start_date: null as Date | null,
-    report_start_day: '',
+    provisional_start_date: '' as string,
+    city: '',
+    state: '',
+    timezone: '',
+    mobile: '',
   })
   
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -55,8 +47,10 @@ export default function RegisterDetails() {
     if (!formData.password) newErrors.password = 'Password is required'
     if (!formData.ahpra_registration_number.trim()) newErrors.ahpra_registration_number = 'AHPRA registration number is required'
     if (!formData.designation) newErrors.designation = 'Designation is required'
-    if (!formData.internship_start_date) newErrors.internship_start_date = 'Internship start date is required'
-    if (!formData.report_start_day) newErrors.report_start_day = 'Report start day is required'
+    if (formData.designation === 'PROVISIONAL' && !formData.provisional_start_date) {
+      newErrors.provisional_start_date = 'Program start date is required'
+    }
+    if (!formData.city.trim()) newErrors.city = 'City is required'
     
     // Email validation
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -78,20 +72,31 @@ export default function RegisterDetails() {
       newErrors.ahpra_registration_number = 'AHPRA registration number must be 3-15 alphanumeric characters'
     }
     
-    // Internship start date validation (must be in the past and less than 5 years ago)
-    if (formData.internship_start_date) {
+    // Program start date validation (only for provisional psychologists)
+    if (formData.designation === 'PROVISIONAL' && formData.provisional_start_date) {
+      const selectedDate = new Date(formData.provisional_start_date)
       const now = new Date()
       const fiveYearsAgo = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
       
-      if (formData.internship_start_date > now) {
-        newErrors.internship_start_date = 'Internship start date must be in the past'
-      } else if (formData.internship_start_date < fiveYearsAgo) {
-        newErrors.internship_start_date = 'Internship start date must be less than 5 years ago'
+      if (selectedDate > now) {
+        newErrors.provisional_start_date = 'Program start date must be in the past'
+      } else if (selectedDate < fiveYearsAgo) {
+        newErrors.provisional_start_date = 'Program start date must be less than 5 years ago'
       }
     }
     
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
+  }
+
+  const handleCityChange = (city: string) => {
+    const cityInfo = getCityInfo(city)
+    setFormData(prev => ({
+      ...prev,
+      city,
+      state: cityInfo?.state || '',
+      timezone: cityInfo?.timezone || ''
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -112,6 +117,10 @@ export default function RegisterDetails() {
       if (response.ok) {
         // Store form data for later use
         localStorage.setItem('registrationData', JSON.stringify(formData))
+        // Store verification code for demo purposes
+        if (data.verification_code) {
+          localStorage.setItem('verification_code', data.verification_code)
+        }
         window.location.href = '/register/verify'
       } else {
         setErrors({ submit: data.error || 'Registration failed' })
@@ -129,6 +138,15 @@ export default function RegisterDetails() {
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }))
+    }
+    
+    // Clear start date when supervisor is selected
+    if (field === 'designation' && value === 'SUPERVISOR') {
+      setFormData(prev => ({ ...prev, provisional_start_date: '' }))
+      // Clear start date error
+      if (errors.provisional_start_date) {
+        setErrors(prev => ({ ...prev, provisional_start_date: '' }))
+      }
     }
   }
 
@@ -263,54 +281,70 @@ export default function RegisterDetails() {
               </div>
               
               <div className="space-y-2">
-                <Label>Internship Start Date *</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !formData.internship_start_date && "text-muted-foreground",
-                        errors.internship_start_date && "border-red-500"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formData.internship_start_date ? (
-                        format(formData.internship_start_date, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={formData.internship_start_date || undefined}
-                      onSelect={(date) => handleInputChange('internship_start_date', date)}
-                      disabled={(date) => date > new Date() || date < new Date(new Date().getFullYear() - 5, 0, 1)}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                {errors.internship_start_date && <p className="text-sm text-red-500">{errors.internship_start_date}</p>}
-                <p className="text-xs text-gray-500">Must be in the past and less than 5 years ago</p>
+                <Label htmlFor="provisional_start_date">
+                  {formData.designation === 'REGISTRAR' ? 'Endorsement Registrar Start Date *' : 
+                   formData.designation === 'SUPERVISOR' ? 'Start Date' :
+                   'Internship Start Date *'}
+                </Label>
+                <Input
+                  id="provisional_start_date"
+                  type="date"
+                  value={formData.provisional_start_date}
+                  onChange={(e) => handleInputChange('provisional_start_date', e.target.value)}
+                  disabled={formData.designation === 'SUPERVISOR'}
+                  max={new Date().toISOString().split('T')[0]}
+                  min={new Date(new Date().getFullYear() - 5, 0, 1).toISOString().split('T')[0]}
+                  className={cn(
+                    errors.provisional_start_date && "border-red-500",
+                    formData.designation === 'SUPERVISOR' && "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  )}
+                  placeholder={formData.designation === 'SUPERVISOR' ? 'Not applicable for supervisors' : 'Select a date'}
+                />
+                {errors.provisional_start_date && <p className="text-sm text-red-500">{errors.provisional_start_date}</p>}
+                {formData.designation === 'SUPERVISOR' ? (
+                  <p className="text-xs text-gray-500">Start date is not required for supervisors</p>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    Select the date when your {formData.designation === 'REGISTRAR' ? 'registrar program' : 'internship'} started (must be in the past and less than 5 years ago)
+                  </p>
+                )}
+              </div>
+              
+            </div>
+
+            {/* Location & Contact Information */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Location & Contact Information</h3>
+              
+              <div className="space-y-2">
+                <Label htmlFor="city">City *</Label>
+                <CitySelect
+                  value={formData.city}
+                  onValueChange={handleCityChange}
+                  placeholder="Select your city"
+                />
+                {errors.city && <p className="text-sm text-red-500">{errors.city}</p>}
+                
+                {/* Display derived information */}
+                {formData.state && formData.timezone && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      <strong>State:</strong> {formData.state} | <strong>Timezone:</strong> {formData.timezone}
+                    </p>
+                  </div>
+                )}
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="report_start_day">Report Start Day *</Label>
-                <Select value={formData.report_start_day} onValueChange={(value) => handleInputChange('report_start_day', value)}>
-                  <SelectTrigger className={errors.report_start_day ? 'border-red-500' : ''}>
-                    <SelectValue placeholder="Select your report start day" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {reportDays.map((day) => (
-                      <SelectItem key={day.value} value={day.value}>
-                        {day.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.report_start_day && <p className="text-sm text-red-500">{errors.report_start_day}</p>}
+                <Label htmlFor="mobile">Mobile Number (Optional)</Label>
+                <Input
+                  id="mobile"
+                  type="tel"
+                  value={formData.mobile}
+                  onChange={(e) => handleInputChange('mobile', e.target.value)}
+                  placeholder="e.g., +61412345678"
+                />
+                <p className="text-xs text-gray-500">Australian mobile format: +614XXXXXXXX</p>
               </div>
             </div>
 

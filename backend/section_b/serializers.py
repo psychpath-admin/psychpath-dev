@@ -17,10 +17,10 @@ class ProfessionalDevelopmentEntrySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'activity_type', 'date_of_activity', 'duration_minutes',
             'is_active_activity', 'activity_details', 'topics_covered',
-            'competencies_covered', 'week_starting', 'duration_display',
+            'competencies_covered', 'reflection', 'week_starting', 'duration_display',
             'duration_hours_minutes', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['trainee', 'created_at', 'updated_at']
+        read_only_fields = ['trainee', 'week_starting', 'created_at', 'updated_at']
     
     def create(self, validated_data):
         validated_data['trainee'] = self.context['request'].user
@@ -54,5 +54,5 @@ class PDEntryWithSummarySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'activity_type', 'date_of_activity', 'duration_minutes',
             'is_active_activity', 'activity_details', 'topics_covered',
-            'competencies_covered', 'duration_display', 'duration_hours_minutes'
+            'competencies_covered', 'reflection', 'week_starting', 'duration_display', 'duration_hours_minutes'
         ]

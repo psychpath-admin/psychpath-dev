@@ -172,9 +172,9 @@ export default function HeaderNotificationBell() {
             </div>
           ) : (
             <div className="divide-y">
-              {notifications.map((notification) => (
+              {notifications.map((notification, index) => (
                 <div
-                  key={notification.id}
+                  key={notification.id || `notification-${index}`}
                   className={`p-4 hover:bg-gray-50 cursor-pointer ${
                     !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                   }`}

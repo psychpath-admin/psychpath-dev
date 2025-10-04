@@ -43,7 +43,7 @@ export function ReflectionLog() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-card border borderLight bg-backgroundCard p-5 shadow-cape">
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-card border borderLight bg-backgroundCard p-5 shadow-psychpath">
       <div className="font-headings text-xl text-textDark">Reflection Log</div>
       <div className="grid gap-4 md:grid-cols-3">
         <div className="space-y-1">

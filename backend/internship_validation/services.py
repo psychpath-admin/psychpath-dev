@@ -84,7 +84,7 @@ class InternshipValidationService:
             entry_hours = (entry_data.get('duration_minutes', 0) or 0) / 60
             
             if current_simulated + entry_hours > self.program_5_plus_1.dcc_simulated_maximum:
-                errors.append(f"Simulated DCC hours would exceed {self.program_5_plus_1.dcc_simulated_maximum}h maximum")
+                errors.append(f"You have already logged {current_simulated:.1f} hours of simulated client contact. Adding {entry_hours:.1f} more hours would exceed the maximum of {self.program_5_plus_1.dcc_simulated_maximum} hours allowed for simulated client contact. Please reduce the duration or mark this entry as non-simulated.")
         
         return len(errors) == 0, errors
     
@@ -129,7 +129,7 @@ class InternshipValidationService:
         # Check minimum weeks
         weeks_completed = self._calculate_weeks_completed(progress)
         if weeks_completed < self.program_5_plus_1.minimum_weeks:
-            return False, [f"Minimum {self.program_5_plus_1.minimum_weeks} weeks required, completed {weeks_completed}"]
+            return False, [f"Your internship requires a minimum of {self.program_5_plus_1.minimum_weeks} weeks to complete. You have currently completed {weeks_completed} weeks. Please continue logging hours until you reach the minimum requirement."]
         
         # Check category requirements
         category_valid, category_errors = progress.validate_category_requirements()
@@ -142,7 +142,7 @@ class InternshipValidationService:
         """Get comprehensive progress summary for display"""
         if user_profile.role not in ['INTERN', 'PROVISIONAL']:
             return {
-                'error': 'User is not enrolled in an internship program',
+                'error': f'You are registered as a {user_profile.role.lower().replace("_", " ")} and are not enrolled in an internship program. Internship tracking is only available for provisional psychologists and interns.',
                 'user_role': user_profile.role
             }
         

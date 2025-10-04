@@ -17,11 +17,17 @@ class SupervisionEntry(models.Model):
 
     trainee = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='supervision_entries')
     date_of_supervision = models.DateField()
+    week_starting = models.DateField(help_text="Week starting date for grouping")
     supervisor_name = models.CharField(max_length=255)
     supervisor_type = models.CharField(max_length=20, choices=SUPERVISOR_TYPE_CHOICES)
     supervision_type = models.CharField(max_length=20, choices=SUPERVISION_TYPE_CHOICES)
     duration_minutes = models.IntegerField(help_text="Duration in minutes")
     summary = models.TextField(help_text="Supervision summary and key points discussed")
+    
+    # Logbook integration
+    locked = models.BooleanField(default=False, help_text="True if this entry is part of a submitted logbook")
+    supervisor_comment = models.TextField(blank=True, default="", help_text="Supervisor comment for this entry when reviewing a logbook")
+    trainee_response = models.TextField(blank=True, default="", help_text="Trainee response to supervisor comment when resubmitting")
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -34,18 +40,12 @@ class SupervisionEntry(models.Model):
     def __str__(self):
         return f"{self.trainee.user.email} - {self.supervisor_name} on {self.date_of_supervision}"
 
-    @property
-    def week_starting(self):
-        # Calculate the Monday of the week for the given date_of_supervision
-        # Monday is 0, Sunday is 6
-        days_since_monday = self.date_of_supervision.weekday()
-        return self.date_of_supervision - timedelta(days=days_since_monday)
 
     @property
     def duration_display(self):
         hours = self.duration_minutes // 60
         minutes = self.duration_minutes % 60
-        return f"{hours:02d}:{minutes:02d}"
+        return f"{hours}:{minutes:02d}"
 
     @property
     def duration_hours_minutes(self):

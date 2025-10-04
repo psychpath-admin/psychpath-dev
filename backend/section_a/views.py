@@ -4,17 +4,25 @@ from rest_framework.response import Response
 from django.db.models import Q
 from .models import SectionAEntry, CustomSessionActivityType
 from .serializers import SectionAEntrySerializer, CustomSessionActivityTypeSerializer
+from permissions import DenyOrgAdmin
 
 
 class SectionAEntryViewSet(viewsets.ModelViewSet):
     """ViewSet for Section A entries"""
     
     serializer_class = SectionAEntrySerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, DenyOrgAdmin]
     
     def get_queryset(self):
         """Return entries for the current user only"""
-        return SectionAEntry.objects.filter(trainee=self.request.user)
+        queryset = SectionAEntry.objects.filter(trainee=self.request.user)
+        
+        # Filter by week_starting if provided
+        week_starting = self.request.query_params.get('week_starting', None)
+        if week_starting:
+            queryset = queryset.filter(week_starting=week_starting)
+        
+        return queryset
     
     def perform_create(self, serializer):
         """Automatically set the trainee to the current user"""
@@ -34,6 +42,18 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def logbook_eligibility(self, request):
+        """Check if user can submit their logbook"""
+        eligibility = SectionAEntry.can_submit_logbook(request.user)
+        return Response(eligibility)
+    
+    @action(detail=False, methods=['get'])
+    def sdcc_summary(self, request):
+        """Get SDCC hours summary for the current user"""
+        summary = SectionAEntry.get_sdcc_summary(request.user)
+        return Response(summary)
     
     @action(detail=False, methods=['get'])
     def client_autocomplete(self, request):
@@ -83,7 +103,7 @@ class CustomSessionActivityTypeViewSet(viewsets.ModelViewSet):
     """ViewSet for custom session activity types"""
     
     serializer_class = CustomSessionActivityTypeSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, DenyOrgAdmin]
     
     def get_queryset(self):
         """Return custom activity types for the current user only"""

@@ -115,12 +115,12 @@ export function useInternshipValidation() {
           setProgress({ error: data.error, user_role: data.user_role } as any)
           setError(null)
         } else {
-          setError('Failed to fetch progress')
+          setError('Unable to load your internship progress. Please refresh the page and try again.')
         }
       }
     } catch (err) {
       console.error('Error fetching progress:', err)
-      setError('Error fetching progress')
+      setError('Unable to load your internship progress. Please check your internet connection and try again.')
     }
   }, [])
 

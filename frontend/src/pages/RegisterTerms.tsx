@@ -10,24 +10,34 @@ export default function RegisterTerms() {
   const [isLoading, setIsLoading] = useState(false)
 
   const handleAgree = async () => {
-    if (!agreed) return
+    console.log('handleAgree called, agreed:', agreed)
+    if (!agreed) {
+      console.log('Button clicked but not agreed, returning early')
+      return
+    }
     
+    console.log('Starting terms agreement process...')
     setIsLoading(true)
     try {
+      console.log('Making request to:', `${API_URL}/api/auth/register/terms/`)
       const response = await fetch(`${API_URL}/api/auth/register/terms/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agreed: true })
       })
       
+      console.log('Response received:', response.status, response.ok)
       if (response.ok) {
+        console.log('Terms agreed successfully, redirecting to details page')
         window.location.href = '/register/details'
       } else {
         const error = await response.json()
         console.error('Error agreeing to terms:', error)
+        alert('Error agreeing to terms. Please try again.')
       }
     } catch (error) {
       console.error('Error agreeing to terms:', error)
+      alert('Error agreeing to terms. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -44,13 +54,13 @@ export default function RegisterTerms() {
           <div className="prose max-w-none">
             <h3>1. Acceptance of Terms</h3>
             <p>
-              By accessing and using the CAPE (Clinical Assessment and Professional Evaluation) platform, 
+              By accessing and using the PsychPATH (Psychology Professional Assessment and Training Hub) platform, 
               you accept and agree to be bound by the terms and provision of this agreement.
             </p>
             
             <h3>2. Use License</h3>
             <p>
-              Permission is granted to temporarily download one copy of the materials on CAPE for personal, 
+              Permission is granted to temporarily download one copy of the materials on PsychPATH for personal, 
               non-commercial transitory viewing only. This is the grant of a license, not a transfer of title.
             </p>
             
@@ -63,7 +73,7 @@ export default function RegisterTerms() {
             
             <h3>4. Data Privacy and Security</h3>
             <p>
-              CAPE is committed to protecting your personal information and professional data. 
+              PsychPATH is committed to protecting your personal information and professional data. 
               All data is stored securely and used only for the purposes outlined in our Privacy Policy.
             </p>
             
@@ -75,14 +85,14 @@ export default function RegisterTerms() {
             
             <h3>6. Limitation of Liability</h3>
             <p>
-              In no event shall CAPE or its suppliers be liable for any damages arising out of the use 
-              or inability to use the materials on CAPE, even if CAPE or an authorized representative 
+              In no event shall PsychPATH or its suppliers be liable for any damages arising out of the use 
+              or inability to use the materials on PsychPATH, even if PsychPATH or an authorized representative 
               has been notified orally or in writing of the possibility of such damage.
             </p>
             
             <h3>7. Modifications</h3>
             <p>
-              CAPE may revise these terms of service at any time without notice. By using this platform, 
+              PsychPATH may revise these terms of service at any time without notice. By using this platform, 
               you are agreeing to be bound by the then current version of these terms.
             </p>
           </div>
@@ -92,7 +102,10 @@ export default function RegisterTerms() {
               <Checkbox 
                 id="agree-terms" 
                 checked={agreed}
-                onCheckedChange={(checked) => setAgreed(checked as boolean)}
+                onCheckedChange={(checked) => {
+                  console.log('Checkbox changed, new value:', checked)
+                  setAgreed(checked as boolean)
+                }}
               />
               <label 
                 htmlFor="agree-terms" 
@@ -104,7 +117,10 @@ export default function RegisterTerms() {
             
             <div className="flex justify-center">
               <Button 
-                onClick={handleAgree}
+                onClick={() => {
+                  console.log('Button clicked, agreed:', agreed, 'isLoading:', isLoading)
+                  handleAgree()
+                }}
                 disabled={!agreed || isLoading}
                 className="bg-primary text-white hover:bg-primary/90"
               >

@@ -41,7 +41,7 @@ export default function SupervisorLinks() {
       </div>
       <ul className="grid gap-2">
         {links.map((l) => (
-          <li key={l.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-cape">#{l.id} supervisee: {l.supervisee}</li>
+          <li key={l.id} className="rounded-card border borderLight bg-backgroundCard p-3 shadow-psychpath">#{l.id} supervisee: {l.supervisee}</li>
         ))}
       </ul>
     </section>

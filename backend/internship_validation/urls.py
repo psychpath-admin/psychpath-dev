@@ -11,3 +11,4 @@ urlpatterns = [
     path('complete/', views.complete_internship, name='complete_internship'),
     path('requirements/', views.get_program_requirements, name='program_requirements'),
 ]
+

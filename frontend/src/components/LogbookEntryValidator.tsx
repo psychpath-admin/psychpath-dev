@@ -44,15 +44,17 @@ export function LogbookEntryValidator({
         onValidationChange?.(result.isValid, result.errors)
       } catch (error) {
         console.error('Validation error:', error)
-        setValidationResult({ isValid: false, errors: ['Validation failed'] })
-        onValidationChange?.(false, ['Validation failed'])
+        setValidationResult({ isValid: false, errors: ['Unable to validate this entry. Please check your input and try again.'] })
+        onValidationChange?.(false, ['Unable to validate this entry. Please check your input and try again.'])
       } finally {
         setIsValidating(false)
       }
     }
 
-    performValidation()
-  }, [entryData, validateEntry, onValidationChange])
+    // Debounce validation to avoid excessive API calls
+    const timeoutId = setTimeout(performValidation, 500)
+    return () => clearTimeout(timeoutId)
+  }, [entryData.entry_type, entryData.duration_minutes, entryData.simulated, validateEntry, onValidationChange])
 
   if (!validationResult) {
     return (
@@ -76,7 +78,7 @@ export function LogbookEntryValidator({
   const getStatusText = () => {
     if (isValidating) return 'Validating...'
     if (validationResult.isValid) return 'Valid'
-    return 'Validation failed'
+    return 'Entry validation failed'
   }
 
   const getStatusColor = () => {
@@ -180,3 +182,4 @@ export function ValidationSummary({ entryData, className = '' }: ValidationSumma
     </div>
   )
 }
+

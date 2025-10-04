@@ -379,9 +379,9 @@ export default function NotificationCenter() {
             </div>
           ) : (
             <div className="divide-y">
-              {notifications.map((notification) => (
+              {notifications.map((notification, index) => (
                 <div
-                  key={notification.id}
+                  key={notification.id || `notification-${index}`}
                   className={`p-6 hover:bg-gray-50 transition-colors ${
                     !notification.read ? 'bg-blue-50/50 border-l-4 border-l-blue-500' : ''
                   }`}
