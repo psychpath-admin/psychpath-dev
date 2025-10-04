@@ -24,9 +24,16 @@ class ProfessionalDevelopmentEntryListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, DenyOrgAdmin]
     
     def get_queryset(self):
-        return ProfessionalDevelopmentEntry.objects.filter(
+        queryset = ProfessionalDevelopmentEntry.objects.filter(
             trainee=self.request.user
-        ).order_by('-date_of_activity', '-created_at')
+        )
+        
+        # Filter by week_starting if provided
+        week_starting = self.request.query_params.get('week_starting', None)
+        if week_starting:
+            queryset = queryset.filter(week_starting=week_starting)
+        
+        return queryset.order_by('-date_of_activity', '-created_at')
     
     def perform_create(self, serializer):
         # Calculate week starting date

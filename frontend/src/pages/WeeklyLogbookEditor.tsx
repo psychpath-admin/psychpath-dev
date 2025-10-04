@@ -73,6 +73,10 @@ interface UserProfile {
   last_name: string
   ahpra_registration_number?: string
   middle_name?: string
+  principal_supervisor?: string
+  principal_supervisor_email?: string
+  secondary_supervisor?: string
+  secondary_supervisor_email?: string
 }
 
 export default function WeeklyLogbookEditor() {
@@ -81,17 +85,51 @@ export default function WeeklyLogbookEditor() {
   const [logbook, setLogbook] = useState<LogbookEntry | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [sectionAEntries, setSectionAEntries] = useState<any[]>([])
+  const [sectionBEntries, setSectionBEntries] = useState<any[]>([])
+  const [sectionCEntries, setSectionCEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null)
 
   useEffect(() => {
     if (weekStart) {
       fetchLogbookData()
       fetchUserProfile()
       fetchSectionAEntries()
+      fetchSectionBEntries()
+      fetchSectionCEntries()
     }
   }, [weekStart])
+
+  // Auto-save effect - triggers when entries change
+  useEffect(() => {
+    if (!logbook || logbook.has_logbook || loading) return
+
+    const hasEntries = sectionAEntries.length > 0 || sectionBEntries.length > 0 || sectionCEntries.length > 0
+    if (!hasEntries) return
+
+    const autoSaveTimer = setTimeout(() => {
+      handleAutoSave()
+    }, 30000) // Auto-save after 30 seconds of inactivity
+
+    return () => clearTimeout(autoSaveTimer)
+  }, [sectionAEntries, sectionBEntries, sectionCEntries, logbook, loading])
+
+  // Auto-save before page unload
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (autoSaveStatus === 'saving') {
+        e.preventDefault()
+        e.returnValue = 'Auto-save in progress. Are you sure you want to leave?'
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [autoSaveStatus])
 
   const fetchLogbookData = async () => {
     try {
@@ -138,6 +176,36 @@ export default function WeeklyLogbookEditor() {
     } catch (error) {
       console.error('Error fetching Section A entries:', error)
       setSectionAEntries([])
+    }
+  }
+
+  const fetchSectionBEntries = async () => {
+    if (!weekStart) return
+    
+    try {
+      const response = await apiFetch(`/api/section-b/entries/?week_starting=${weekStart}`)
+      if (response.ok) {
+        const entries = await response.json()
+        setSectionBEntries(Array.isArray(entries) ? entries : [])
+      }
+    } catch (error) {
+      console.error('Error fetching Section B entries:', error)
+      setSectionBEntries([])
+    }
+  }
+
+  const fetchSectionCEntries = async () => {
+    if (!weekStart) return
+    
+    try {
+      const response = await apiFetch(`/api/section-c/entries/?week_starting=${weekStart}`)
+      if (response.ok) {
+        const entries = await response.json()
+        setSectionCEntries(Array.isArray(entries) ? entries : [])
+      }
+    } catch (error) {
+      console.error('Error fetching Section C entries:', error)
+      setSectionCEntries([])
     }
   }
 
@@ -195,6 +263,91 @@ export default function WeeklyLogbookEditor() {
 
   const handleRegenerateConfirm = () => {
     createNewLogbook()
+  }
+
+  const handleSubmitToSupervisor = async () => {
+    if (!logbook) return
+
+    // Check if user has a principal supervisor
+    if (!userProfile?.principal_supervisor || !userProfile?.principal_supervisor_email) {
+      toast.error('You must have a principal supervisor assigned before submitting a logbook')
+      return
+    }
+
+    // Check if logbook exists, if not create it first
+    if (!logbook.has_logbook) {
+      await createNewLogbook()
+      // After creating, the logbook state will be updated and we can submit
+      if (!logbook.has_logbook) {
+        toast.error('Failed to create logbook for submission')
+        return
+      }
+    }
+
+    // Submit the logbook
+    try {
+      setSubmitting(true)
+      const response = await apiFetch('/api/logbook/submit/', {
+        method: 'POST',
+        body: JSON.stringify({
+          week_start: logbook.week_start_date
+        })
+      })
+
+      if (response.ok) {
+        const updatedLogbook = await response.json()
+        setLogbook(updatedLogbook)
+        toast.success('Logbook submitted to supervisor successfully')
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to submit logbook')
+      }
+    } catch (error) {
+      console.error('Error submitting logbook:', error)
+      toast.error('Failed to submit logbook')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleAutoSave = async () => {
+    if (!logbook || logbook.has_logbook || autoSaveStatus === 'saving') return
+
+    const hasEntries = sectionAEntries.length > 0 || sectionBEntries.length > 0 || sectionCEntries.length > 0
+    if (!hasEntries) return
+
+    try {
+      setAutoSaveStatus('saving')
+      const response = await apiFetch('/api/logbook/create/', {
+        method: 'POST',
+        body: JSON.stringify({
+          week_start_date: logbook.week_start_date
+        })
+      })
+
+      if (response.ok) {
+        const newLogbook = await response.json()
+        setLogbook(newLogbook)
+        setAutoSaveStatus('saved')
+        setLastAutoSave(new Date())
+        
+        // Reset status after 3 seconds
+        setTimeout(() => {
+          setAutoSaveStatus('idle')
+        }, 3000)
+      } else {
+        setAutoSaveStatus('error')
+        setTimeout(() => {
+          setAutoSaveStatus('idle')
+        }, 5000)
+      }
+    } catch (error) {
+      console.error('Auto-save failed:', error)
+      setAutoSaveStatus('error')
+      setTimeout(() => {
+        setAutoSaveStatus('idle')
+      }, 5000)
+    }
   }
 
   const handleBackToDashboard = () => {
@@ -272,6 +425,35 @@ export default function WeeklyLogbookEditor() {
         <div className="flex items-center gap-3">
           {getStatusBadge(logbook.status)}
           {isLocked && <Lock className="h-5 w-5 text-gray-500" />}
+          
+          {/* Auto-save status indicator */}
+          {!logbook.has_logbook && (
+            <div className="flex items-center gap-2 text-sm">
+              {autoSaveStatus === 'saving' && (
+                <div className="flex items-center gap-1 text-blue-600">
+                  <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Auto-saving...</span>
+                </div>
+              )}
+              {autoSaveStatus === 'saved' && (
+                <div className="flex items-center gap-1 text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Auto-saved</span>
+                </div>
+              )}
+              {autoSaveStatus === 'error' && (
+                <div className="flex items-center gap-1 text-red-600">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>Auto-save failed</span>
+                </div>
+              )}
+              {lastAutoSave && autoSaveStatus === 'idle' && (
+                <div className="text-gray-500">
+                  Last saved: {lastAutoSave.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -398,7 +580,7 @@ export default function WeeklyLogbookEditor() {
                           <div><strong>Date:</strong> {entry.session_date ? formatDateDDMMYYYY(entry.session_date) : ''}</div>
                           <div><strong>Activity:</strong> {
                             entry.session_activity_types && entry.session_activity_types.length > 0 
-                              ? entry.session_activity_types.join(', ').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                              ? entry.session_activity_types.join(', ').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
                               : entry.activity_description || ''
                           }</div>
                         </div>
@@ -415,7 +597,7 @@ export default function WeeklyLogbookEditor() {
                               <div><strong>Date:</strong> {entry.session_date ? formatDateDDMMYYYY(entry.session_date) : ''}</div>
                               <div><strong>Activity:</strong> {
                                 entry.session_activity_types && entry.session_activity_types.length > 0 
-                                  ? entry.session_activity_types.join(', ').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                                  ? entry.session_activity_types.join(', ').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
                                   : entry.activity_description || entry.client_related_activity || ''
                               }</div>
                             </>
@@ -480,17 +662,237 @@ export default function WeeklyLogbookEditor() {
         </CardContent>
       </Card>
 
+      {/* Section B */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">SECTION B: Weekly record of professional development</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Section B Table Header */}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="border border-gray-300 p-3 text-left font-medium">Date</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Professional Development Activity</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Duration</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Provider/Source</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Competency Areas</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Reflections on Learning</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sectionBEntries.length === 0 ? (
+                  <tr>
+                    <td className="border border-gray-300 p-3 text-center text-gray-500" colSpan={6}>
+                      {logbook.has_logbook ? (
+                        canEdit ? 'No Section B entries recorded for this week' : 'Logbook is locked'
+                      ) : (
+                        'No Section B entries recorded for this week'
+                      )}
+                    </td>
+                  </tr>
+                ) : (
+                  sectionBEntries.map((entry, index) => (
+                    <tr key={entry.id || index}>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          {entry.date_of_activity ? formatDateDDMMYYYY(entry.date_of_activity) : ''}
+                        </div>
+                      </td>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          <div><strong>Title:</strong> {entry.activity_details || ''}</div>
+                          <div><strong>Type:</strong> {entry.activity_type || ''}</div>
+                          <div><strong>Topics:</strong> {entry.topics_covered || ''}</div>
+                        </div>
+                      </td>
+                      <td className="border border-gray-300 p-3 text-center">
+                        <span className="font-medium">
+                          {entry.duration_minutes ? formatDurationWithUnit(entry.duration_minutes) : ''}
+                        </span>
+                      </td>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          {entry.activity_details || ''}
+                        </div>
+                      </td>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          {entry.competencies_covered && entry.competencies_covered.length > 0 
+                            ? entry.competencies_covered.join(', ')
+                            : 'No competencies linked'
+                          }
+                        </div>
+                      </td>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          {entry.reflection || 'No reflections recorded'}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Section B Cumulative Totals */}
+          <div className="mt-6">
+            <h4 className="text-md font-semibold mb-3">Section B Totals</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="border border-gray-300 p-3 text-left font-medium"></th>
+                    <th className="border border-gray-300 p-3 text-left font-medium">Professional Development Hours</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-300 p-3 font-medium">Weekly total</td>
+                    <td className="border border-gray-300 p-3 font-medium">
+                      {logbook.section_totals.section_b.weekly_hours || '0:00h'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-gray-300 p-3 font-medium">Cumulative total</td>
+                    <td className="border border-gray-300 p-3 font-medium">
+                      {logbook.section_totals.section_b.cumulative_hours || '0:00h'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section C */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">SECTION C: Weekly record of supervision</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Section C Table Header */}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="border border-gray-300 p-3 text-left font-medium">Date</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Supervisor</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Type</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Duration</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Focus Areas</th>
+                  <th className="border border-gray-300 p-3 text-left font-medium">Reflections</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sectionCEntries.length === 0 ? (
+                  <tr>
+                    <td className="border border-gray-300 p-3 text-center text-gray-500" colSpan={6}>
+                      {logbook.has_logbook ? (
+                        canEdit ? 'No Section C entries recorded for this week' : 'Logbook is locked'
+                      ) : (
+                        'No Section C entries recorded for this week'
+                      )}
+                    </td>
+                  </tr>
+                ) : (
+                  sectionCEntries.map((entry, index) => (
+                    <tr key={entry.id || index}>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          {entry.date_of_supervision ? formatDateDDMMYYYY(entry.date_of_supervision) : ''}
+                        </div>
+                      </td>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          <div><strong>Name:</strong> {entry.supervisor_name || ''}</div>
+                          <div><strong>Type:</strong> {entry.supervisor_type || ''}</div>
+                        </div>
+                      </td>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          <div><strong>Format:</strong> {entry.supervision_type || ''}</div>
+                        </div>
+                      </td>
+                      <td className="border border-gray-300 p-3 text-center">
+                        <span className="font-medium">
+                          {entry.duration_minutes ? formatDurationWithUnit(entry.duration_minutes) : ''}
+                        </span>
+                      </td>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          {entry.summary || 'No focus areas recorded'}
+                        </div>
+                      </td>
+                      <td className="border border-gray-300 p-3">
+                        <div className="text-sm">
+                          {entry.summary || 'No reflections recorded'}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Section C Cumulative Totals */}
+          <div className="mt-6">
+            <h4 className="text-md font-semibold mb-3">Section C Totals</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="border border-gray-300 p-3 text-left font-medium"></th>
+                    <th className="border border-gray-300 p-3 text-left font-medium">Supervision Hours</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-300 p-3 font-medium">Weekly total</td>
+                    <td className="border border-gray-300 p-3 font-medium">
+                      {logbook.section_totals.section_c.weekly_hours || '0:00h'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-gray-300 p-3 font-medium">Cumulative total</td>
+                    <td className="border border-gray-300 p-3 font-medium">
+                      {logbook.section_totals.section_c.cumulative_hours || '0:00h'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Action Buttons */}
       <div className="flex justify-end gap-3">
         {!logbook.has_logbook ? (
-          <Button onClick={handleCreateLogbook} disabled={creating}>
-            {creating ? 'Creating...' : 'Create Logbook'}
-          </Button>
+          <div className="flex gap-3">
+            <Button onClick={handleCreateLogbook} disabled={creating}>
+              {creating ? 'Saving...' : 'Save Draft'}
+            </Button>
+            <Button onClick={handleSubmitToSupervisor} disabled={creating || submitting} variant="default">
+              {submitting ? 'Submitting...' : 'Submit to Supervisor'}
+            </Button>
+          </div>
         ) : canEdit ? (
-          <Button onClick={handleCreateLogbook} variant="outline" disabled={creating}>
-            <Edit className="h-4 w-4 mr-2" />
-            {creating ? 'Regenerating...' : 'Regenerate Logbook'}
-          </Button>
+          <div className="flex gap-3">
+            <Button onClick={handleCreateLogbook} variant="outline" disabled={creating}>
+              <Edit className="h-4 w-4 mr-2" />
+              {creating ? 'Saving...' : 'Save Draft'}
+            </Button>
+            {logbook.status === 'ready' && (
+              <Button onClick={handleSubmitToSupervisor} disabled={creating || submitting} variant="default">
+                {submitting ? 'Submitting...' : 'Submit to Supervisor'}
+              </Button>
+            )}
+          </div>
         ) : (
           <Button disabled>
             <Lock className="h-4 w-4 mr-2" />

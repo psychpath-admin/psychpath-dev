@@ -32,12 +32,31 @@ class WeeklyLogbook(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # Cumulative totals (added by migration 0009)
+    cumulative_cra_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    cumulative_dcc_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    cumulative_pd_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    cumulative_sup_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    cumulative_total_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    
+    # Weekly totals (added by migration 0009)
+    total_cra_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    total_dcc_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    total_pd_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    total_sup_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    total_weekly_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    
     class Meta:
         ordering = ['-week_start_date']
         unique_together = ['trainee', 'week_start_date']
     
     def __str__(self):
         return f"{self.trainee.email} - Week {self.week_number} ({self.week_start_date})"
+    
+    @property
+    def has_logbook(self):
+        """Returns True if this logbook has been created (has an ID)"""
+        return self.pk is not None
     
     def calculate_section_totals(self):
         """Calculate weekly and cumulative totals for all sections"""
@@ -97,7 +116,7 @@ class WeeklyLogbook(models.Model):
             trainee_profile = UserProfile.objects.get(user=self.trainee)
             all_previous_section_c = SupervisionEntry.objects.filter(
                 trainee=trainee_profile,
-                date_of_supervision__lt=self.week_start_date
+                week_starting__lt=self.week_start_date
                 # Include ALL entries from previous weeks, not just locked ones
             )
         except UserProfile.DoesNotExist:

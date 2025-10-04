@@ -10,12 +10,12 @@ class SupervisionEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = SupervisionEntry
         fields = [
-            'id', 'trainee', 'trainee_email', 'date_of_supervision', 'supervisor_name',
+            'id', 'trainee', 'trainee_email', 'date_of_supervision', 'week_starting', 'supervisor_name',
             'supervisor_type', 'supervision_type', 'duration_minutes', 'summary',
-            'week_starting', 'duration_display', 'duration_hours_minutes',
+            'duration_display', 'duration_hours_minutes',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['trainee', 'week_starting', 'duration_display', 'duration_hours_minutes', 'created_at', 'updated_at']
+        read_only_fields = ['trainee', 'duration_display', 'duration_hours_minutes', 'created_at', 'updated_at']
 
 class SupervisionWeeklySummarySerializer(serializers.ModelSerializer):
     week_total_display = serializers.CharField(read_only=True)

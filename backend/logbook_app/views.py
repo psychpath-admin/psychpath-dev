@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from django.db import transaction
 from django.shortcuts import render
 from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification
+from api.models import Supervision
 from .serializers import (
     LogbookSerializer, LogbookDraftSerializer, EligibleWeekSerializer, 
     LogbookSubmissionSerializer, LogbookAuditLogSerializer,
@@ -161,8 +162,7 @@ def logbook_dashboard_list(request):
                     )
                     section_c_entries = SupervisionEntry.objects.filter(
                         trainee=trainee_profile,
-                        date_of_supervision__gte=week_start,
-                        date_of_supervision__lte=week_end,
+                        week_starting=week_start,
                         locked=False
                     )
                     
@@ -411,8 +411,7 @@ def eligible_weeks(request):
             
             section_c_count = SupervisionEntry.objects.filter(
                 trainee=trainee_profile,
-                date_of_supervision__gte=week_start,
-                date_of_supervision__lte=week_end,
+                week_starting=week_start,
                 locked=False
             ).count()
             
@@ -481,8 +480,7 @@ def logbook_draft(request):
     
     section_c_entries = SupervisionEntry.objects.filter(
         trainee=trainee_profile,
-        date_of_supervision__gte=week_start,
-        date_of_supervision__lte=week_end,
+        week_starting=week_start,
         locked=False
     ).order_by('date_of_supervision', 'created_at')
     
@@ -494,17 +492,17 @@ def logbook_draft(request):
     # Calculate cumulative totals up to this week
     cumulative_section_a = SectionAEntry.objects.filter(
         trainee=request.user,
-        week_starting__lt=week_start + timedelta(days=7)
+        week_starting__lt=week_start + timedelta(days=6)
     ).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
     
     cumulative_section_b = ProfessionalDevelopmentEntry.objects.filter(
         trainee=request.user,
-        week_starting__lt=week_start + timedelta(days=7)
+        week_starting__lt=week_start + timedelta(days=6)
     ).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
     
     cumulative_section_c = SupervisionEntry.objects.filter(
         trainee=trainee_profile,
-        date_of_supervision__lt=week_start + timedelta(days=7)
+        week_starting__lt=week_start + timedelta(days=6)
     ).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
     
     draft_data = {
@@ -606,8 +604,7 @@ def logbook_create(request):
     
     section_c_entries = SupervisionEntry.objects.filter(
         trainee=trainee_profile,
-        date_of_supervision__gte=week_start_date,
-        date_of_supervision__lte=week_end_date,
+        week_starting=week_start_date,
         locked=False
     )
     
@@ -648,44 +645,59 @@ def logbook_create(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@support_error_handler
+# @support_error_handler  # Temporarily removed to see full traceback
 def logbook_submit(request):
     """Submit a logbook for supervisor review"""
     if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
         return Response({'error': 'Only trainees can submit logbooks'}, status=status.HTTP_403_FORBIDDEN)
     
-    serializer = LogbookSubmissionSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    # Check if user has a principal supervisor assigned
+    user_profile = request.user.profile
+    if not user_profile.principal_supervisor or not user_profile.principal_supervisor_email:
+        return Response({
+            'error': 'You must have a principal supervisor assigned before submitting a logbook. Please update your profile with supervisor information.'
+        }, status=status.HTTP_400_BAD_REQUEST)
     
-    data = serializer.validated_data
-    week_start = data['week_start']
-    week_end = data['week_end']
-    section_a_entry_ids = data['section_a_entry_ids']
-    section_b_entry_ids = data['section_b_entry_ids']
-    section_c_entry_ids = data['section_c_entry_ids']
+    # Check if supervisor relationship is accepted
+    supervisor_relationship = Supervision.objects.filter(
+        supervisee=request.user,
+        role='PRIMARY',
+        status='ACCEPTED'
+    ).first()
+    
+    if not supervisor_relationship:
+        return Response({
+            'error': 'Your supervisor relationship must be accepted before submitting a logbook. Please ensure your supervisor has accepted your supervision invitation.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    week_start_date = request.data.get('week_start')
+    if not week_start_date:
+        return Response({'error': 'week_start is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Parse date
+    try:
+        if isinstance(week_start_date, str):
+            week_start_date = datetime.strptime(week_start_date, '%Y-%m-%d').date()
+    except ValueError:
+        return Response({'error': 'Invalid week_start format'}, status=status.HTTP_400_BAD_REQUEST)
     
     # Check if logbook already exists for this week
     existing_logbook = WeeklyLogbook.objects.filter(
         trainee=request.user,
-        week_start_date=week_start
+        week_start_date=week_start_date
     ).first()
     
-    if existing_logbook:
-        return Response({'error': 'Logbook already exists for this week'}, status=status.HTTP_400_BAD_REQUEST)
+    if not existing_logbook:
+        return Response({'error': 'No logbook found for this week. Please save a draft first.'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if existing_logbook.status in ['submitted', 'approved']:
+        return Response({'error': f'Logbook already {existing_logbook.status}'}, status=status.HTTP_400_BAD_REQUEST)
     
     with transaction.atomic():
-        # Create the logbook
-        logbook = WeeklyLogbook.objects.create(
-            trainee=request.user,
-            week_start_date=week_start,
-            week_end_date=week_end,
-            status='submitted',
-            section_a_entry_ids=section_a_entry_ids,
-            section_b_entry_ids=section_b_entry_ids,
-            section_c_entry_ids=section_c_entry_ids,
-            submitted_at=timezone.now()
-        )
+        # Update existing logbook to submitted status
+        existing_logbook.status = 'submitted'
+        existing_logbook.submitted_at = timezone.now()
+        existing_logbook.save()
         
         # Lock all entries
         from section_a.models import SectionAEntry
@@ -693,30 +705,48 @@ def logbook_submit(request):
         from section_c.models import SupervisionEntry
         
         SectionAEntry.objects.filter(
-            id__in=section_a_entry_ids,
+            id__in=existing_logbook.section_a_entry_ids,
             trainee=request.user
         ).update(locked=True)
         
         ProfessionalDevelopmentEntry.objects.filter(
-            id__in=section_b_entry_ids,
+            id__in=existing_logbook.section_b_entry_ids,
             trainee=request.user
         ).update(locked=True)
         
         SupervisionEntry.objects.filter(
-            id__in=section_c_entry_ids,
+            id__in=existing_logbook.section_c_entry_ids,
             trainee=request.user.profile
         ).update(locked=True)
         
         # Create audit log entry
         LogbookAuditLog.objects.create(
-            logbook=logbook,
+            logbook=existing_logbook,
             action='submitted',
             user=request.user,
             new_status='submitted'
         )
         
-        response_serializer = LogbookSerializer(logbook)
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        # Return updated logbook data
+        return Response({
+            'id': existing_logbook.id,
+            'week_start_date': existing_logbook.week_start_date,
+            'week_end_date': existing_logbook.week_end_date,
+            'week_display': existing_logbook.week_display,
+            'week_starting_display': f"Week of {existing_logbook.week_start_date.strftime('%d %b %Y')}",
+            'status': existing_logbook.status,
+            'rag_status': existing_logbook.get_rag_status(),
+            'is_overdue': existing_logbook.is_overdue(),
+            'has_supervisor_comments': existing_logbook.has_supervisor_comments(),
+            'is_editable': existing_logbook.is_editable_by_user(request.user),
+            'supervisor_comments': existing_logbook.supervisor_comments,
+            'submitted_at': existing_logbook.submitted_at,
+            'reviewed_at': existing_logbook.reviewed_at,
+            'reviewed_by_name': f"{existing_logbook.reviewed_by.profile.first_name} {existing_logbook.reviewed_by.profile.last_name}".strip() if existing_logbook.reviewed_by and hasattr(existing_logbook.reviewed_by, 'profile') else None,
+            'section_totals': existing_logbook.calculate_section_totals(),
+            'active_unlock': None,
+            'has_logbook': True
+        }, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -783,13 +813,30 @@ def supervisor_logbooks(request):
     # Get filter parameter
     status_filter = request.query_params.get('status', 'submitted')
     
-    # Build queryset based on filter
+    # Get supervisees for this supervisor
+    supervisee_relationships = Supervision.objects.filter(
+        supervisor=request.user,
+        role='PRIMARY',
+        status='ACCEPTED'
+    )
+    supervisee_users = [rel.supervisee for rel in supervisee_relationships if rel.supervisee]
+    
+    if not supervisee_users:
+        return Response([])
+    
+    # Build queryset based on filter and supervisees
     if status_filter == 'all':
-        logbooks = WeeklyLogbook.objects.all()
+        logbooks = WeeklyLogbook.objects.filter(trainee__in=supervisee_users)
     elif status_filter in ['submitted', 'rejected', 'approved']:
-        logbooks = WeeklyLogbook.objects.filter(status=status_filter)
+        logbooks = WeeklyLogbook.objects.filter(
+            trainee__in=supervisee_users,
+            status=status_filter
+        )
     else:
-        logbooks = WeeklyLogbook.objects.filter(status='submitted')
+        logbooks = WeeklyLogbook.objects.filter(
+            trainee__in=supervisee_users,
+            status='submitted'
+        )
     
     logbooks = logbooks.order_by('-submitted_at')
     
@@ -1925,7 +1972,7 @@ def logbook_html_report(request, logbook_id):
     
     section_c_cumulative = SupervisionEntry.objects.filter(
         trainee=logbook.trainee.profile,
-        date_of_supervision__lte=logbook.week_end_date
+        week_starting__lte=logbook.week_start_date
     ).aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
     
     # Helper function to format minutes to hours:minutes

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+// import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ChevronLeft, ChevronRight, Eye, Edit, Plus, Trash2, Calendar, Clock, User, FileText, TrendingUp, Target, Award, Filter, X, Search, BarChart3, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { 
@@ -34,6 +35,7 @@ const formatDateDDMMYYYY = (dateString: string) => {
 interface DCCEntry {
   id: number
   client_id: string
+  client_pseudonym?: string
   session_date: string
   week_starting: string
   place_of_practice: string
@@ -41,10 +43,11 @@ interface DCCEntry {
   session_activity_types: string[]
   duration_minutes: string
   reflections_on_experience: string
-  entry_type: 'client_contact' | 'cra' | 'icra'
+  entry_type: 'client_contact' | 'cra' | 'independent_activity'
   parent_dcc_entry?: number
   cra_entries: DCCEntry[]
   simulated: boolean
+  supervisor_reviewed?: boolean
   simulated_hours_info?: {
     total_hours: number
     remaining_hours: number
@@ -80,6 +83,7 @@ export default function SectionADashboard() {
   const [showEntryForm, setShowEntryForm] = useState(false)
   const [showCRAForm, setShowCRAForm] = useState(false)
   const [showICRAForm, setShowICRAForm] = useState(false)
+  const [showSmartForm, setShowSmartForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState(false)
   const [editingCRAId, setEditingCRAId] = useState<number | null>(null)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
@@ -113,6 +117,25 @@ export default function SectionADashboard() {
     reflections_on_experience: '',
     simulated: false
   })
+
+  // Smart form state
+  const [smartFormData, setSmartFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    client_pseudonym: '',
+    place_of_practice: '',
+    presenting_issues: '',
+    dcc_activity_types: [] as string[],
+    description: '',
+    duration: 50, // Default 50 minutes
+    simulated_client: false,
+    supervisor_reviewed: false
+  })
+  const [clientSuggestions, setClientSuggestions] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  
+  // Tooltip toggle
+  const [showTooltips, setShowTooltips] = useState(true)
   
   // Filters and sorting
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'duration' | 'client'>('newest')
@@ -122,10 +145,15 @@ export default function SectionADashboard() {
   const [durationMin, setDurationMin] = useState('')
   const [durationMax, setDurationMax] = useState('')
   const [groupByWeek, setGroupByWeek] = useState(false)
+  
+  // New Section A-specific filters
+  const [clientPseudonym, setClientPseudonym] = useState('')
+  const [activityType, setActivityType] = useState('all') // 'all', 'DCC', 'CRA', 'ICRA'
+  const [reviewedFilter, setReviewedFilter] = useState('all') // 'all', 'reviewed', 'not_reviewed'
 
   useEffect(() => {
     loadDCCEntries()
-  }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax, groupByWeek])
+  }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax, groupByWeek, clientPseudonym, activityType, reviewedFilter])
 
   // Load custom activity types from localStorage
   useEffect(() => {
@@ -157,13 +185,13 @@ export default function SectionADashboard() {
       setAllEntries(fetchedEntries)
       
       // Filter for DCC and ICRA entries
-      let filteredEntries = fetchedEntries.filter(entry => 
+      let filteredEntries = fetchedEntries.filter((entry: DCCEntry) => 
         entry.entry_type === 'client_contact' || entry.entry_type === 'independent_activity'
       )
       
       // Apply filters
       if (dateFrom) {
-        filteredEntries = filteredEntries.filter(entry => {
+        filteredEntries = filteredEntries.filter((entry: DCCEntry) => {
           // Parse dates properly for comparison
           const entryDate = new Date(entry.session_date + 'T00:00:00') // Add time to avoid timezone issues
           const fromDate = new Date(dateFrom + 'T00:00:00')
@@ -171,7 +199,7 @@ export default function SectionADashboard() {
         })
       }
       if (dateTo) {
-        filteredEntries = filteredEntries.filter(entry => {
+        filteredEntries = filteredEntries.filter((entry: DCCEntry) => {
           // Parse dates properly for comparison
           const entryDate = new Date(entry.session_date + 'T00:00:00') // Add time to avoid timezone issues
           const toDate = new Date(dateTo + 'T23:59:59') // End of day
@@ -179,23 +207,49 @@ export default function SectionADashboard() {
         })
       }
       if (sessionType && sessionType !== 'all') {
-        filteredEntries = filteredEntries.filter(entry => 
+        filteredEntries = filteredEntries.filter((entry: DCCEntry) => 
           entry.session_activity_types.includes(sessionType)
         )
       }
       if (durationMin) {
-        filteredEntries = filteredEntries.filter(entry => 
+        filteredEntries = filteredEntries.filter((entry: DCCEntry) => 
           parseInt(entry.duration_minutes) >= parseInt(durationMin)
         )
       }
       if (durationMax) {
-        filteredEntries = filteredEntries.filter(entry => 
+        filteredEntries = filteredEntries.filter((entry: DCCEntry) => 
           parseInt(entry.duration_minutes) <= parseInt(durationMax)
         )
       }
+
+      // Client pseudonym filter
+      if (clientPseudonym) {
+        filteredEntries = filteredEntries.filter((entry: DCCEntry) => 
+          entry.client_id.toLowerCase().includes(clientPseudonym.toLowerCase()) ||
+          (entry.client_pseudonym && entry.client_pseudonym.toLowerCase().includes(clientPseudonym.toLowerCase()))
+        )
+      }
+
+      // Activity type filter (DCC, CRA, ICRA)
+      if (activityType !== 'all') {
+        filteredEntries = filteredEntries.filter((entry: DCCEntry) => {
+          if (activityType === 'DCC') return entry.entry_type === 'client_contact'
+          if (activityType === 'CRA') return entry.entry_type === 'cra'
+          if (activityType === 'ICRA') return entry.entry_type === 'independent_activity'
+          return true
+        })
+      }
+
+      // Supervisor review filter
+      if (reviewedFilter === 'reviewed') {
+        filteredEntries = filteredEntries.filter((entry: DCCEntry) => entry.supervisor_reviewed)
+      }
+      if (reviewedFilter === 'not_reviewed') {
+        filteredEntries = filteredEntries.filter((entry: DCCEntry) => !entry.supervisor_reviewed)
+      }
       
       // Apply sorting
-      filteredEntries.sort((a, b) => {
+      filteredEntries.sort((a: DCCEntry, b: DCCEntry) => {
         switch (sortBy) {
           case 'newest':
             return new Date(b.session_date).getTime() - new Date(a.session_date).getTime()
@@ -463,6 +517,123 @@ export default function SectionADashboard() {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
   }
 
+  // Smart form handlers
+  const getClientSuggestions = async (query: string) => {
+    if (query.length < 2) {
+      setClientSuggestions([])
+      return
+    }
+    
+    try {
+      const entries = await getSectionAEntries()
+      const uniqueClients = [...new Set(
+        entries
+          .filter(entry => 
+            entry.client_pseudonym?.toLowerCase().includes(query.toLowerCase()) ||
+            entry.client_id?.toLowerCase().includes(query.toLowerCase())
+          )
+          .map(entry => entry.client_pseudonym || entry.client_id)
+      )].filter(Boolean) as string[]
+      
+      setClientSuggestions(uniqueClients.slice(0, 10))
+    } catch (error) {
+      console.error('Error fetching client suggestions:', error)
+    }
+  }
+
+  const handleClientSelect = async (clientPseudonym: string) => {
+    try {
+      const entries = await getSectionAEntries()
+      const lastEntry = entries
+        .filter(entry => (entry.client_pseudonym || entry.client_id) === clientPseudonym)
+        .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())[0]
+      
+      if (lastEntry) {
+        setSmartFormData(prev => ({
+          ...prev,
+          client_pseudonym: clientPseudonym,
+          place_of_practice: lastEntry.place_of_practice || '',
+          presenting_issues: lastEntry.presenting_issues || ''
+        }))
+      } else {
+        setSmartFormData(prev => ({
+          ...prev,
+          client_pseudonym: clientPseudonym
+        }))
+      }
+      setShowSuggestions(false)
+    } catch (error) {
+      console.error('Error fetching client data:', error)
+    }
+  }
+
+  const validateSmartForm = () => {
+    const errors: Record<string, string> = {}
+    
+    if (!smartFormData.date) errors.date = 'Date is required'
+    if (!smartFormData.client_pseudonym) errors.client_pseudonym = 'Client pseudonym is required'
+    if (!smartFormData.place_of_practice) errors.place_of_practice = 'Place of practice is required'
+    if (!smartFormData.presenting_issues) errors.presenting_issues = 'Presenting issues are required'
+    if (smartFormData.dcc_activity_types.length === 0) errors.dcc_activity_types = 'At least one DCC activity type is required'
+    if (!smartFormData.description) errors.description = 'Activity description is required'
+    if (smartFormData.duration <= 0) errors.duration = 'Duration must be greater than 0'
+    
+    // Validation: DCC activities cannot be with simulated clients
+    if (smartFormData.simulated_client) {
+      errors.simulated_client = 'DCC activities cannot be with simulated clients'
+    }
+    
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSmartFormSubmit = async () => {
+    if (!validateSmartForm()) {
+      toast.error('Please fix the form errors before submitting')
+      return
+    }
+
+    try {
+      const entryData = {
+        client_id: smartFormData.client_pseudonym,
+        client_pseudonym: smartFormData.client_pseudonym,
+        session_date: smartFormData.date,
+        place_of_practice: smartFormData.place_of_practice,
+        presenting_issues: smartFormData.presenting_issues,
+        session_activity_types: smartFormData.dcc_activity_types,
+        duration_minutes: smartFormData.duration.toString(),
+        reflections_on_experience: smartFormData.description,
+        simulated: smartFormData.simulated_client,
+        supervisor_reviewed: smartFormData.supervisor_reviewed,
+        entry_type: 'client_contact',
+        week_starting: calculateWeekStarting(smartFormData.date)
+      }
+
+      await createSectionAEntry(entryData)
+      
+      // Reset form
+      setSmartFormData({
+        date: new Date().toISOString().split('T')[0],
+        client_pseudonym: '',
+        place_of_practice: '',
+        presenting_issues: '',
+        activity_types: [],
+        description: '',
+        duration: 1.0,
+        simulated_client: false,
+        supervisor_reviewed: false
+      })
+      setFormErrors({})
+      setShowSmartForm(false)
+      loadDCCEntries()
+      
+      toast.success('Entry saved successfully. Consider logging supervision if applicable.')
+    } catch (error) {
+      console.error('Error saving entry:', error)
+      toast.error('Failed to save entry. Please try again.')
+    }
+  }
+
   const clearFilters = () => {
     setDateFrom('')
     setDateTo('')
@@ -470,10 +641,13 @@ export default function SectionADashboard() {
     setDurationMin('')
     setDurationMax('')
     setGroupByWeek(false)
+    setClientPseudonym('')
+    setActivityType('all')
+    setReviewedFilter('all')
     setPagination(prev => ({ ...prev, current_page: 1 }))
   }
 
-  const hasActiveFilters = dateFrom || dateTo || (sessionType && sessionType !== 'all') || durationMin || durationMax || groupByWeek
+  const hasActiveFilters = dateFrom || dateTo || (sessionType && sessionType !== 'all') || durationMin || durationMax || groupByWeek || clientPseudonym || activityType !== 'all' || reviewedFilter !== 'all'
 
   const toggleWeekExpansion = (weekStart: string) => {
     setExpandedWeeks(prev => {
@@ -575,12 +749,12 @@ export default function SectionADashboard() {
               </div>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <Button 
-                      onClick={() => navigate('/section-a/create')}
+                      onClick={() => setShowSmartForm(true)}
                       size="lg"
                       className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg"
                     >
                       <Plus className="h-5 w-5 mr-2" />
-                      New DCC Entry
+                      Log DCC Entry
                     </Button>
                     <Button 
                       onClick={() => handleAddICRA()}
@@ -590,25 +764,27 @@ export default function SectionADashboard() {
                       <Plus className="h-5 w-5 mr-2" />
                       New ICRA Entry
                     </Button>
-                    <Button 
-                      variant="outline"
-                      size="lg"
-                      className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
-                    >
-                      <BarChart3 className="h-5 w-5 mr-2" />
-                      View Reports
-                    </Button>
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  onClick={() => window.location.href = '/logbook'}
+                  className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+                >
+                  <BarChart3 className="h-5 w-5 mr-2" />
+                  Weekly Logbooks
+                </Button>
                   </div>
             </div>
           </div>
         </div>
 
 
-        {/* Hours Summary */}
+        {/* Section A Client Hours Compliance Dashboard */}
         {(() => {
           // Calculate hours summary - use ALL entries for cumulative totals, not filtered ones
           let totalDccHours = 0
           let totalCRAHours = 0
+          let totalICRAHours = 0
           let simulatedDccHours = 0
 
           allEntries.forEach(entry => {
@@ -620,8 +796,10 @@ export default function SectionADashboard() {
               if (entry.simulated) {
                 simulatedDccHours += entryHours
               }
-            } else if (entry.entry_type === 'cra' || entry.entry_type === 'independent_activity') {
+            } else if (entry.entry_type === 'cra') {
               totalCRAHours += entryHours
+            } else if (entry.entry_type === 'independent_activity') {
+              totalICRAHours += entryHours
             }
 
             // Add CRA hours from nested entries
@@ -634,123 +812,342 @@ export default function SectionADashboard() {
             }
           })
 
-          // AHPRA 5+1 Requirements (assuming provisional/intern role)
-          const dccMinimum = 500 // hours
-          const simulatedMaximum = 60 // hours
-          const practiceHoursTotal = 1360 // hours (DCC + CRA combined)
-          
-          const remainingDcc = Math.max(0, dccMinimum - totalDccHours)
-          const remainingPractice = Math.max(0, practiceHoursTotal - (totalDccHours + totalCRAHours))
-          const simulatedOverflow = Math.max(0, simulatedDccHours - simulatedMaximum)
+          // Mock user profile data - in real implementation, this would come from user profile
+          const userProfile = {
+            internship_start_date: '2024-01-01', // Mock start date
+            internship_weeks_estimate: 52, // 1 year internship
+            weekly_clinical_commitment_hours: 26 // 26 hours per week (assume 60% DCC, 40% CRA)
+          }
 
-              const progressPercentage = Math.min((totalDccHours + totalCRAHours) / 1360 * 100, 100)
-              
-              return (
-                <Card className="mb-6 brand-card">
+          // Calculate internship progress
+          const calculateInternshipProgress = () => {
+            const startDate = new Date(userProfile.internship_start_date)
+            const currentDate = new Date()
+            const weeksElapsed = Math.max(1, Math.ceil((currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7)))
+            const progressPercentage = Math.min(weeksElapsed / userProfile.internship_weeks_estimate, 1) * 100 // Convert to percentage
+            const expectedDccHours = weeksElapsed * userProfile.weekly_clinical_commitment_hours * 0.6 // 60% DCC
+            const expectedCRAHours = weeksElapsed * userProfile.weekly_clinical_commitment_hours * 0.4 // 40% CRA
+            return { weeksElapsed, progressPercentage, expectedDccHours, expectedCRAHours }
+          }
+
+          const internshipProgress = calculateInternshipProgress()
+
+          // Calculate progress ratios
+          const dccProgressRatio = totalDccHours / internshipProgress.expectedDccHours
+          const craProgressRatio = totalCRAHours / internshipProgress.expectedCRAHours
+
+          // RAG Status calculation
+          const getRAGStatus = (ratio: number) => {
+            if (ratio < 0.75) return { status: 'red', label: 'Non-compliant', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' }
+            if (ratio < 1) return { status: 'amber', label: 'At Risk', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' }
+            return { status: 'green', label: 'On Track', color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' }
+          }
+
+          const dccRAGStatus = getRAGStatus(dccProgressRatio)
+          const craRAGStatus = getRAGStatus(craProgressRatio)
+
+          // Supervisor review tracking
+          const reviewedEntries = allEntries.filter(entry => entry.supervisor_reviewed).length
+          const reviewPercentage = allEntries.length > 0 ? (reviewedEntries / allEntries.length) * 100 : 0
+
+          return (
+            <>
+              {/* Tooltip Toggle */}
+              <div className="flex justify-end mb-4">
+                <div className="flex items-center space-x-2 bg-white/80 backdrop-blur-sm rounded-lg px-4 py-2 shadow-sm border border-gray-200">
+                  <span className="text-sm text-gray-600 font-medium">Show Tooltips</span>
+                  <button
+                    onClick={() => setShowTooltips(!showTooltips)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                      showTooltips ? 'bg-primary' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        showTooltips ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* Compliance Overview Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
+                {/* Total DCC Logged */}
+                <div className="relative group">
+                  <Card className={`brand-card hover:shadow-md transition-all duration-300 ${dccRAGStatus.border} ${dccRAGStatus.bg}`}>
                   <CardContent className="p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="h-8 w-8 bg-primary rounded-full flex items-center justify-center">
-                        <Award className="h-4 w-4 text-white" />
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                        <Target className="h-6 w-6 text-primary" />
                       </div>
-                      <div>
-                        <h2 className="text-xl font-headings text-textDark">AHPRA 5+1 Program Progress</h2>
-                        <p className="text-textLight font-body text-sm">Track your internship requirements</p>
-                      </div>
+                      <Badge className={`${dccRAGStatus.status === 'green' ? 'bg-green-500' : dccRAGStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'} text-white text-xs font-semibold`}>
+                        {dccRAGStatus.label}
+                      </Badge>
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      {/* DCC Hours */}
-                      <div className="text-center p-4 bg-bgCard rounded-lg border border-border hover:shadow-sm transition-all duration-300">
-                        <div className="h-10 w-10 bg-primary rounded-full flex items-center justify-center mx-auto mb-2">
-                          <Target className="h-5 w-5 text-white" />
-                        </div>
-                        <div className="text-2xl font-bold text-textDark mb-1">
-                          {formatDurationWithUnit(totalDccHours * 60)}
-                        </div>
-                        <div className="text-xs font-semibold text-textDark mb-1 font-body">Direct Client Contact</div>
-                        <div className="text-xs text-textLight mb-2">Target: 500h</div>
-                        {remainingDcc > 0 ? (
-                          <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
-                            {formatDurationWithUnit(remainingDcc * 60)} remaining
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
-                            ✓ Met
-                          </Badge>
-                        )}
-                        {simulatedDccHours > 0 && (
-                          <div className="mt-2 p-1 bg-primary/10 rounded text-xs border border-primary/20">
-                            <div className="font-semibold text-primary">
-                              {formatDurationWithUnit(simulatedDccHours * 60)} simulated
-                            </div>
-                            {simulatedOverflow > 0 && (
-                              <div className="text-accent font-semibold">
-                                +{formatDurationWithUnit(simulatedOverflow * 60)} over
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* CRA Hours */}
-                      <div className="text-center p-4 bg-bgCard rounded-lg border border-border hover:shadow-sm transition-all duration-300">
-                        <div className="h-10 w-10 bg-secondary rounded-full flex items-center justify-center mx-auto mb-2">
-                          <FileText className="h-5 w-5 text-white" />
-                        </div>
-                        <div className="text-2xl font-bold text-textDark mb-1">
-                          {formatDurationWithUnit(totalCRAHours * 60)}
-                        </div>
-                        <div className="text-xs font-semibold text-textDark mb-1 font-body">Client Related Activities</div>
-                        <div className="text-xs text-textLight mb-2">(includes ICRA)</div>
-                        <Badge variant="outline" className="text-secondary border-secondary text-xs font-semibold">
-                          Supporting DCC
-                        </Badge>
-                      </div>
-
-                      {/* Total Practice Hours */}
-                      <div className="text-center p-4 bg-bgCard rounded-lg border border-border hover:shadow-sm transition-all duration-300">
-                        <div className="h-10 w-10 bg-accent rounded-full flex items-center justify-center mx-auto mb-2">
-                          <TrendingUp className="h-5 w-5 text-white" />
-                        </div>
-                        <div className="text-2xl font-bold text-textDark mb-1">
-                          {formatDurationWithUnit((totalDccHours + totalCRAHours) * 60)}
-                        </div>
-                        <div className="text-xs font-semibold text-textDark mb-1 font-body">Total Practice Hours</div>
-                        <div className="text-xs text-textLight mb-2">Target: 1,360h</div>
-                        {remainingPractice > 0 ? (
-                          <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
-                            {formatDurationWithUnit(remainingPractice * 60)} remaining
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-secondary text-white border-secondary text-xs font-semibold">
-                            ✓ Met
-                          </Badge>
-                        )}
-                      </div>
+                    <div className="text-2xl font-bold text-textDark mb-1">
+                      {formatDurationWithUnit(totalDccHours * 60)}
                     </div>
-                    
-                    {/* Compact Progress Bar */}
-                    <div className="bg-bgCard p-4 rounded-lg border border-border">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-semibold text-textDark font-body">Overall Progress</span>
-                        <span className="text-lg font-bold text-primary">{progressPercentage.toFixed(1)}%</span>
-                      </div>
-                      <div className="relative">
-                        <div className="w-full bg-border rounded-full h-2 overflow-hidden">
-                          <div 
-                            className="bg-gradient-to-r from-primary via-secondary to-accent h-2 rounded-full transition-all duration-1000 ease-out"
-                            style={{ width: `${progressPercentage}%` }}
-                          ></div>
-                        </div>
-                        <div className="flex justify-between text-xs text-textLight mt-1">
-                          <span>0h</span>
-                          <span className="font-medium">1,360h target</span>
-                        </div>
-                      </div>
+                    <div className="text-xs font-semibold text-textDark mb-1 font-body">Total DCC Logged</div>
+                    <div className="text-xs text-textLight mb-2">Goal: {(userProfile.internship_weeks_estimate * userProfile.weekly_clinical_commitment_hours * 0.6).toFixed(0)}h total</div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-500 ${dccRAGStatus.status === 'green' ? 'bg-green-500' : dccRAGStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}
+                        style={{ width: `${Math.min(dccProgressRatio * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div className="text-xs text-textLight mt-1">
+                      {dccProgressRatio >= 1 ? `✓ ${(dccProgressRatio * 100).toFixed(1)}% complete` : `${(dccProgressRatio * 100).toFixed(1)}% of expected`}
                     </div>
                   </CardContent>
                 </Card>
-              )
+                  {/* Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg transition-opacity duration-200 pointer-events-none z-50 w-80 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="space-y-1">
+                      <p className="font-semibold">Direct Client Contact (DCC) Hours</p>
+                      <p>Time spent in direct face-to-face or virtual contact with clients for assessment, intervention, or consultation.</p>
+                      <p>Target: 60% of your clinical commitment hours. Current status: {dccRAGStatus.label.toLowerCase()}.</p>
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+
+                {/* Total CRA Logged */}
+                <div className="relative group">
+                  <Card className={`brand-card hover:shadow-md transition-all duration-300 ${craRAGStatus.border} ${craRAGStatus.bg}`}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
+                        <FileText className="h-6 w-6 text-secondary" />
+                      </div>
+                      <Badge className={`${craRAGStatus.status === 'green' ? 'bg-green-500' : craRAGStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'} text-white text-xs font-semibold`}>
+                        {craRAGStatus.label}
+                      </Badge>
+                    </div>
+                    <div className="text-2xl font-bold text-textDark mb-1">
+                      {formatDurationWithUnit(totalCRAHours * 60)}
+                    </div>
+                    <div className="text-xs font-semibold text-textDark mb-1 font-body">Total CRA Logged</div>
+                    <div className="text-xs text-textLight mb-2">Goal: {(userProfile.internship_weeks_estimate * userProfile.weekly_clinical_commitment_hours * 0.4).toFixed(0)}h total</div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-500 ${craRAGStatus.status === 'green' ? 'bg-green-500' : craRAGStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}
+                        style={{ width: `${Math.min(craProgressRatio * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div className="text-xs text-textLight mt-1">
+                      {craProgressRatio >= 1 ? `✓ ${(craProgressRatio * 100).toFixed(1)}% complete` : `${(craProgressRatio * 100).toFixed(1)}% of expected`}
+                    </div>
+                  </CardContent>
+                </Card>
+                  {/* Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg transition-opacity duration-200 pointer-events-none z-50 w-80 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="space-y-1">
+                      <p className="font-semibold">Client Related Activities (CRA) Hours</p>
+                      <p>Time spent on client-related work outside direct contact, including case notes, report writing, treatment planning, and consultation.</p>
+                      <p>Target: 40% of your clinical commitment hours. Current status: {craRAGStatus.label.toLowerCase()}.</p>
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+
+                {/* Total ICRA Logged */}
+                <div className="relative group">
+                  <Card className="brand-card hover:shadow-md transition-all duration-300">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
+                        <TrendingUp className="h-6 w-6 text-accent" />
+                      </div>
+                      <Badge variant="outline" className="text-accent border-accent text-xs font-semibold">
+                        ICRA
+                      </Badge>
+                    </div>
+                    <div className="text-2xl font-bold text-textDark mb-1">
+                      {formatDurationWithUnit(totalICRAHours * 60)}
+                    </div>
+                    <div className="text-xs font-semibold text-textDark mb-1 font-body">Total ICRA Logged</div>
+                    <div className="text-xs text-textLight mb-2">Independent activities</div>
+                    <div className="text-xs text-textLight">
+                      {totalICRAHours > 0 ? '✓ Activities logged' : 'No ICRA entries'}
+                    </div>
+                  </CardContent>
+                </Card>
+                  {/* Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg transition-opacity duration-200 pointer-events-none z-50 w-80 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="space-y-1">
+                      <p className="font-semibold">Independent Client Related Activities (ICRA)</p>
+                      <p>Independent client-related work performed outside supervised practice, including research, case studies, and professional development activities.</p>
+                      <p>These activities supplement your supervised practice and contribute to your overall professional development.</p>
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+
+                {/* Expected DCC to Date */}
+                <div className="relative group">
+                  <Card className="brand-card hover:shadow-md transition-all duration-300">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="h-12 w-12 bg-blue-500/10 rounded-full flex items-center justify-center">
+                        <Calendar className="h-6 w-6 text-blue-600" />
+                      </div>
+                      <Badge variant="outline" className="text-blue-600 border-blue-600 text-xs font-semibold">
+                        Expected
+                      </Badge>
+                    </div>
+                    <div className="text-2xl font-bold text-textDark mb-1">
+                      {internshipProgress.expectedDccHours.toFixed(0)}h
+                    </div>
+                    <div className="text-xs font-semibold text-textDark mb-1 font-body">Expected DCC to Date</div>
+                    <div className="text-xs text-textLight mb-2">Based on 60% DCC commitment</div>
+                    <div className="text-xs text-textLight">
+                      {internshipProgress.weeksElapsed} weeks elapsed
+                    </div>
+                  </CardContent>
+                </Card>
+                  {/* Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg transition-opacity duration-200 pointer-events-none z-50 w-80 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="space-y-1">
+                      <p className="font-semibold">Expected DCC Hours to Date</p>
+                      <p>Calculated based on your internship start date, weekly clinical commitment, and the 60% DCC allocation.</p>
+                      <p>Formula: {internshipProgress.weeksElapsed} weeks × {userProfile.weekly_clinical_commitment_hours} hours/week × 60% = {internshipProgress.expectedDccHours.toFixed(0)} hours</p>
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+
+                {/* Expected CRA to Date */}
+                <div className="relative group">
+                  <Card className="brand-card hover:shadow-md transition-all duration-300">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="h-12 w-12 bg-purple-500/10 rounded-full flex items-center justify-center">
+                        <Calendar className="h-6 w-6 text-purple-600" />
+                      </div>
+                      <Badge variant="outline" className="text-purple-600 border-purple-600 text-xs font-semibold">
+                        Expected
+                      </Badge>
+                    </div>
+                    <div className="text-2xl font-bold text-textDark mb-1">
+                      {internshipProgress.expectedCRAHours.toFixed(0)}h
+                    </div>
+                    <div className="text-xs font-semibold text-textDark mb-1 font-body">Expected CRA to Date</div>
+                    <div className="text-xs text-textLight mb-2">Based on 40% CRA commitment</div>
+                    <div className="text-xs text-textLight">
+                      {internshipProgress.weeksElapsed} weeks elapsed
+                    </div>
+                  </CardContent>
+                </Card>
+                  {/* Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg transition-opacity duration-200 pointer-events-none z-50 w-80 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="space-y-1">
+                      <p className="font-semibold">Expected CRA Hours to Date</p>
+                      <p>Calculated based on your internship start date, weekly clinical commitment, and the 40% CRA allocation.</p>
+                      <p>Formula: {internshipProgress.weeksElapsed} weeks × {userProfile.weekly_clinical_commitment_hours} hours/week × 40% = {internshipProgress.expectedCRAHours.toFixed(0)} hours</p>
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+
+                {/* Supervisor Reviews */}
+                <div className="relative group">
+                  <Card className="brand-card hover:shadow-md transition-all duration-300">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="h-12 w-12 bg-green-500/10 rounded-full flex items-center justify-center">
+                        <Eye className="h-6 w-6 text-green-600" />
+                      </div>
+                      <Badge variant="outline" className="text-green-600 border-green-600 text-xs font-semibold">
+                        {reviewPercentage.toFixed(0)}%
+                      </Badge>
+                    </div>
+                    <div className="text-2xl font-bold text-textDark mb-1">
+                      {reviewedEntries}/{allEntries.length}
+                    </div>
+                    <div className="text-xs font-semibold text-textDark mb-1 font-body">Supervisor Reviews</div>
+                    <div className="text-xs text-textLight mb-2">Target: ≥75% reviewed</div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-500 ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                        style={{ width: `${Math.min(reviewPercentage, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div className="text-xs text-textLight mt-1">
+                      {reviewPercentage >= 75 ? '✓ Target met' : `${(75 - reviewPercentage).toFixed(1)}% to target`}
+                    </div>
+                  </CardContent>
+                </Card>
+                  {/* Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg transition-opacity duration-200 pointer-events-none z-50 w-80 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="space-y-1">
+                      <p className="font-semibold">Supervisor Review Progress</p>
+                      <p>Tracks how many of your Section A entries have been reviewed by your supervisor.</p>
+                      <p>Target: At least 75% of entries should be reviewed. Current: {reviewPercentage.toFixed(1)}% reviewed ({reviewedEntries} of {allEntries.length} entries).</p>
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+                </div>
+
+              {/* Compliance Summary */}
+              <div className="bg-bgCard p-6 rounded-lg border border-border mb-8">
+                <h3 className="text-lg font-semibold text-textDark mb-4 font-headings">Section A Compliance Summary</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${dccRAGStatus.status === 'green' ? 'bg-green-500' : dccRAGStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                      <span className="font-medium">DCC Hours: {formatDurationWithUnit(totalDccHours * 60)} / {internshipProgress.expectedDccHours.toFixed(0)}h expected</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${craRAGStatus.status === 'green' ? 'bg-green-500' : craRAGStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                      <span className="font-medium">CRA Hours: {formatDurationWithUnit(totalCRAHours * 60)} / {internshipProgress.expectedCRAHours.toFixed(0)}h expected</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                      <span className="font-medium">Supervisor Reviews: {reviewPercentage.toFixed(1)}% (Target: ≥75%)</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="font-medium">Internship Progress: {internshipProgress.weeksElapsed} weeks ({internshipProgress.progressPercentage.toFixed(0)}%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="font-medium">ICRA Activities: {formatDurationWithUnit(totalICRAHours * 60)} logged</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="font-medium">Simulated DCC: {formatDurationWithUnit(simulatedDccHours * 60)} of {formatDurationWithUnit(totalDccHours * 60)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Legend */}
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center gap-6 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                      <span className="text-textLight">On Track / Compliant</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                      <span className="text-textLight">At Risk (75-99%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <span className="text-textLight">Non-Compliant (&lt;75%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="text-textLight">Informational</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )
         })()}
 
         {/* Enhanced Filters and Controls */}
@@ -908,6 +1305,30 @@ export default function SectionADashboard() {
                       </button>
                     </Badge>
                   )}
+                  {clientPseudonym && (
+                    <Badge variant="secondary" className="bg-secondary/10 text-secondary">
+                      Client: {clientPseudonym}
+                      <button onClick={() => setClientPseudonym('')} className="ml-2 hover:bg-secondary/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {activityType !== 'all' && (
+                    <Badge variant="secondary" className="bg-accent/10 text-accent">
+                      Type: {activityType}
+                      <button onClick={() => setActivityType('all')} className="ml-2 hover:bg-accent/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {reviewedFilter !== 'all' && (
+                    <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">
+                      Review: {reviewedFilter === 'reviewed' ? 'Reviewed' : 'Not Reviewed'}
+                      <button onClick={() => setReviewedFilter('all')} className="ml-2 hover:bg-blue-500/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
                 </>
               )}
             </div>
@@ -935,6 +1356,36 @@ export default function SectionADashboard() {
                 />
               </div>
               
+              {/* Client Pseudonym */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Client Pseudonym</label>
+                <Input
+                  type="text"
+                  value={clientPseudonym}
+                  onChange={(e) => setClientPseudonym(e.target.value)}
+                  placeholder="Search by client..."
+                />
+              </div>
+              
+              {/* Activity Type */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Activity Type</label>
+                <Select value={activityType} onValueChange={setActivityType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    <SelectItem value="DCC">Direct Client Contact</SelectItem>
+                    <SelectItem value="CRA">Client Related Activity</SelectItem>
+                    <SelectItem value="ICRA">Independent CRA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Additional filters */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               {/* Session Type */}
               <div>
                 <label className="block text-sm font-medium mb-1">Session Type</label>
@@ -971,6 +1422,21 @@ export default function SectionADashboard() {
                     className="flex-1"
                   />
                 </div>
+              </div>
+
+              {/* Supervisor Review Filter */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Supervisor Review</label>
+                <Select value={reviewedFilter} onValueChange={setReviewedFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All entries" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All entries</SelectItem>
+                    <SelectItem value="reviewed">Reviewed only</SelectItem>
+                    <SelectItem value="not_reviewed">Not reviewed</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             
@@ -1172,6 +1638,11 @@ export default function SectionADashboard() {
                         {entry.simulated && (
                           <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
                             Simulated
+                          </Badge>
+                        )}
+                        {entry.supervisor_reviewed && (
+                          <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-green-600 border-green-600">
+                            ✓ Reviewed
                           </Badge>
                         )}
                       </div>
@@ -1549,6 +2020,11 @@ export default function SectionADashboard() {
                                       Simulated
                                     </Badge>
                                   )}
+                                  {entry.supervisor_reviewed && (
+                                    <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-green-600 border-green-600">
+                                      ✓ Reviewed
+                                    </Badge>
+                                  )}
                                 </div>
                                 
                                 <div className="flex items-center gap-2">
@@ -1920,6 +2396,235 @@ export default function SectionADashboard() {
               showClientIdInput={true}
               isEditing={!!editingCRAId}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Smart Form Modal */}
+      {showSmartForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Log Direct Client Contact (DCC)</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowSmartForm(false)
+                  setFormErrors({})
+                  setShowSuggestions(false)
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleSmartFormSubmit(); }} className="space-y-6">
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date of Activity <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="date"
+                  value={smartFormData.date}
+                  onChange={(e) => setSmartFormData(prev => ({ ...prev, date: e.target.value }))}
+                  className={formErrors.date ? 'border-red-500' : ''}
+                />
+                {formErrors.date && <p className="text-red-500 text-xs mt-1">{formErrors.date}</p>}
+              </div>
+
+              {/* Client Pseudonym with Autosuggest */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Client Pseudonym <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="text"
+                  value={smartFormData.client_pseudonym}
+                  onChange={(e) => {
+                    setSmartFormData(prev => ({ ...prev, client_pseudonym: e.target.value }))
+                    getClientSuggestions(e.target.value)
+                    setShowSuggestions(true)
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                  placeholder="Type to search previous clients..."
+                  className={formErrors.client_pseudonym ? 'border-red-500' : ''}
+                />
+                {showSuggestions && clientSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                    {clientSuggestions.map((client, index) => (
+                      <div
+                        key={index}
+                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                        onClick={() => handleClientSelect(client)}
+                      >
+                        {client}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {formErrors.client_pseudonym && <p className="text-red-500 text-xs mt-1">{formErrors.client_pseudonym}</p>}
+              </div>
+
+              {/* Place of Practice */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Place of Practice <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="text"
+                  value={smartFormData.place_of_practice}
+                  onChange={(e) => setSmartFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
+                  className={formErrors.place_of_practice ? 'border-red-500' : ''}
+                />
+                {formErrors.place_of_practice && <p className="text-red-500 text-xs mt-1">{formErrors.place_of_practice}</p>}
+              </div>
+
+              {/* Presenting Issues */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Presenting Issues <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical min-h-[80px]"
+                  value={smartFormData.presenting_issues}
+                  onChange={(e) => setSmartFormData(prev => ({ ...prev, presenting_issues: e.target.value }))}
+                  placeholder="Describe the client's presenting issues..."
+                />
+                {formErrors.presenting_issues && <p className="text-red-500 text-xs mt-1">{formErrors.presenting_issues}</p>}
+              </div>
+
+              {/* DCC Activity Types */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  DCC Activity Type(s) <span className="text-red-500">*</span>
+                </label>
+                <div className="space-y-2">
+                  {[
+                    'Psychological Assessment',
+                    'Intervention',
+                    'Prevention',
+                    'Evaluation'
+                  ].map((type) => (
+                    <label key={type} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={smartFormData.dcc_activity_types.includes(type)}
+                        onChange={(e) => {
+                          const updatedTypes = e.target.checked
+                            ? [...smartFormData.dcc_activity_types, type]
+                            : smartFormData.dcc_activity_types.filter(t => t !== type)
+                          setSmartFormData(prev => ({ ...prev, dcc_activity_types: updatedTypes }))
+                        }}
+                        className="rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm text-gray-700">{type}</span>
+                    </label>
+                  ))}
+                </div>
+                {formErrors.dcc_activity_types && <p className="text-red-500 text-xs mt-1">{formErrors.dcc_activity_types}</p>}
+              </div>
+
+              {/* Activity Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Activity Description <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical min-h-[100px]"
+                  value={smartFormData.description}
+                  onChange={(e) => setSmartFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
+                />
+                {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
+              </div>
+
+              {/* Duration */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Duration (minutes) <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="number"
+                  min="5"
+                  step="5"
+                  value={smartFormData.duration}
+                  onChange={(e) => setSmartFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                  className={formErrors.duration ? 'border-red-500' : ''}
+                />
+                
+                {/* Quick Duration Options */}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="text-xs text-gray-500 mr-2">Quick options:</span>
+                  {[30, 50, 60, 75, 90].map((minutes) => (
+                    <button
+                      key={minutes}
+                      type="button"
+                      onClick={() => setSmartFormData(prev => ({ ...prev, duration: minutes }))}
+                      className={`px-2 py-1 text-xs rounded border ${
+                        smartFormData.duration === minutes
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                      }`}
+                    >
+                      {minutes}min
+                    </button>
+                  ))}
+                </div>
+                
+                {formErrors.duration && <p className="text-red-500 text-xs mt-1">{formErrors.duration}</p>}
+              </div>
+
+              {/* Simulated Client */}
+              <div>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={smartFormData.simulated_client}
+                    onChange={(e) => setSmartFormData(prev => ({ ...prev, simulated_client: e.target.checked }))}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm text-gray-700">Simulated Client</span>
+                </label>
+                {formErrors.simulated_client && <p className="text-red-500 text-xs mt-1">{formErrors.simulated_client}</p>}
+              </div>
+
+              {/* Supervisor Reviewed */}
+              <div>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={smartFormData.supervisor_reviewed}
+                    onChange={(e) => setSmartFormData(prev => ({ ...prev, supervisor_reviewed: e.target.checked }))}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm text-gray-700">Reviewed by Supervisor?</span>
+                </label>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowSmartForm(false)
+                    setFormErrors({})
+                    setShowSuggestions(false)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  Save Entry
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

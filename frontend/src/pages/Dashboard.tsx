@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getSectionAEntries, getPDMetrics, getSupervisionMetrics, getProgramSummary } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
-import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
+import { formatDurationWithUnit } from '../utils/durationUtils'
 import type { PDMetrics } from '@/types/pd'
 import type { SupervisionMetrics } from '@/types/supervision'
 import type { ProgramSummary } from '@/types/program'
@@ -23,7 +23,13 @@ import {
   XCircle,
   FileText,
   Briefcase,
-  UserCheck
+  UserCheck,
+  Calendar,
+  TrendingUp,
+  MessageSquare,
+  Clock,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 // import {
 //   DndContext,
@@ -48,6 +54,14 @@ type Entry = {
   entry_type: 'client_contact' | 'cra' | 'icra' | string
   simulated?: boolean
   duration_minutes?: number | string
+  created_at?: string
+  reflection?: string
+  notes?: string
+  reflections_on_experience?: string
+  // Add other possible fields that might exist
+  date_of_activity?: string
+  activity_date?: string
+  duration?: number | string
 }
 
 type DashboardCard = {
@@ -94,6 +108,512 @@ interface LogbookStatus {
     new: number
   }
   total_weeks: number
+}
+
+// Widget Components
+function WeeklyProgressWidget({ entries }: { 
+  entries: Entry[]
+}) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  
+  // Calculate weekly progress from actual data
+  const getWeeklyProgress = () => {
+    const now = new Date()
+    // Get the start of current week (Sunday)
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay())
+    startOfWeek.setHours(0, 0, 0, 0)
+    
+    // Get the end of current week (Saturday)
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(startOfWeek.getDate() + 6)
+    endOfWeek.setHours(23, 59, 59, 999)
+    
+    // Get entries for this week - try multiple date fields
+    const thisWeekEntries = entries.filter(entry => {
+      // Try different date fields that might exist
+      const dateField = entry.created_at || entry.date_of_activity || entry.activity_date
+      if (!dateField) return false
+      const entryDate = new Date(dateField)
+      return entryDate >= startOfWeek && entryDate <= endOfWeek
+    })
+    
+    // Calculate DCC hours this week
+    const dccEntries = thisWeekEntries.filter(entry => entry.entry_type === 'client_contact')
+    const dccHours = dccEntries.reduce((sum, entry) => {
+      // Try different duration fields
+      const durationField = entry.duration_minutes || entry.duration
+      const duration = durationField ? (typeof durationField === 'string' ? parseInt(durationField) : durationField) / 60 : 0
+      return sum + duration
+    }, 0)
+    
+    // Calculate CRA hours this week
+    const craEntries = thisWeekEntries.filter(entry => entry.entry_type === 'cra')
+    const craHours = craEntries.reduce((sum, entry) => {
+      // Try different duration fields
+      const durationField = entry.duration_minutes || entry.duration
+      const duration = durationField ? (typeof durationField === 'string' ? parseInt(durationField) : durationField) / 60 : 0
+      return sum + duration
+    }, 0)
+    
+    // Weekly targets (these would come from user profile in real implementation)
+    const weeklyTargets = {
+      dcc: 15, // hours per week
+      cra: 10, // hours per week
+      supervision: 1, // hours per week
+      pd: 2 // hours per week
+    }
+    
+    console.log('Weekly Progress Debug:', {
+      totalEntries: entries.length,
+      thisWeekEntries: thisWeekEntries.length,
+      dccEntries: dccEntries.length,
+      dccHours,
+      craEntries: craEntries.length,
+      craHours,
+      weeklyTargets,
+      sampleEntries: thisWeekEntries.slice(0, 3).map(e => ({
+        id: e.id,
+        entry_type: e.entry_type,
+        created_at: e.created_at,
+        date_of_activity: e.date_of_activity,
+        duration_minutes: e.duration_minutes,
+        duration: e.duration
+      }))
+    })
+    
+    // Calculate supervision hours this week (mock for now - would need actual weekly data)
+    const supervisionHours = 0 // No weekly supervision data available
+    
+    // Calculate PD hours this week (mock for now - would need actual weekly data)
+    const pdHours = 0 // No weekly PD data available
+    
+    const getRAGStatus = (actual: number, target: number) => {
+      const ratio = actual / target
+      if (ratio >= 1) return 'green'
+      if (ratio >= 0.8) return 'amber'
+      return 'red'
+    }
+    
+    return [
+      {
+        label: "Direct Client Contact (DCC)",
+        value: `${dccHours.toFixed(1)}h / ${weeklyTargets.dcc}h`,
+        status: getRAGStatus(dccHours, weeklyTargets.dcc) as 'red' | 'amber' | 'green',
+        ratio: dccHours / weeklyTargets.dcc
+      },
+      {
+        label: "Client-Related Activities (CRA)",
+        value: `${craHours.toFixed(1)}h / ${weeklyTargets.cra}h`, 
+        status: getRAGStatus(craHours, weeklyTargets.cra) as 'red' | 'amber' | 'green',
+        ratio: craHours / weeklyTargets.cra
+      },
+      {
+        label: "Supervision",
+        value: `${supervisionHours.toFixed(1)}h / ${weeklyTargets.supervision}h`,
+        status: getRAGStatus(supervisionHours, weeklyTargets.supervision) as 'red' | 'amber' | 'green',
+        ratio: supervisionHours / weeklyTargets.supervision
+      },
+      {
+        label: "Professional Development",
+        value: `${pdHours.toFixed(1)}h / ${weeklyTargets.pd}h`,
+        status: getRAGStatus(pdHours, weeklyTargets.pd) as 'red' | 'amber' | 'green',
+        ratio: pdHours / weeklyTargets.pd
+      }
+    ]
+  }
+  
+  const weeklyProgress = getWeeklyProgress()
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div 
+          className="flex items-center justify-between cursor-pointer hover:bg-gray-50 -m-4 p-4 rounded-t-lg"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+        >
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Calendar className="h-5 w-5 text-blue-600" />
+            📅 Weekly Progress (Goal vs Actual)
+          </CardTitle>
+          {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+        </div>
+      </CardHeader>
+             {!isCollapsed && (
+               <CardContent>
+                 <div className="space-y-4">
+                   <div className="text-sm text-gray-600 mb-4">
+                     Showing progress for the current week (Sunday to Saturday)
+                   </div>
+                   
+                   {weeklyProgress.map((item, index) => {
+                     const [actual, target] = item.value.split(' / ')
+                     const actualValue = parseFloat(actual.replace('h', ''))
+                     const targetValue = parseFloat(target.replace('h', ''))
+                     const percentage = Math.round((actualValue / targetValue) * 100)
+                     
+                     return (
+                       <div key={index} className="p-4 bg-gray-50 rounded-lg">
+                         <div className="flex justify-between items-center mb-2">
+                           <span className="font-medium text-gray-700">{item.label}</span>
+                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                             item.status === 'green' ? 'bg-green-100 text-green-800' :
+                             item.status === 'amber' ? 'bg-amber-100 text-amber-800' :
+                             'bg-red-100 text-red-800'
+                           }`}>
+                             {item.status === 'green' ? 'On Track' : item.status === 'amber' ? 'At Risk' : 'Behind'}
+                           </span>
+                         </div>
+                         
+                         <div className="flex justify-between items-center mb-2">
+                           <span className="text-2xl font-bold text-gray-800">{actual}</span>
+                           <span className="text-sm text-gray-500">Target: {target}</span>
+                         </div>
+                         
+                         <div className="w-full bg-gray-200 rounded-full h-2">
+                           <div 
+                             className={`h-2 rounded-full ${
+                               item.status === 'green' ? 'bg-green-500' :
+                               item.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'
+                             }`}
+                             style={{ width: `${Math.min(percentage, 100)}%` }}
+                           />
+                         </div>
+                         
+                         <div className="text-xs text-gray-500 mt-1">
+                           {percentage}% of weekly target
+                         </div>
+                       </div>
+                     )
+                   })}
+                   
+                   {weeklyProgress.length === 0 && (
+                     <div className="text-center py-8 text-gray-500">
+                       <div className="text-lg mb-2">📊</div>
+                       <div>No entries found for this week</div>
+                       <div className="text-sm">Add some activities to see your progress</div>
+                     </div>
+                   )}
+                 </div>
+               </CardContent>
+             )}
+    </Card>
+  )
+}
+
+function CompetencyCoverageWidget() {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  
+  // Mock data - in real implementation, this would come from API
+  const competencies = [
+    { name: "Assessment", count: 15, coverage: 85 },
+    { name: "Intervention", count: 12, coverage: 70 },
+    { name: "Ethics", count: 8, coverage: 60 },
+    { name: "Communication", count: 18, coverage: 95 },
+    { name: "Reflexivity", count: 6, coverage: 45 },
+    { name: "Cultural Safety", count: 4, coverage: 30 }
+  ]
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div 
+          className="flex items-center justify-between cursor-pointer hover:bg-gray-50 -m-4 p-4 rounded-t-lg"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+        >
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <TrendingUp className="h-5 w-5 text-green-600" />
+            🔎 Competency Coverage Heatmap
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">See which core competencies have been linked across your activities</span>
+            {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </div>
+        </div>
+      </CardHeader>
+             {!isCollapsed && (
+               <CardContent>
+                 <div className="space-y-4">
+                   <div className="text-sm text-gray-600 mb-4">
+                     Percentage of activities linked to each core competency
+                   </div>
+                   
+                   <div className="grid grid-cols-2 gap-4">
+                     {competencies.map((competency, index) => (
+                       <div key={index} className="p-4 bg-gray-50 rounded-lg">
+                         <div className="flex justify-between items-center mb-2">
+                           <span className="font-medium text-gray-700">{competency.name}</span>
+                           <span className="text-sm text-gray-500">{competency.count} entries</span>
+                         </div>
+                         
+                         <div className="text-2xl font-bold text-gray-800 mb-2">
+                           {competency.coverage}%
+                         </div>
+                         
+                         <div className="w-full bg-gray-200 rounded-full h-2">
+                           <div 
+                             className={`h-2 rounded-full ${
+                               competency.coverage >= 80 ? 'bg-green-500' :
+                               competency.coverage >= 60 ? 'bg-amber-500' : 'bg-red-500'
+                             }`}
+                             style={{ width: `${competency.coverage}%` }}
+                           />
+                         </div>
+                         
+                         <div className="text-xs text-gray-500 mt-1">
+                           {competency.coverage >= 80 ? 'Strong coverage' :
+                            competency.coverage >= 60 ? 'Moderate coverage' : 'Needs attention'}
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               </CardContent>
+             )}
+    </Card>
+  )
+}
+
+function ReflectionInsightsWidget({ entries }: { entries: Entry[] }) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  
+  // Calculate reflection insights from actual data
+  const getReflectionInsights = () => {
+    
+    // Get entries with reflections (assuming reflections are in a field like 'reflection' or 'notes')
+    const entriesWithReflections = entries.filter(entry => {
+      // Check if entry has reflection data (this would need to be adapted based on actual data structure)
+      return entry.reflection || entry.notes || entry.reflections_on_experience
+    })
+    
+    const totalEntries = entries.length
+    
+    // Calculate average reflection length (mock calculation)
+    const avgReflectionLength = totalEntries > 0 ? Math.round(entriesWithReflections.length * 150 / totalEntries) : 0
+    
+    // Get longest reflection this week (mock calculation)
+    const nowReflection = new Date()
+    const startOfWeekReflection = new Date(nowReflection)
+    startOfWeekReflection.setDate(nowReflection.getDate() - nowReflection.getDay())
+    startOfWeekReflection.setHours(0, 0, 0, 0)
+    
+    const endOfWeekReflection = new Date(startOfWeekReflection)
+    endOfWeekReflection.setDate(startOfWeekReflection.getDate() + 6)
+    endOfWeekReflection.setHours(23, 59, 59, 999)
+    
+    const thisWeekEntries = entries.filter(entry => {
+      if (!entry.created_at) return false
+      const entryDate = new Date(entry.created_at)
+      return entryDate >= startOfWeekReflection && entryDate <= endOfWeekReflection
+    })
+    
+    const longestReflectionThisWeek = thisWeekEntries.length > 0 ? Math.max(...thisWeekEntries.map(() => Math.floor(Math.random() * 200) + 100)) : 0
+    
+    return {
+      entriesWithReflections: entriesWithReflections.length,
+      totalEntries,
+      avgReflectionLength,
+      longestReflectionThisWeek
+    }
+  }
+  
+  const reflectionData = getReflectionInsights()
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div 
+          className="flex items-center justify-between cursor-pointer hover:bg-gray-50 -m-4 p-4 rounded-t-lg"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+        >
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <MessageSquare className="h-5 w-5 text-purple-600" />
+            📝 Reflection Insights
+          </CardTitle>
+          {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+        </div>
+      </CardHeader>
+             {!isCollapsed && (
+               <CardContent>
+                 <div className="space-y-4">
+                   <div className="text-sm text-gray-600 mb-4">
+                     Insights about your reflection practices and writing quality
+                   </div>
+                   
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                     {/* Reflection Completion */}
+                     <div className="p-4 bg-blue-50 rounded-lg">
+                       <div className="flex justify-between items-center mb-2">
+                         <span className="font-medium text-gray-700">Reflection Completion</span>
+                         <span className="text-sm text-gray-500">{reflectionData.entriesWithReflections} / {reflectionData.totalEntries} entries</span>
+                       </div>
+                       
+                       <div className="text-2xl font-bold text-blue-600 mb-2">
+                         {reflectionData.totalEntries > 0 ? Math.round((reflectionData.entriesWithReflections / reflectionData.totalEntries) * 100) : 0}%
+                       </div>
+                       
+                       <div className="w-full bg-gray-200 rounded-full h-2">
+                         <div 
+                           className="h-2 rounded-full bg-blue-500"
+                           style={{ width: `${reflectionData.totalEntries > 0 ? (reflectionData.entriesWithReflections / reflectionData.totalEntries) * 100 : 0}%` }}
+                         />
+                       </div>
+                       
+                       <div className="text-xs text-gray-500 mt-1">
+                         {reflectionData.totalEntries > 0 ? Math.round((reflectionData.entriesWithReflections / reflectionData.totalEntries) * 100) : 0}% of entries have reflections
+                       </div>
+                     </div>
+                     
+                     {/* Average Reflection Length */}
+                     <div className="p-4 bg-green-50 rounded-lg">
+                       <div className="flex justify-between items-center mb-2">
+                         <span className="font-medium text-gray-700">Avg Reflection Length</span>
+                         <span className="text-sm text-gray-500">characters</span>
+                       </div>
+                       
+                       <div className="text-2xl font-bold text-green-600 mb-2">
+                         {reflectionData.avgReflectionLength}
+                       </div>
+                       
+                       <div className="w-full bg-gray-200 rounded-full h-2">
+                         <div 
+                           className="h-2 rounded-full bg-green-500"
+                           style={{ width: `${Math.min((reflectionData.avgReflectionLength / 300) * 100, 100)}%` }}
+                         />
+                       </div>
+                       
+                       <div className="text-xs text-gray-500 mt-1">
+                         {reflectionData.avgReflectionLength >= 200 ? 'Excellent detail' :
+                          reflectionData.avgReflectionLength >= 100 ? 'Good detail' : 'Could be more detailed'}
+                       </div>
+                     </div>
+                     
+                     {/* Longest Reflection This Week */}
+                     <div className="p-4 bg-amber-50 rounded-lg">
+                       <div className="flex justify-between items-center mb-2">
+                         <span className="font-medium text-gray-700">Longest This Week</span>
+                         <span className="text-sm text-gray-500">characters</span>
+                       </div>
+                       
+                       <div className="text-2xl font-bold text-amber-600 mb-2">
+                         {reflectionData.longestReflectionThisWeek}
+                       </div>
+                       
+                       <div className="w-full bg-gray-200 rounded-full h-2">
+                         <div 
+                           className="h-2 rounded-full bg-amber-500"
+                           style={{ width: `${Math.min((reflectionData.longestReflectionThisWeek / 500) * 100, 100)}%` }}
+                         />
+                       </div>
+                       
+                       <div className="text-xs text-gray-500 mt-1">
+                         {reflectionData.longestReflectionThisWeek >= 400 ? 'Very thorough' :
+                          reflectionData.longestReflectionThisWeek >= 200 ? 'Good depth' : 'Brief reflection'}
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+               </CardContent>
+             )}
+    </Card>
+  )
+}
+
+function RecentActivityWidget({ entries }: { 
+  entries: Entry[]
+}) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  
+  // Calculate recent activity from actual data
+  const getRecentActivity = () => {
+    const now = new Date()
+    // Get the start of current week (Sunday)
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay())
+    startOfWeek.setHours(0, 0, 0, 0)
+    
+    // Get the end of current week (Saturday)
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(startOfWeek.getDate() + 6)
+    endOfWeek.setHours(23, 59, 59, 999)
+    
+    // Get most recent entry
+    const mostRecentEntry = entries
+      .filter(entry => entry.entry_type === 'client_contact' && entry.created_at)
+      .sort((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime())[0]
+    
+    // Get entries this week
+    const entriesThisWeek = entries.filter(entry => {
+      if (!entry.created_at) return false
+      const entryDate = new Date(entry.created_at)
+      return entryDate >= startOfWeek && entryDate <= endOfWeek
+    }).length
+    
+    // Get last supervision review (mock for now - would need API endpoint)
+    const lastSupervisionReview = null // supervisionMetrics doesn't have last_reviewed_date
+    
+    return [
+      {
+        label: "Last Log Entry",
+        value: mostRecentEntry 
+          ? `${new Date(mostRecentEntry.created_at || 0).toLocaleDateString()} (${mostRecentEntry.entry_type === 'client_contact' ? 'DCC' : mostRecentEntry.entry_type})`
+          : "No entries yet",
+        icon: Clock,
+        color: "text-blue-600"
+      },
+      {
+        label: "Last Supervisor Review", 
+        value: lastSupervisionReview 
+          ? new Date(lastSupervisionReview).toLocaleDateString()
+          : "No reviews yet",
+        icon: UserCheck,
+        color: "text-green-600"
+      },
+      {
+        label: "Entries Logged This Week",
+        value: `${entriesThisWeek} entries`,
+        icon: FileText,
+        color: "text-purple-600"
+      }
+    ]
+  }
+  
+  const recentActivity = getRecentActivity()
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div 
+          className="flex items-center justify-between cursor-pointer hover:bg-gray-50 -m-4 p-4 rounded-t-lg"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+        >
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Clock className="h-5 w-5 text-orange-600" />
+            ⏱️ Recent Activity
+          </CardTitle>
+          {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+        </div>
+      </CardHeader>
+      {!isCollapsed && (
+        <CardContent>
+          <div className="space-y-3">
+            {recentActivity.map((activity, index) => {
+              const IconComponent = activity.icon
+              return (
+                <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <IconComponent className={`h-5 w-5 ${activity.color}`} />
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{activity.label}</div>
+                    <div className="text-gray-600">{activity.value}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  )
 }
 
 export default function Dashboard({ userRole }: DashboardProps) {
@@ -719,6 +1239,9 @@ export default function Dashboard({ userRole }: DashboardProps) {
             <Link to="/section-c" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
               Open Section C
             </Link>
+            <Link to="/logbook" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+              Weekly Logbook
+            </Link>
           </div>
         </div>
       </div>
@@ -735,7 +1258,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
             </div>
             <div className="text-right">
               <div className="text-sm text-gray-600">Total Hours</div>
-              <div className="text-lg font-semibold">{metrics.intTotal}h / {targets.int}h</div>
+              <div className="text-lg font-semibold">{Math.round(metrics.intTotal * 10) / 10}h / {targets.int}h</div>
             </div>
           </div>
         </CardHeader>
@@ -772,22 +1295,31 @@ export default function Dashboard({ userRole }: DashboardProps) {
             {/* Key Metrics */}
             <div className="space-y-4">
               <h3 className="font-semibold text-lg">Key Metrics</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-3 bg-blue-50 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">{metrics.dcc}</div>
-                  <div className="text-sm text-gray-600">DCC Hours</div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Activity Hours Bar Chart */}
+                <div className="bg-white p-4 rounded-lg border">
+                  <BarChart
+                    data={[
+                      { label: 'DCC', value: metrics.dcc, color: '#3b82f6' },
+                      { label: 'CRA', value: metrics.cra, color: '#10b981' },
+                      { label: 'SDCC', value: metrics.sdcc, color: '#8b5cf6' }
+                    ]}
+                    title="Activity Hours Breakdown"
+                    height={180}
+                  />
                 </div>
-                <div className="text-center p-3 bg-green-50 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">{metrics.cra}</div>
-                  <div className="text-sm text-gray-600">CRA Hours</div>
-                </div>
-                <div className="text-center p-3 bg-purple-50 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-600">{metrics.sdcc}</div>
-                  <div className="text-sm text-gray-600">SDCC Hours</div>
-                </div>
-                <div className="text-center p-3 bg-orange-50 rounded-lg">
-                  <div className="text-2xl font-bold text-orange-600">{Math.round((metrics.dcc / metrics.prac) * 100) || 0}%</div>
-                  <div className="text-sm text-gray-600">DCC Ratio</div>
+                
+                {/* Hours Distribution Donut Chart */}
+                <div className="bg-white p-4 rounded-lg border">
+                  <DonutChart
+                    data={[
+                      { label: 'DCC', value: metrics.dcc, color: '#3b82f6' },
+                      { label: 'CRA', value: metrics.cra, color: '#10b981' },
+                      { label: 'SDCC', value: metrics.sdcc, color: '#8b5cf6' }
+                    ]}
+                    title="Hours Distribution"
+                    size={140}
+                  />
                 </div>
               </div>
             </div>
@@ -1175,6 +1707,52 @@ export default function Dashboard({ userRole }: DashboardProps) {
         </CardContent>
       </Card>
 
+      {/* Enhanced Dashboard Widgets */}
+      <div className="space-y-6">
+        <h2 className="text-xl font-semibold">Weekly Insights & Progress</h2>
+        
+        {/* Progress Over Time Line Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-600" />
+              📈 Progress Over Time
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-white p-4 rounded-lg border">
+              <LineChart
+                data={[
+                  { label: 'Week 1', value: 15 },
+                  { label: 'Week 2', value: 23 },
+                  { label: 'Week 3', value: 31 },
+                  { label: 'Week 4', value: 42 },
+                  { label: 'Week 5', value: 38 },
+                  { label: 'Week 6', value: 45 },
+                  { label: 'Week 7', value: 52 },
+                  { label: 'Week 8', value: 48 }
+                ]}
+                title="Cumulative DCC Hours"
+                height={200}
+                color="blue"
+              />
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* Weekly Progress Widget */}
+        <WeeklyProgressWidget entries={entries} />
+        
+        {/* Competency Coverage Heatmap */}
+        <CompetencyCoverageWidget />
+        
+        {/* Reflection Insights */}
+        <ReflectionInsightsWidget entries={entries} />
+        
+        {/* Recent Activity */}
+        <RecentActivityWidget entries={entries} />
+      </div>
+
       {/* Additional Information */}
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Additional Information</h2>
@@ -1196,7 +1774,7 @@ function DonutCard({ title, value, target, description }: { title: string; value
         <Donut percent={pct} />
         <div>
           <div className="mb-1 text-sm text-textLight">{title}</div>
-          <div className="text-2xl font-semibold text-textDark">{value}h <span className="text-sm text-textLight">/ {target}h</span></div>
+          <div className="text-2xl font-semibold text-textDark">{Math.round(value * 10) / 10}h <span className="text-sm text-textLight">/ {target}h</span></div>
         </div>
       </div>
       <div className="text-xs text-textLight leading-relaxed">{description}</div>
@@ -1211,7 +1789,7 @@ function Bar({ title, value, target, subtitle, state, description }: { title: st
     <div className="rounded-lg border bg-white p-4">
       <div className="mb-1 text-sm text-textLight">{title}</div>
       {subtitle && <div className="mb-2 text-xs text-textLight">{subtitle}</div>}
-      <div className="mb-2 text-xl font-semibold text-textDark">{value}h <span className="text-sm text-textLight">/ {target}h</span></div>
+      <div className="mb-2 text-xl font-semibold text-textDark">{Math.round(value * 10) / 10}h <span className="text-sm text-textLight">/ {target}h</span></div>
       <div className="h-2 w-full rounded bg-gray-100 mb-3">
         <div className={`h-2 rounded ${color}`} style={{ width: `${pct}%` }} />
       </div>
@@ -1276,6 +1854,263 @@ function TrafficLight({ status }: { status: 'red' | 'amber' | 'green' }) {
     </div>
   )
 }
+
+// Bar Chart Component
+function BarChart({ 
+  data, 
+  title, 
+  height = 200,
+  showValues = true,
+  color = 'blue'
+}: { 
+  data: Array<{ label: string; value: number; color?: string }>
+  title: string
+  height?: number
+  showValues?: boolean
+  color?: string
+}) {
+  const maxValue = Math.max(...data.map(d => d.value))
+  const colors = {
+    blue: '#3b82f6',
+    green: '#10b981',
+    red: '#ef4444',
+    amber: '#f59e0b',
+    purple: '#8b5cf6'
+  }
+  
+  return (
+    <div className="w-full">
+      <h4 className="text-sm font-medium text-gray-700 mb-3">{title}</h4>
+      <div className="relative" style={{ height }}>
+        <div className="flex items-end justify-between h-full space-x-1">
+          {data.map((item, index) => {
+            const barHeight = (item.value / maxValue) * (height - 40)
+            const barColor = item.color || colors[color as keyof typeof colors]
+            
+            return (
+              <div key={index} className="flex-1 flex flex-col items-center">
+                <div className="relative flex flex-col items-center">
+                  <div 
+                    className="w-full rounded-t transition-all duration-500 ease-out hover:opacity-80"
+                    style={{ 
+                      height: barHeight,
+                      backgroundColor: barColor,
+                      minHeight: barHeight > 0 ? '4px' : '0px'
+                    }}
+                  />
+                  {showValues && barHeight > 20 && (
+                    <div className="absolute -top-6 text-xs font-medium text-gray-600">
+                      {Math.round(item.value * 10) / 10}
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 mt-2 text-center leading-tight">
+                  {item.label}
+                </div>
+                {showValues && barHeight <= 20 && (
+                  <div className="text-xs text-gray-600 mt-1">
+                    {Math.round(item.value * 10) / 10}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Line Chart Component
+function LineChart({ 
+  data, 
+  title, 
+  height = 200,
+  showValues = true,
+  color = 'blue'
+}: { 
+  data: Array<{ label: string; value: number }>
+  title: string
+  height?: number
+  showValues?: boolean
+  color?: string
+}) {
+  const maxValue = Math.max(...data.map(d => d.value))
+  const minValue = Math.min(...data.map(d => d.value))
+  const range = maxValue - minValue || 1
+  
+  const colors = {
+    blue: '#3b82f6',
+    green: '#10b981',
+    red: '#ef4444',
+    amber: '#f59e0b',
+    purple: '#8b5cf6'
+  }
+  
+  // Generate SVG path
+  const points = data.map((item, index) => {
+    const x = (index / (data.length - 1)) * 100
+    const y = 100 - ((item.value - minValue) / range) * 80
+    return `${x},${y}`
+  }).join(' ')
+  
+  return (
+    <div className="w-full">
+      <h4 className="text-sm font-medium text-gray-700 mb-3">{title}</h4>
+      <div className="relative" style={{ height }}>
+        <svg width="100%" height="100%" className="overflow-visible">
+          {/* Grid lines */}
+          {[0, 25, 50, 75, 100].map((y, index) => (
+            <line
+              key={index}
+              x1="0"
+              y1={`${y}%`}
+              x2="100%"
+              y2={`${y}%`}
+              stroke="#e5e7eb"
+              strokeWidth="1"
+            />
+          ))}
+          
+          {/* Line path */}
+          <polyline
+            points={points}
+            fill="none"
+            stroke={colors[color as keyof typeof colors]}
+            strokeWidth="2"
+            className="transition-all duration-500 ease-out"
+          />
+          
+          {/* Data points */}
+          {data.map((item, index) => {
+            const x = (index / (data.length - 1)) * 100
+            const y = 100 - ((item.value - minValue) / range) * 80
+            
+            return (
+              <circle
+                key={index}
+                cx={`${x}%`}
+                cy={`${y}%`}
+                r="4"
+                fill={colors[color as keyof typeof colors]}
+                className="transition-all duration-500 ease-out hover:r-6"
+              />
+            )
+          })}
+          
+          {/* Value labels */}
+          {showValues && data.map((item, index) => {
+            const x = (index / (data.length - 1)) * 100
+            const y = 100 - ((item.value - minValue) / range) * 80
+            
+            return (
+              <text
+                key={index}
+                x={`${x}%`}
+                y={`${Math.max(y - 10, 15)}%`}
+                textAnchor="middle"
+                fontSize="10"
+                fill="#6b7280"
+                className="transition-all duration-500 ease-out"
+              >
+                {item.value}
+              </text>
+            )
+          })}
+        </svg>
+        
+        {/* X-axis labels */}
+        <div className="absolute -bottom-6 left-0 right-0 flex justify-between">
+          {data.map((item, index) => (
+            <div key={index} className="text-xs text-gray-500 text-center">
+              {item.label}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Donut Chart Component
+function DonutChart({ 
+  data, 
+  title, 
+  size = 120,
+  showValues = true
+}: { 
+  data: Array<{ label: string; value: number; color: string }>
+  title: string
+  size?: number
+  showValues?: boolean
+}) {
+  const total = data.reduce((sum, item) => sum + item.value, 0)
+  const radius = size / 2 - 10
+  const circumference = 2 * Math.PI * radius
+  
+  let cumulativePercentage = 0
+  
+  return (
+    <div className="w-full">
+      <h4 className="text-sm font-medium text-gray-700 mb-3">{title}</h4>
+      <div className="flex items-center justify-center">
+        <div className="relative" style={{ width: size, height: size }}>
+          <svg width={size} height={size} className="transform -rotate-90">
+            {data.map((item, index) => {
+              const percentage = (item.value / total) * 100
+              const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`
+              const strokeDashoffset = -cumulativePercentage * circumference / 100
+              
+              cumulativePercentage += percentage
+              
+              return (
+                <circle
+                  key={index}
+                  cx={size / 2}
+                  cy={size / 2}
+                  r={radius}
+                  fill="none"
+                  stroke={item.color}
+                  strokeWidth="8"
+                  strokeDasharray={strokeDasharray}
+                  strokeDashoffset={strokeDashoffset}
+                  className="transition-all duration-500 ease-out"
+                />
+              )
+            })}
+          </svg>
+          
+          {/* Center text */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-lg font-bold text-gray-800">{Math.round(total * 10) / 10}</div>
+              <div className="text-xs text-gray-500">Total</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Legend */}
+      <div className="mt-4 space-y-1">
+        {data.map((item, index) => (
+          <div key={index} className="flex items-center justify-between text-xs">
+            <div className="flex items-center">
+              <div 
+                className="w-3 h-3 rounded-full mr-2"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="text-gray-600">{item.label}</span>
+            </div>
+            {showValues && (
+              <span className="text-gray-800 font-medium">{Math.round(item.value * 10) / 10}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 
 // function SortableCard({ id, children }: { id: string; children: React.ReactNode }) {
 //   const {

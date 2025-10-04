@@ -9,6 +9,7 @@ export interface PDEntry {
   competencies_covered: string[]
   week_starting: string
   reflection?: string
+  reviewed_in_supervision?: boolean
   duration_display: string
   duration_hours_minutes: string
   created_at: string

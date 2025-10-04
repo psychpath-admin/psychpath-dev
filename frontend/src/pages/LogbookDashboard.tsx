@@ -1,27 +1,32 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Progress } from '@/components/ui/progress'
 import { 
   BookOpen, 
   Plus, 
   Calendar, 
   Clock, 
   CheckCircle, 
-  XCircle, 
   AlertCircle,
   Eye,
   FileText,
   Unlock,
-  ExternalLink
+  TrendingUp,
+  BarChart3,
+  Filter,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Send,
+  Lock
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
 import LogbookCreationModal from '@/components/LogbookCreationModal'
 import LogbookPreview from '@/components/LogbookPreview'
-import UnlockRequestModal from '@/components/UnlockRequestModal'
-import DashboardCountdown from '@/components/DashboardCountdown'
 
 interface Logbook {
   id: number
@@ -35,6 +40,9 @@ interface Logbook {
   submitted_at: string
   reviewed_at?: string
   supervisor_comments?: string
+  is_locked?: boolean
+  regenerated?: boolean
+  due_date?: string
   section_totals: {
     section_a: { weekly_hours: number; cumulative_hours: number }
     section_b: { weekly_hours: number; cumulative_hours: number }
@@ -47,13 +55,46 @@ interface Logbook {
   }
 }
 
+interface LogbookMetrics {
+  totalLogbooks: number
+  submittedLogbooks: number
+  approvedLogbooks: number
+  lockedLogbooks: number
+  regeneratedLogbooks: number
+  overdueLogbooks: number
+  avgReviewTime: number
+  nextDueDate: string | null
+  internshipWeeksEstimate: number
+}
+
+interface LogbookFilters {
+  status: string
+  isLocked: boolean
+  regenerated: boolean
+  weekRange: { start: string; end: string }
+  searchTerm: string
+}
+
 export default function LogbookDashboard() {
   const [logbooks, setLogbooks] = useState<Logbook[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreationModal, setShowCreationModal] = useState(false)
   const [previewLogbook, setPreviewLogbook] = useState<Logbook | null>(null)
-  const [showUnlockModal, setShowUnlockModal] = useState(false)
-  const [selectedLogbook, setSelectedLogbook] = useState<Logbook | null>(null)
+  
+  // New state for dashboard functionality
+  const [metrics, setMetrics] = useState<LogbookMetrics | null>(null)
+  const [filters, setFilters] = useState<LogbookFilters>({
+    status: '',
+    isLocked: false,
+    regenerated: false,
+    weekRange: { start: '', end: '' },
+    searchTerm: ''
+  })
+  const [showFilters, setShowFilters] = useState(false)
+  const [sortBy] = useState<'week_start_date' | 'status' | 'submitted_at'>('week_start_date')
+  const [sortOrder] = useState<'asc' | 'desc'>('desc')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
     fetchLogbooks()
@@ -65,6 +106,7 @@ export default function LogbookDashboard() {
       if (response.ok) {
         const data = await response.json()
         setLogbooks(data)
+        calculateMetrics(data)
       } else {
         toast.error('Failed to fetch logbooks')
       }
@@ -74,6 +116,53 @@ export default function LogbookDashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const calculateMetrics = (logbookData: Logbook[]) => {
+    const now = new Date()
+    const today = now.toISOString().split('T')[0]
+    
+    const totalLogbooks = logbookData.length
+    const submittedLogbooks = logbookData.filter(l => l.status === 'submitted').length
+    const approvedLogbooks = logbookData.filter(l => l.status === 'approved').length
+    const lockedLogbooks = logbookData.filter(l => l.is_locked).length
+    const regeneratedLogbooks = logbookData.filter(l => l.regenerated).length
+    const overdueLogbooks = logbookData.filter(l => {
+      if (!l.due_date) return false
+      return l.due_date < today && ['draft', 'submitted'].includes(l.status)
+    }).length
+    
+    // Calculate average review time
+    const reviewedLogbooks = logbookData.filter(l => l.submitted_at && l.reviewed_at)
+    const avgReviewTime = reviewedLogbooks.length > 0 
+      ? reviewedLogbooks.reduce((sum, l) => {
+          const submitted = new Date(l.submitted_at)
+          const reviewed = new Date(l.reviewed_at!)
+          const diffTime = Math.abs(reviewed.getTime() - submitted.getTime())
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          return sum + diffDays
+        }, 0) / reviewedLogbooks.length
+      : 0
+    
+    // Find next due date
+    const upcomingLogbooks = logbookData.filter(l => {
+      if (!l.due_date) return false
+      return l.due_date >= today && ['draft', 'submitted'].includes(l.status)
+    }).sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime())
+    
+    const nextDueDate = upcomingLogbooks.length > 0 ? upcomingLogbooks[0].due_date || null : null
+    
+    setMetrics({
+      totalLogbooks,
+      submittedLogbooks,
+      approvedLogbooks,
+      lockedLogbooks,
+      regeneratedLogbooks,
+      overdueLogbooks,
+      avgReviewTime: Math.round(avgReviewTime * 10) / 10,
+      nextDueDate,
+      internshipWeeksEstimate: 52 // Default estimate, could be from user profile
+    })
   }
 
   const getStatusBadge = (status: string) => {
@@ -89,18 +178,6 @@ export default function LogbookDashboard() {
     }
   }
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'submitted':
-        return <Clock className="h-4 w-4 text-yellow-500" />
-      case 'approved':
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'rejected':
-        return <XCircle className="h-4 w-4 text-red-500" />
-      default:
-        return <AlertCircle className="h-4 w-4 text-gray-500" />
-    }
-  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-AU', {
@@ -121,14 +198,51 @@ export default function LogbookDashboard() {
     setPreviewLogbook(logbook)
   }
 
-  const handleRequestUnlock = (logbook: Logbook) => {
-    setSelectedLogbook(logbook)
-    setShowUnlockModal(true)
-  }
 
-  const handleUnlockSuccess = () => {
-    fetchLogbooks() // Refresh the logbook list
-  }
+  // Filter and sort logbooks
+  const filteredLogbooks = logbooks.filter(logbook => {
+    if (filters.status && logbook.status !== filters.status) return false
+    if (filters.isLocked && !logbook.is_locked) return false
+    if (filters.regenerated && !logbook.regenerated) return false
+    if (filters.searchTerm && !logbook.week_display.toLowerCase().includes(filters.searchTerm.toLowerCase())) return false
+    if (filters.weekRange.start && logbook.week_start_date < filters.weekRange.start) return false
+    if (filters.weekRange.end && logbook.week_start_date > filters.weekRange.end) return false
+    return true
+  }).sort((a, b) => {
+    let aValue: any, bValue: any
+    
+    switch (sortBy) {
+      case 'week_start_date':
+        aValue = new Date(a.week_start_date).getTime()
+        bValue = new Date(b.week_start_date).getTime()
+        break
+      case 'status':
+        aValue = a.status
+        bValue = b.status
+        break
+      case 'submitted_at':
+        aValue = new Date(a.submitted_at).getTime()
+        bValue = new Date(b.submitted_at).getTime()
+        break
+      default:
+        aValue = a.week_start_date
+        bValue = b.week_start_date
+    }
+    
+    if (sortOrder === 'asc') {
+      return aValue > bValue ? 1 : -1
+    } else {
+      return aValue < bValue ? 1 : -1
+    }
+  })
+
+  // Pagination
+  const totalPages = Math.ceil(filteredLogbooks.length / pageSize)
+  const paginatedLogbooks = filteredLogbooks.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  )
+
 
   if (loading) {
     return (
@@ -150,137 +264,540 @@ export default function LogbookDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <BookOpen className="h-8 w-8" />
-            Weekly Logbooks
-          </h1>
-          <p className="text-muted-foreground">Manage your weekly logbook submissions for supervisor review</p>
+      {/* Hero Section */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg p-8 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Weekly Logbook Status Dashboard
+            </h1>
+            <p className="text-blue-100">
+              Monitor your administrative progress and logbook workflow readiness
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setShowCreationModal(true)}
+              className="border-white text-white hover:bg-white hover:text-blue-600 font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Create New Logbook
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => {/* TODO: Export functionality */}}
+              className="border-white text-white hover:bg-white hover:text-blue-600 font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+            >
+              <Download className="h-5 w-5 mr-2" />
+              Export Data
+            </Button>
+          </div>
         </div>
-        <Button onClick={() => setShowCreationModal(true)} className="bg-blue-600 hover:bg-blue-700">
-          <Plus className="h-4 w-4 mr-2" />
-          Create New Logbook
-        </Button>
       </div>
 
-      {/* Logbooks List */}
-      {logbooks.length === 0 ? (
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center py-12">
-              <FileText className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-              <h3 className="text-lg font-semibold mb-2">No Logbooks Yet</h3>
-              <p className="text-gray-600 mb-4">
-                You haven't submitted any weekly logbooks yet. Create your first logbook to get started.
-              </p>
-              <Button onClick={() => setShowCreationModal(true)} className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First Logbook
-              </Button>
+      {/* KPI Cards */}
+      {metrics && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Logbooks Created */}
+          <Card className="relative group">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Logbooks Created</p>
+                  <p className="text-2xl font-bold text-gray-900">{metrics.totalLogbooks}</p>
+                  <p className="text-xs text-gray-500">Target: {metrics.internshipWeeksEstimate}</p>
+                </div>
+                <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <BookOpen className="h-6 w-6 text-blue-600" />
+                </div>
+              </div>
+              <div className="mt-4">
+                <Progress 
+                  value={(metrics.totalLogbooks / metrics.internshipWeeksEstimate) * 100} 
+                  className="h-2"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {Math.round((metrics.totalLogbooks / metrics.internshipWeeksEstimate) * 100)}% complete
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Submitted Logbooks */}
+          <Card className="relative group">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Submitted</p>
+                  <p className="text-2xl font-bold text-gray-900">{metrics.submittedLogbooks}</p>
+                </div>
+                <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                  <Send className="h-6 w-6 text-yellow-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Approved Logbooks */}
+          <Card className="relative group">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Approved</p>
+                  <p className="text-2xl font-bold text-gray-900">{metrics.approvedLogbooks}</p>
+                </div>
+                <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="h-6 w-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Locked Logbooks */}
+          <Card className="relative group">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Finalised (Locked)</p>
+                  <p className="text-2xl font-bold text-gray-900">{metrics.lockedLogbooks}</p>
+                </div>
+                <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <Lock className="h-6 w-6 text-gray-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Regenerated Logbooks */}
+          <Card className="relative group">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Regenerated</p>
+                  <p className="text-2xl font-bold text-gray-900">{metrics.regeneratedLogbooks}</p>
+                </div>
+                <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="h-6 w-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Overdue Logbooks */}
+          <Card className="relative group">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Overdue</p>
+                  <p className="text-2xl font-bold text-gray-900">{metrics.overdueLogbooks}</p>
+                  <p className="text-xs text-gray-500">Due but not approved</p>
+                </div>
+                <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
+                  <AlertCircle className="h-6 w-6 text-red-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Avg Review Time */}
+          <Card className="relative group">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Avg Review Time</p>
+                  <p className="text-2xl font-bold text-gray-900">{metrics.avgReviewTime}</p>
+                  <p className="text-xs text-gray-500">days</p>
+                </div>
+                <div className="h-12 w-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                  <Clock className="h-6 w-6 text-indigo-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Next Due Date */}
+          <Card className="relative group">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Next Due Date</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {metrics.nextDueDate ? new Date(metrics.nextDueDate).toLocaleDateString('en-AU') : 'None'}
+                  </p>
+                </div>
+                <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <Calendar className="h-6 w-6 text-orange-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Filters & Search */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filters & Search
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              {showFilters ? 'Hide' : 'Show'} Filters
+            </Button>
+          </div>
+        </CardHeader>
+        {showFilters && (
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search logbooks..."
+                  value={filters.searchTerm}
+                  onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
+                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="submitted">Submitted</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+
+              {/* Locked Filter */}
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={filters.isLocked}
+                  onChange={(e) => setFilters(prev => ({ ...prev, isLocked: e.target.checked }))}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">Locked only</span>
+              </label>
+
+              {/* Regenerated Filter */}
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={filters.regenerated}
+                  onChange={(e) => setFilters(prev => ({ ...prev, regenerated: e.target.checked }))}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">Show Regenerated</span>
+              </label>
+            </div>
+
+            {/* Filter Chips */}
+            <div className="flex flex-wrap gap-2 mt-4">
+              {filters.status && (
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                  Status: {filters.status}
+                  <button
+                    onClick={() => setFilters(prev => ({ ...prev, status: '' }))}
+                    className="ml-1 hover:bg-blue-200 rounded-full p-0.5"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+              {filters.isLocked && (
+                <Badge variant="secondary" className="bg-gray-100 text-gray-800">
+                  Locked only
+                  <button
+                    onClick={() => setFilters(prev => ({ ...prev, isLocked: false }))}
+                    className="ml-1 hover:bg-gray-200 rounded-full p-0.5"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+              {filters.regenerated && (
+                <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                  Regenerated
+                  <button
+                    onClick={() => setFilters(prev => ({ ...prev, regenerated: false }))}
+                    className="ml-1 hover:bg-purple-200 rounded-full p-0.5"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+              {filters.searchTerm && (
+                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                  Search: "{filters.searchTerm}"
+                  <button
+                    onClick={() => setFilters(prev => ({ ...prev, searchTerm: '' }))}
+                    className="ml-1 hover:bg-green-200 rounded-full p-0.5"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
             </div>
           </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {logbooks.map((logbook) => (
-            <Card key={logbook.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4">
-                    {getStatusIcon(logbook.status)}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold">{logbook.week_display}</h3>
-                        {getStatusBadge(logbook.status)}
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">Section A:</span>
-                          <span className="ml-1 font-medium">{logbook.section_totals.section_a.weekly_hours}h</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Section B:</span>
-                          <span className="ml-1 font-medium">{logbook.section_totals.section_b.weekly_hours}h</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Section C:</span>
-                          <span className="ml-1 font-medium">{logbook.section_totals.section_c.weekly_hours}h</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Total:</span>
-                          <span className="ml-1 font-medium">{logbook.section_totals.total.weekly_hours}h</span>
-                        </div>
-                      </div>
+        )}
+      </Card>
 
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <span>Submitted: {formatDate(logbook.submitted_at)}</span>
-                        {logbook.reviewed_at && (
-                          <span>Reviewed: {formatDate(logbook.reviewed_at)}</span>
-                        )}
-                      </div>
+      {/* Logbook Status Overview Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Logbook Status Overview
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">
+                Showing {paginatedLogbooks.length} of {filteredLogbooks.length} logbooks
+              </span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={5}>5 per page</option>
+                <option value={10}>10 per page</option>
+                <option value={20}>20 per page</option>
+                <option value={50}>50 per page</option>
+              </select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredLogbooks.length === 0 ? (
+            <div className="text-center py-12">
+              <FileText className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+              <h3 className="text-lg font-semibold mb-2">No Logbooks Found</h3>
+              <p className="text-gray-600 mb-4">
+                {logbooks.length === 0 
+                  ? "You haven't created any weekly logbooks yet. Create your first logbook to get started."
+                  : "No logbooks match your current filters. Try adjusting your search criteria."
+                }
+              </p>
+              {logbooks.length === 0 && (
+                <Button onClick={() => setShowCreationModal(true)} className="bg-blue-600 hover:bg-blue-700">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Your First Logbook
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Table Header */}
+              <div className="grid grid-cols-12 gap-4 p-4 bg-gray-50 rounded-lg font-medium text-sm text-gray-700">
+                <div className="col-span-2">Week</div>
+                <div className="col-span-1">Status</div>
+                <div className="col-span-2">Submitted</div>
+                <div className="col-span-2">Reviewed</div>
+                <div className="col-span-1">Locked</div>
+                <div className="col-span-1">Regenerated</div>
+                <div className="col-span-2">Comments</div>
+                <div className="col-span-1">Actions</div>
+              </div>
 
-                      {logbook.active_unlock && (
-                        <div className="mt-4">
-                          <DashboardCountdown
-                            unlockExpiresAt={logbook.active_unlock.unlock_expires_at}
-                            durationMinutes={logbook.active_unlock.duration_minutes}
-                            logbookWeekDisplay={logbook.week_display}
-                          />
-                        </div>
-                      )}
+              {/* Table Rows */}
+              {paginatedLogbooks.map((logbook) => (
+                <div key={logbook.id} className="grid grid-cols-12 gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  {/* Week */}
+                  <div className="col-span-2">
+                    <div className="font-medium text-gray-900">{logbook.week_display}</div>
+                    <div className="text-sm text-gray-500">{logbook.week_start_date}</div>
+                  </div>
 
-                      {logbook.supervisor_comments && (
-                        <Alert className="mt-4">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            <strong>Supervisor Comments:</strong> {logbook.supervisor_comments}
-                          </AlertDescription>
-                        </Alert>
+                  {/* Status */}
+                  <div className="col-span-1">
+                    {getStatusBadge(logbook.status)}
+                  </div>
+
+                  {/* Submitted */}
+                  <div className="col-span-2">
+                    <div className="text-sm text-gray-900">{formatDate(logbook.submitted_at)}</div>
+                  </div>
+
+                  {/* Reviewed */}
+                  <div className="col-span-2">
+                    <div className="text-sm text-gray-900">
+                      {logbook.reviewed_at ? formatDate(logbook.reviewed_at) : 'Not reviewed'}
+                    </div>
+                    {logbook.reviewed_by_name && (
+                      <div className="text-xs text-gray-500">by {logbook.reviewed_by_name}</div>
+                    )}
+                  </div>
+
+                  {/* Locked */}
+                  <div className="col-span-1">
+                    <div className="flex items-center justify-center">
+                      {logbook.is_locked ? (
+                        <Lock className="h-4 w-4 text-gray-600" />
+                      ) : (
+                        <Unlock className="h-4 w-4 text-gray-400" />
                       )}
                     </div>
                   </div>
-                  
+
+                  {/* Regenerated */}
+                  <div className="col-span-1">
+                    <div className="flex items-center justify-center">
+                      {logbook.regenerated ? (
+                        <TrendingUp className="h-4 w-4 text-purple-600" />
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Comments */}
+                  <div className="col-span-2">
+                    <div className="text-sm text-gray-900">
+                      {logbook.supervisor_comments ? (
+                        <div className="max-w-xs truncate" title={logbook.supervisor_comments}>
+                          {logbook.supervisor_comments}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">No comments</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="col-span-1">
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePreviewLogbook(logbook)}
+                        title="View Logbook"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      
+                      {logbook.status === 'draft' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Submit"
+                        >
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      )}
+                      
+                      {logbook.status === 'approved' && !logbook.is_locked && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Lock"
+                        >
+                          <Lock className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-4">
+                  <div className="text-sm text-gray-600">
+                    Page {currentPage} of {totalPages}
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handlePreviewLogbook(logbook)}
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
                     >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View
+                      Previous
                     </Button>
-                    
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.open(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/logbook/${logbook.id}/html-report/`, '_blank')}
-                      title="View AHPRA-formatted report"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
                     >
-                      <FileText className="h-4 w-4 mr-2" />
-                      Report
+                      Next
                     </Button>
-                    
-                    {logbook.status === 'approved' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRequestUnlock(logbook)}
-                        className="bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
-                      >
-                        <Unlock className="h-4 w-4 mr-2" />
-                        Request Unlock
-                      </Button>
-                    )}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Compliance Checklist */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5" />
+            Compliance Checklist
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {metrics && (
+              <>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium">All weeks have created logbooks</span>
+                  <Badge variant={metrics.totalLogbooks >= metrics.internshipWeeksEstimate ? "default" : "secondary"}>
+                    {metrics.totalLogbooks}/{metrics.internshipWeeksEstimate}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium">≥ 90% logbooks submitted</span>
+                  <Badge variant={metrics.submittedLogbooks >= metrics.totalLogbooks * 0.9 ? "default" : "secondary"}>
+                    {Math.round((metrics.submittedLogbooks / metrics.totalLogbooks) * 100)}%
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium">≥ 80% logbooks reviewed</span>
+                  <Badge variant={metrics.approvedLogbooks >= metrics.totalLogbooks * 0.8 ? "default" : "secondary"}>
+                    {Math.round((metrics.approvedLogbooks / metrics.totalLogbooks) * 100)}%
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium">Timely submissions (≤ 2 overdue)</span>
+                  <Badge variant={metrics.overdueLogbooks <= 2 ? "default" : "destructive"}>
+                    {metrics.overdueLogbooks}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium">Review times &lt; 5 days</span>
+                  <Badge variant={metrics.avgReviewTime < 5 ? "default" : "secondary"}>
+                    {metrics.avgReviewTime} days
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium">All approved logbooks locked</span>
+                  <Badge variant={metrics.lockedLogbooks >= metrics.approvedLogbooks ? "default" : "secondary"}>
+                    {metrics.lockedLogbooks}/{metrics.approvedLogbooks}
+                  </Badge>
+                </div>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Modals */}
       {showCreationModal && (
@@ -297,18 +814,6 @@ export default function LogbookDashboard() {
         />
       )}
 
-      {showUnlockModal && selectedLogbook && (
-        <UnlockRequestModal
-          isOpen={showUnlockModal}
-          onClose={() => {
-            setShowUnlockModal(false)
-            setSelectedLogbook(null)
-          }}
-          logbookId={selectedLogbook.id}
-          logbookWeekDisplay={selectedLogbook.week_display}
-          onSuccess={handleUnlockSuccess}
-        />
-      )}
     </div>
   )
 }

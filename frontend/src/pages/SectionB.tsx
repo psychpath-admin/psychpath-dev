@@ -9,7 +9,6 @@ import {
   BookOpen, 
   Clock, 
   Target, 
-  Brain, 
   Filter, 
   ChevronUp, 
   ChevronDown, 
@@ -20,7 +19,6 @@ import {
   Edit, 
   Trash2,
   Calendar,
-  FileText,
   BarChart3
 } from 'lucide-react'
 import { 
@@ -53,7 +51,14 @@ const SectionB: React.FC = () => {
   const [entriesPerPage, setEntriesPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
+  
+  // Tooltip toggle
+  const [showTooltips, setShowTooltips] = useState(true)
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
+  
+  // New PD-specific filters
+  const [competencyFilter, setCompetencyFilter] = useState<string[]>([])
+  const [reviewedFilter, setReviewedFilter] = useState('all') // 'all', 'reviewed', 'not_reviewed'
 
 
   const formatDateDDMMYYYY = (dateString: string) => {
@@ -111,6 +116,8 @@ const SectionB: React.FC = () => {
     setDurationMax('')
     setGroupByWeek(false)
     setSearchTerm('')
+    setCompetencyFilter([])
+    setReviewedFilter('all')
     setCurrentPage(1)
   }
 
@@ -141,7 +148,7 @@ const SectionB: React.FC = () => {
   }
 
   // Check if any filters are active
-  const hasActiveFilters = dateFrom || dateTo || activityType !== 'all' || durationMin || durationMax || groupByWeek
+  const hasActiveFilters = dateFrom || dateTo || activityType !== 'all' || durationMin || durationMax || groupByWeek || competencyFilter.length > 0 || reviewedFilter !== 'all'
 
   // Get all entries from weekly groups
   const allEntries = weeklyGroups.flatMap(group => group.entries)
@@ -177,6 +184,18 @@ const SectionB: React.FC = () => {
         entry.activity_type.toLowerCase().includes(searchLower)
       if (!matchesSearch) return false
     }
+
+    // Competency filter
+    if (competencyFilter.length > 0) {
+      const hasMatchingCompetency = entry.competencies_covered.some(comp => 
+        competencyFilter.includes(comp)
+      )
+      if (!hasMatchingCompetency) return false
+    }
+
+    // Supervisor review filter
+    if (reviewedFilter === 'reviewed' && !entry.reviewed_in_supervision) return false
+    if (reviewedFilter === 'not_reviewed' && entry.reviewed_in_supervision) return false
 
     return true
   })
@@ -252,7 +271,8 @@ const SectionB: React.FC = () => {
     activity_details: '',
     topics_covered: '',
     competencies_covered: [] as string[],
-    reflection: ''
+    reflection: '',
+    reviewed_in_supervision: false
   })
 
   const activityTypes = [
@@ -480,7 +500,8 @@ const SectionB: React.FC = () => {
       activity_details: '',
       topics_covered: '',
       competencies_covered: [],
-      reflection: ''
+      reflection: '',
+      reviewed_in_supervision: false
     })
     setEditingEntry(null)
     setShowForm(true)
@@ -495,7 +516,8 @@ const SectionB: React.FC = () => {
       activity_details: entry.activity_details,
       topics_covered: entry.topics_covered,
       competencies_covered: entry.competencies_covered,
-      reflection: entry.reflection || ''
+      reflection: entry.reflection || '',
+      reviewed_in_supervision: entry.reviewed_in_supervision || false
     })
     setEditingEntry(entry)
     setShowForm(true)
@@ -592,81 +614,344 @@ const SectionB: React.FC = () => {
                 <Button 
                   variant="outline"
                   size="lg"
+                  onClick={() => window.location.href = '/logbook'}
                   className="border-white text-white hover:bg-white hover:text-green-600 font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
                 >
                   <BarChart3 className="h-5 w-5 mr-2" />
-                  View Reports
+                  Weekly Logbooks
                 </Button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Quick Stats Cards */}
+        {/* PD Compliance Dashboard */}
         {(() => {
           const totalEntries = allEntries.length
           const totalMinutes = allEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0)
           const uniqueCompetencies = new Set(allEntries.flatMap(entry => entry.competencies_covered || [])).size
           const activeMinutes = allEntries.filter(entry => entry.is_active_activity).reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0)
 
+          // Mock user profile data - in real implementation, this would come from user profile
+          const userProfile = {
+            internship_start_date: '2024-01-01', // Mock start date
+            internship_weeks_estimate: 52, // 1 year internship
+            weekly_pd_commitment_hours: 2 // 2 hours per week
+          }
+
+          // Calculate internship progress
+          const calculateInternshipProgress = () => {
+            const startDate = new Date(userProfile.internship_start_date)
+            const currentDate = new Date()
+            const weeksElapsed = Math.max(1, Math.ceil((currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7)))
+            const progressPercentage = Math.min(weeksElapsed / userProfile.internship_weeks_estimate, 1)
+            const expectedHours = weeksElapsed * userProfile.weekly_pd_commitment_hours
+            return { weeksElapsed, progressPercentage, expectedHours }
+          }
+
+          const internshipProgress = calculateInternshipProgress()
+          const totalHours = totalMinutes / 60
+          const progressRatio = totalHours / internshipProgress.expectedHours
+
+          // RAG Status calculation
+          const getRAGStatus = (ratio: number) => {
+            if (ratio < 0.75) return { status: 'red', label: 'Non-compliant', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' }
+            if (ratio < 1) return { status: 'amber', label: 'At Risk', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' }
+            return { status: 'green', label: 'On Track', color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' }
+          }
+
+          const ragStatus = getRAGStatus(progressRatio)
+
+          // Supervisor review tracking
+          const reviewedEntries = allEntries.filter(entry => entry.reviewed_in_supervision).length
+          const reviewPercentage = totalEntries > 0 ? (reviewedEntries / totalEntries) * 100 : 0
+
           return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Total Activities</p>
-                      <p className="text-3xl font-bold text-primary">{totalEntries}</p>
-                    </div>
-                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <FileText className="h-6 w-6 text-primary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            <>
+              {/* Tooltip Toggle */}
+              <div className="flex justify-end mb-4">
+                <div className="flex items-center space-x-2 bg-white/80 backdrop-blur-sm rounded-lg px-4 py-2 shadow-sm border border-gray-200">
+                  <span className="text-sm text-gray-600 font-medium">Show Tooltips</span>
+                  <button
+                    onClick={() => setShowTooltips(!showTooltips)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                      showTooltips ? 'bg-primary' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        showTooltips ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
 
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Total Hours</p>
-                      <p className="text-3xl font-bold text-secondary">{formatDurationWithUnit(totalMinutes)}</p>
+              {/* Compliance Overview Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+                {/* Total PD Hours Logged */}
+                <div className="relative group">
+                  <Card className={`brand-card hover:shadow-md transition-all duration-300 ${ragStatus.border} ${ragStatus.bg}`}>
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                          <Clock className="h-6 w-6 text-primary" />
+                        </div>
+                        <Badge className={`${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'} text-white text-xs font-semibold`}>
+                          {ragStatus.label}
+                        </Badge>
+                      </div>
+                      <div className="text-2xl font-bold text-textDark mb-1">
+                        {formatDurationWithUnit(totalMinutes)}
+                      </div>
+                      <div className="text-xs font-semibold text-textDark mb-1 font-body">Total PD Hours Logged</div>
+                      <div className="text-xs text-textLight mb-2">Goal: {userProfile.internship_weeks_estimate * userProfile.weekly_pd_commitment_hours}h total</div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-500 ${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}
+                          style={{ width: `${Math.min(progressRatio * 100, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-textLight mt-1">
+                        {progressRatio >= 1 ? `✓ ${(progressRatio * 100).toFixed(1)}% complete` : `${(progressRatio * 100).toFixed(1)}% of expected`}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Tooltip */}
+                    <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="font-semibold mb-2">Total PD Hours Logged</div>
+                    <div className="mb-2">Tracks all professional development activities completed during your internship.</div>
+                    <div className="mb-2"><strong>Target:</strong> {userProfile.internship_weeks_estimate * userProfile.weekly_pd_commitment_hours} hours total ({userProfile.weekly_pd_commitment_hours}h/week × {userProfile.internship_weeks_estimate} weeks)</div>
+                    <div className="mb-2"><strong>Current:</strong> {formatDurationWithUnit(totalMinutes)} logged</div>
+                    <div className="mb-2"><strong>Status:</strong> {ragStatus.label} ({(progressRatio * 100).toFixed(1)}% of expected)</div>
+                    <div className="text-xs text-gray-300">
+                      <strong>Calculation:</strong> Total PD minutes ÷ 60 = hours logged
                     </div>
-                    <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
-                      <Clock className="h-6 w-6 text-secondary" />
-                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
 
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Active Hours</p>
-                      <p className="text-3xl font-bold text-accent">{formatDurationWithUnit(activeMinutes)}</p>
+                {/* Expected Hours to Date */}
+                <div className="relative group">
+                  <Card className="brand-card hover:shadow-md transition-all duration-300">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
+                          <Calendar className="h-6 w-6 text-secondary" />
+                        </div>
+                        <Badge variant="outline" className="text-secondary border-secondary text-xs font-semibold">
+                          Expected
+                        </Badge>
+                      </div>
+                      <div className="text-2xl font-bold text-textDark mb-1">
+                        {internshipProgress.expectedHours.toFixed(1)}h
+                      </div>
+                      <div className="text-xs font-semibold text-textDark mb-1 font-body">Expected Hours to Date</div>
+                      <div className="text-xs text-textLight mb-2">Based on {userProfile.weekly_pd_commitment_hours}h/week commitment</div>
+                      <div className="text-xs text-textLight">
+                        {internshipProgress.weeksElapsed} weeks elapsed ({internshipProgress.progressPercentage.toFixed(1)}% of internship)
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Tooltip */}
+                    <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="font-semibold mb-2">Expected Hours to Date</div>
+                    <div className="mb-2">Calculates how many PD hours you should have completed based on your weekly commitment and internship progress.</div>
+                    <div className="mb-2"><strong>Weekly Commitment:</strong> {userProfile.weekly_pd_commitment_hours} hours per week</div>
+                    <div className="mb-2"><strong>Weeks Elapsed:</strong> {internshipProgress.weeksElapsed} weeks since internship start</div>
+                    <div className="mb-2"><strong>Expected Total:</strong> {internshipProgress.expectedHours.toFixed(1)} hours to date</div>
+                    <div className="mb-2"><strong>Internship Progress:</strong> {(internshipProgress.progressPercentage * 100).toFixed(1)}% complete</div>
+                    <div className="text-xs text-gray-300">
+                      <strong>Calculation:</strong> Weeks elapsed × Weekly commitment = Expected hours
                     </div>
-                    <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
-                      <Target className="h-6 w-6 text-accent" />
-                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
 
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Competencies</p>
-                      <p className="text-3xl font-bold text-primary">{uniqueCompetencies}</p>
+                {/* Progress Ratio */}
+                <div className="relative group">
+                  <Card className="brand-card hover:shadow-md transition-all duration-300">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
+                          <Target className="h-6 w-6 text-accent" />
+                        </div>
+                        <Badge className={`${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'} text-white text-xs font-semibold`}>
+                          {progressRatio.toFixed(2)}
+                        </Badge>
+                      </div>
+                      <div className="text-2xl font-bold text-textDark mb-1">
+                        {(progressRatio * 100).toFixed(0)}%
+                      </div>
+                      <div className="text-xs font-semibold text-textDark mb-1 font-body">Progress Ratio</div>
+                      <div className="text-xs text-textLight mb-2">Actual vs Expected Hours</div>
+                      <div className="text-xs text-textLight">
+                        {progressRatio >= 1 ? '✓ Meeting target' : `${((1 - progressRatio) * 100).toFixed(1)}% behind schedule`}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Tooltip */}
+                    <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="font-semibold mb-2">Progress Ratio</div>
+                    <div className="mb-2">Compares your actual PD hours logged against the expected hours based on your internship timeline.</div>
+                    <div className="mb-2"><strong>Actual Hours:</strong> {formatDurationWithUnit(totalMinutes)} logged</div>
+                    <div className="mb-2"><strong>Expected Hours:</strong> {internshipProgress.expectedHours.toFixed(1)} hours to date</div>
+                    <div className="mb-2"><strong>Ratio:</strong> {progressRatio.toFixed(2)} ({(progressRatio * 100).toFixed(0)}%)</div>
+                    <div className="mb-2"><strong>Status:</strong> {progressRatio >= 1 ? '✓ Meeting target' : `${((1 - progressRatio) * 100).toFixed(1)}% behind schedule`}</div>
+                    <div className="text-xs text-gray-300">
+                      <strong>Calculation:</strong> Actual hours ÷ Expected hours = Progress ratio
                     </div>
-                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <Brain className="h-6 w-6 text-primary" />
-                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+
+                {/* RAG Status */}
+                <div className="relative group">
+                  <Card className={`brand-card hover:shadow-md transition-all duration-300 ${ragStatus.border} ${ragStatus.bg}`}>
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="h-12 w-12 bg-purple-500/10 rounded-full flex items-center justify-center">
+                          <div className={`h-6 w-6 rounded-full ${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                        </div>
+                        <Badge className={`${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'} text-white text-xs font-semibold`}>
+                          {ragStatus.status.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <div className="text-2xl font-bold text-textDark mb-1">
+                        {ragStatus.label}
+                      </div>
+                      <div className="text-xs font-semibold text-textDark mb-1 font-body">Compliance Status</div>
+                      <div className="text-xs text-textLight mb-2">Real-time monitoring</div>
+                      <div className="text-xs text-textLight">
+                        {ragStatus.status === 'green' ? '✓ All requirements met' : 
+                         ragStatus.status === 'amber' ? '⚠ Close to target' : 
+                         '⚠ Needs attention'}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Tooltip */}
+                    <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="font-semibold mb-2">Compliance Status</div>
+                    <div className="mb-2">Real-time monitoring of your PD progress against internship requirements.</div>
+                    <div className="mb-2"><strong>Current Status:</strong> {ragStatus.label}</div>
+                    <div className="mb-2"><strong>Progress Ratio:</strong> {progressRatio.toFixed(2)} ({(progressRatio * 100).toFixed(0)}%)</div>
+                    <div className="mb-2"><strong>Thresholds:</strong></div>
+                    <div className="ml-2 text-xs text-gray-300">
+                      • <span className="text-green-400">Green:</span> ≥100% (On Track)<br/>
+                      • <span className="text-amber-400">Amber:</span> 75-99% (At Risk)<br/>
+                      • <span className="text-red-400">Red:</span> &lt;75% (Non-compliant)
+                    </div>
+                    <div className="mb-2"><strong>Message:</strong> {ragStatus.status === 'green' ? '✓ All requirements met' : ragStatus.status === 'amber' ? '⚠ Close to target' : '⚠ Needs attention'}</div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+
+                {/* Supervisor Reviews */}
+                <div className="relative group">
+                  <Card className="brand-card hover:shadow-md transition-all duration-300">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="h-12 w-12 bg-blue-500/10 rounded-full flex items-center justify-center">
+                          <Eye className="h-6 w-6 text-blue-600" />
+                        </div>
+                        <Badge variant="outline" className="text-blue-600 border-blue-600 text-xs font-semibold">
+                          {reviewPercentage.toFixed(0)}%
+                        </Badge>
+                      </div>
+                      <div className="text-2xl font-bold text-textDark mb-1">
+                        {reviewedEntries}/{totalEntries}
+                      </div>
+                      <div className="text-xs font-semibold text-textDark mb-1 font-body">Supervisor Reviews</div>
+                      <div className="text-xs text-textLight mb-2">Target: ≥75% reviewed</div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-500 ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                          style={{ width: `${Math.min(reviewPercentage, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-textLight mt-1">
+                        {reviewPercentage >= 75 ? '✓ Target met' : `${(75 - reviewPercentage).toFixed(1)}% to target`}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Tooltip */}
+                    <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="font-semibold mb-2">Supervisor Reviews</div>
+                    <div className="mb-2">Tracks how many of your PD entries have been reviewed and discussed with your supervisor.</div>
+                    <div className="mb-2"><strong>Reviewed Entries:</strong> {reviewedEntries} out of {totalEntries} total</div>
+                    <div className="mb-2"><strong>Review Percentage:</strong> {reviewPercentage.toFixed(1)}%</div>
+                    <div className="mb-2"><strong>Target:</strong> ≥75% of entries reviewed</div>
+                    <div className="mb-2"><strong>Status:</strong> {reviewPercentage >= 75 ? '✓ Target met' : `${(75 - reviewPercentage).toFixed(1)}% to target`}</div>
+                    <div className="text-xs text-gray-300">
+                      <strong>Importance:</strong> Supervisor review ensures quality and learning from PD activities
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
             </div>
+
+              {/* Compliance Summary */}
+              <div className="bg-bgCard p-6 rounded-lg border border-border mb-8">
+                <h3 className="text-lg font-semibold text-textDark mb-4 font-headings">PD Compliance Summary</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                      <span className="font-medium">Total Hours: {formatDurationWithUnit(totalMinutes)} / {userProfile.internship_weeks_estimate * userProfile.weekly_pd_commitment_hours}h goal</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                      <span className="font-medium">Progress Ratio: {(progressRatio * 100).toFixed(1)}% (Target: 100%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                      <span className="font-medium">Supervisor Reviews: {reviewPercentage.toFixed(1)}% (Target: ≥75%)</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="font-medium">Internship Progress: {internshipProgress.weeksElapsed} weeks ({internshipProgress.progressPercentage.toFixed(1)}%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="font-medium">Competencies Covered: {uniqueCompetencies} unique areas</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="font-medium">Active Learning: {formatDurationWithUnit(activeMinutes)} of {formatDurationWithUnit(totalMinutes)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Legend */}
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center gap-6 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                      <span className="text-textLight">On Track / Compliant</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                      <span className="text-textLight">At Risk (75-99%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <span className="text-textLight">Non-Compliant (&lt;75%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="text-textLight">Informational</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
           )
         })()}
 
@@ -754,6 +1039,22 @@ const SectionB: React.FC = () => {
                       </button>
                     </Badge>
                   )}
+                  {competencyFilter.map((comp, idx) => (
+                    <Badge key={idx} variant="secondary" className="bg-secondary/10 text-secondary">
+                      Competency: {comp}
+                      <button onClick={() => setCompetencyFilter(prev => prev.filter(c => c !== comp))} className="ml-2 hover:bg-secondary/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                  {reviewedFilter !== 'all' && (
+                    <Badge variant="secondary" className="bg-accent/10 text-accent">
+                      Review: {reviewedFilter === 'reviewed' ? 'Reviewed' : 'Not Reviewed'}
+                      <button onClick={() => setReviewedFilter('all')} className="ml-2 hover:bg-accent/20 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
                 </>
               )}
             </div>
@@ -822,6 +1123,62 @@ const SectionB: React.FC = () => {
                     className="flex-1"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Additional PD-specific filters */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              {/* Competency Filter */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Competency Tags</label>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1">
+                    {competencyFilter.map((comp, idx) => (
+                      <Badge key={idx} variant="secondary" className="bg-primary/10 text-primary">
+                        {comp}
+                        <button 
+                          onClick={() => setCompetencyFilter(prev => prev.filter(c => c !== comp))} 
+                          className="ml-2 hover:bg-primary/20 rounded-full p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  <Select onValueChange={(value) => {
+                    if (value && !competencyFilter.includes(value)) {
+                      setCompetencyFilter(prev => [...prev, value])
+                    }
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Add competency filter..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {competencies
+                        .filter(comp => !competencyFilter.includes(comp.name))
+                        .map(comp => (
+                          <SelectItem key={comp.id} value={comp.name}>
+                            {comp.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Supervisor Review Filter */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Supervisor Review</label>
+                <Select value={reviewedFilter} onValueChange={setReviewedFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All entries" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All entries</SelectItem>
+                    <SelectItem value="reviewed">Reviewed only</SelectItem>
+                    <SelectItem value="not_reviewed">Not reviewed</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             
@@ -947,7 +1304,12 @@ const SectionB: React.FC = () => {
                                 </span>
                                 <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
                                   {entry.is_active_activity ? 'Active' : 'Passive'}
-                    </Badge>
+                                </Badge>
+                                {entry.reviewed_in_supervision && (
+                                  <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                                    ✓ Reviewed
+                                  </Badge>
+                                )}
                               </div>
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-textLight" />
@@ -1048,6 +1410,7 @@ const SectionB: React.FC = () => {
                                     <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.date_of_activity)}</div>
                                     <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
                                     <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
+                                    <div><span className="font-medium">Reviewed:</span> {entry.reviewed_in_supervision ? 'Yes' : 'No'}</div>
           </div>
         </div>
 
@@ -1108,6 +1471,11 @@ const SectionB: React.FC = () => {
                         <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
                           {entry.is_active_activity ? 'Active' : 'Passive'}
                         </Badge>
+                        {entry.reviewed_in_supervision && (
+                          <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                            ✓ Reviewed
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-textLight" />
@@ -1208,6 +1576,7 @@ const SectionB: React.FC = () => {
                             <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.date_of_activity)}</div>
                             <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
                             <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
+                            <div><span className="font-medium">Reviewed:</span> {entry.reviewed_in_supervision ? 'Yes' : 'No'}</div>
                           </div>
                         </div>
 
@@ -1509,6 +1878,19 @@ const SectionB: React.FC = () => {
                   className="w-full p-2 border rounded h-24"
                   placeholder="Reflect on how this activity contributed to your professional development..."
                 />
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.reviewed_in_supervision}
+                    onChange={(e) => setFormData(prev => ({ ...prev, reviewed_in_supervision: e.target.checked }))}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm font-medium">Reviewed with Supervisor</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1">Mark this if you've discussed this PD activity with your supervisor</p>
               </div>
               </div>
 

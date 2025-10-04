@@ -18,19 +18,33 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
         user = self.request.user
         if user.is_authenticated and hasattr(user, 'profile'):
             if user.profile.role in ['PROVISIONAL', 'INTERN', 'REGISTRAR']:
-                return SupervisionEntry.objects.filter(trainee=user.profile).order_by('-date_of_supervision')
+                queryset = SupervisionEntry.objects.filter(trainee=user.profile)
             elif user.profile.role == 'SUPERVISOR':
                 trainee_ids = user.profile.supervising.values_list('id', flat=True)
-                return SupervisionEntry.objects.filter(trainee__id__in=trainee_ids).order_by('-date_of_supervision')
+                queryset = SupervisionEntry.objects.filter(trainee__id__in=trainee_ids)
             elif user.profile.role == 'ORG_ADMIN':
                 org_trainee_ids = UserProfile.objects.filter(organization=user.profile.organization, role__in=['PROVISIONAL', 'INTERN', 'REGISTRAR']).values_list('id', flat=True)
-                return SupervisionEntry.objects.filter(trainee__id__in=org_trainee_ids).order_by('-date_of_supervision')
+                queryset = SupervisionEntry.objects.filter(trainee__id__in=org_trainee_ids)
+            else:
+                return SupervisionEntry.objects.none()
+            
+            # Filter by week_starting if provided
+            week_starting = self.request.query_params.get('week_starting', None)
+            if week_starting:
+                queryset = queryset.filter(week_starting=week_starting)
+            
+            return queryset.order_by('-date_of_supervision')
         return SupervisionEntry.objects.none()
 
     def perform_create(self, serializer):
         if not hasattr(self.request.user, 'profile') or self.request.user.profile.role not in ['PROVISIONAL', 'INTERN', 'REGISTRAR']:
             raise serializers.ValidationError("Only provisional psychologists, interns and registrars can create supervision entries.")
-        serializer.save(trainee=self.request.user.profile)
+        
+        # Calculate week_starting from date_of_supervision
+        date_of_supervision = serializer.validated_data['date_of_supervision']
+        week_starting = date_of_supervision - timedelta(days=date_of_supervision.weekday())
+        
+        serializer.save(trainee=self.request.user.profile, week_starting=week_starting)
 
     @action(detail=False, methods=['get'], url_path='grouped-by-week', permission_classes=[permissions.IsAuthenticated])
     def grouped_by_week(self, request):

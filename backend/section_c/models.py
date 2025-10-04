@@ -17,6 +17,7 @@ class SupervisionEntry(models.Model):
 
     trainee = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='supervision_entries')
     date_of_supervision = models.DateField()
+    week_starting = models.DateField(help_text="Week starting date for grouping")
     supervisor_name = models.CharField(max_length=255)
     supervisor_type = models.CharField(max_length=20, choices=SUPERVISOR_TYPE_CHOICES)
     supervision_type = models.CharField(max_length=20, choices=SUPERVISION_TYPE_CHOICES)
@@ -39,12 +40,6 @@ class SupervisionEntry(models.Model):
     def __str__(self):
         return f"{self.trainee.user.email} - {self.supervisor_name} on {self.date_of_supervision}"
 
-    @property
-    def week_starting(self):
-        # Calculate the Monday of the week for the given date_of_supervision
-        # Monday is 0, Sunday is 6
-        days_since_monday = self.date_of_supervision.weekday()
-        return self.date_of_supervision - timedelta(days=days_since_monday)
 
     @property
     def duration_display(self):
