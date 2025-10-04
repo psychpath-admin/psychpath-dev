@@ -118,6 +118,9 @@ SESSION_SUMMARY="
 
 # Update the checkpoint file
 if [ -f "$CHECKPOINT_FILE" ]; then
+    # Create a temporary file with the session summary
+    echo "$SESSION_SUMMARY" > "/tmp/session_summary.tmp"
+    
     # Find the line with "## ✅ **COMPLETED THIS SESSION" and replace everything after it
     # until we find the next "## ✅ **PREVIOUSLY COMPLETED" section
     awk '
@@ -136,17 +139,18 @@ if [ -f "$CHECKPOINT_FILE" ]; then
     !in_current_session { print $0 }
     ' "$CHECKPOINT_FILE" > "$CHECKPOINT_FILE.tmp"
     
-    # Insert the new session summary
+    # Insert the new session summary before the "PREVIOUSLY COMPLETED" section
     awk '
     /^## ✅ \*\*PREVIOUSLY COMPLETED/ {
-        print "'"$SESSION_SUMMARY"'";
+        system("cat /tmp/session_summary.tmp")
         print $0;
         next
     }
     { print $0 }
     ' "$CHECKPOINT_FILE.tmp" > "$CHECKPOINT_FILE"
     
-    rm "$CHECKPOINT_FILE.tmp"
+    # Clean up temporary files
+    rm "$CHECKPOINT_FILE.tmp" "/tmp/session_summary.tmp"
     
     echo -e "${GREEN}✅ CHECKPOINT_STATUS.md updated successfully${NC}"
 else
