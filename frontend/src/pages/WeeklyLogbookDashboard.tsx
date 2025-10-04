@@ -848,10 +848,11 @@ export default function WeeklyLogbookDashboard() {
 
                   {/* Actions */}
                   <div className="col-span-1">
-                    <div className="flex gap-1">
+                    <div className="flex items-center justify-end gap-2">
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="h-8 w-8 p-0"
                         onClick={() => handleViewLogbook(logbook)}
                         title="View Logbook"
                       >
@@ -861,6 +862,7 @@ export default function WeeklyLogbookDashboard() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="h-8 w-8 p-0"
                         onClick={() => handleViewAuditTrail(logbook)}
                         title="View Audit Trail"
                       >
@@ -871,6 +873,7 @@ export default function WeeklyLogbookDashboard() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-8 w-8 p-0"
                           title="Submit"
                         >
                           <Send className="h-4 w-4" />
@@ -881,11 +884,12 @@ export default function WeeklyLogbookDashboard() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-8 w-8 p-0"
                           title="Lock"
                         >
-                              <Lock className="h-4 w-4" />
+                          <Lock className="h-4 w-4" />
                         </Button>
-                        )}
+                      )}
                       </div>
                     </div>
                 </div>
