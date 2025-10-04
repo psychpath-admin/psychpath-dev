@@ -22,10 +22,12 @@ import {
   ChevronUp,
   Download,
   Send,
-  Lock
+  Lock,
+  Activity
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
+import LogbookAuditTrailModal from '@/components/LogbookAuditTrailModal'
 
 interface LogbookEntry {
   id: number | null
@@ -97,7 +99,10 @@ export default function WeeklyLogbookDashboard() {
   })
   const [showFilters, setShowFilters] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('date-desc')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  
+  // Audit trail modal state
+  const [auditModalOpen, setAuditModalOpen] = useState(false)
+  const [selectedLogbookId, setSelectedLogbookId] = useState<number | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [showTooltips, setShowTooltips] = useState(true)
@@ -217,13 +222,13 @@ export default function WeeklyLogbookDashboard() {
     if (filters.searchTerm && !logbook.week_display.toLowerCase().includes(filters.searchTerm.toLowerCase())) return false
     if (filters.weekRange.start && logbook.week_start_date < filters.weekRange.start) return false
     if (filters.weekRange.end && logbook.week_start_date > filters.weekRange.end) return false
-    return true
+            return true
   }).sort((a, b) => {
-    switch (sortBy) {
-      case 'date-asc':
-        return new Date(a.week_start_date).getTime() - new Date(b.week_start_date).getTime()
-      case 'date-desc':
-        return new Date(b.week_start_date).getTime() - new Date(a.week_start_date).getTime()
+      switch (sortBy) {
+        case 'date-asc':
+          return new Date(a.week_start_date).getTime() - new Date(b.week_start_date).getTime()
+        case 'date-desc':
+          return new Date(b.week_start_date).getTime() - new Date(a.week_start_date).getTime()
       case 'status-asc':
         return (a.status || '').localeCompare(b.status || '')
       case 'status-desc':
@@ -252,6 +257,13 @@ export default function WeeklyLogbookDashboard() {
     navigate(`/logbook/week/${logbook.week_start_date}`)
   }
 
+  const handleViewAuditTrail = (logbook: LogbookEntry) => {
+    if (logbook.id) {
+      setSelectedLogbookId(logbook.id)
+      setAuditModalOpen(true)
+    }
+  }
+
 
   if (loading) {
     return (
@@ -262,11 +274,11 @@ export default function WeeklyLogbookDashboard() {
             <p className="text-muted-foreground">Monitor your administrative progress and logbook workflow readiness</p>
           </div>
         </div>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center py-8">Loading logbooks...</div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardContent className="p-6">
+                <div className="text-center py-8">Loading logbooks...</div>
+              </CardContent>
+            </Card>
       </div>
     )
   }
@@ -275,11 +287,11 @@ export default function WeeklyLogbookDashboard() {
     <div className="space-y-6">
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg p-8 text-white">
-        <div className="flex items-center justify-between">
-          <div>
+      <div className="flex items-center justify-between">
+        <div>
             <h1 className="text-3xl font-bold tracking-tight">
               Weekly Logbook Status Dashboard
-            </h1>
+          </h1>
             <p className="text-blue-100">
               Monitor your administrative progress and logbook workflow readiness
             </p>
@@ -414,7 +426,7 @@ export default function WeeklyLogbookDashboard() {
                   <div>Total: {metrics.approvedLogbooks} logbooks</div>
                 </div>
                 <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-              </div>
+                        </div>
             </CardContent>
           </Card>
 
@@ -428,9 +440,9 @@ export default function WeeklyLogbookDashboard() {
                 </div>
                 <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center">
                   <Lock className="h-6 w-6 text-gray-600" />
+                  </div>
                 </div>
-              </div>
-              
+                
               {/* Tooltip */}
               <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
                 <div className="font-semibold mb-1">Finalised (Locked) Logbooks</div>
@@ -440,7 +452,7 @@ export default function WeeklyLogbookDashboard() {
                   <div>Total: {metrics.lockedLogbooks} logbooks</div>
                 </div>
                 <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-              </div>
+                        </div>
             </CardContent>
           </Card>
 
@@ -451,7 +463,7 @@ export default function WeeklyLogbookDashboard() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Regenerated</p>
                   <p className="text-2xl font-bold text-gray-900">{metrics.regeneratedLogbooks}</p>
-                </div>
+                  </div>
                 <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
                   <TrendingUp className="h-6 w-6 text-purple-600" />
                 </div>
@@ -481,9 +493,9 @@ export default function WeeklyLogbookDashboard() {
                 </div>
                 <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
                   <AlertCircle className="h-6 w-6 text-red-600" />
-                </div>
-              </div>
-              
+                    </div>
+                        </div>
+                        
               {/* Tooltip */}
               <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
                 <div className="font-semibold mb-1">Overdue Logbooks</div>
@@ -492,9 +504,9 @@ export default function WeeklyLogbookDashboard() {
                   <div>Grace Period: 2 weeks after week end</div>
                   <div>Total: {metrics.overdueLogbooks} logbooks</div>
                   <div>Action: Requires immediate attention</div>
-                </div>
+                              </div>
                 <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-              </div>
+                              </div>
             </CardContent>
           </Card>
 
@@ -506,11 +518,11 @@ export default function WeeklyLogbookDashboard() {
                   <p className="text-sm font-medium text-gray-600">Avg Review Time</p>
                   <p className="text-2xl font-bold text-gray-900">{metrics.avgReviewTime}</p>
                   <p className="text-xs text-gray-500">days</p>
-                </div>
+                          </div>
                 <div className="h-12 w-12 bg-indigo-100 rounded-lg flex items-center justify-center">
                   <Clock className="h-6 w-6 text-indigo-600" />
-                </div>
-              </div>
+                          </div>
+                        </div>
               
               {/* Tooltip */}
               <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
@@ -538,8 +550,8 @@ export default function WeeklyLogbookDashboard() {
                 </div>
                 <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
                   <Calendar className="h-6 w-6 text-orange-600" />
-                </div>
-              </div>
+                      </div>
+                    </div>
               
               {/* Tooltip */}
               <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
@@ -696,14 +708,14 @@ export default function WeeklyLogbookDashboard() {
       </Card>
 
       {/* Logbook Status Overview Table */}
-      <Card>
-        <CardHeader>
+            <Card>
+              <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
               Logbook Status Overview
             </CardTitle>
-            <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">
                 Showing {paginatedLogbooks.length} of {filteredLogbooks.length} logbooks
               </span>
@@ -807,8 +819,8 @@ export default function WeeklyLogbookDashboard() {
                       ) : (
                         <Unlock className="h-4 w-4 text-gray-400" />
                       )}
-                    </div>
-                  </div>
+                          </div>
+                        </div>
 
                   {/* Regenerated */}
                   <div className="col-span-1">
@@ -818,8 +830,8 @@ export default function WeeklyLogbookDashboard() {
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
-                    </div>
-                  </div>
+                          </div>
+                        </div>
 
                   {/* Comments */}
                   <div className="col-span-2">
@@ -831,8 +843,8 @@ export default function WeeklyLogbookDashboard() {
                       ) : (
                         <span className="text-gray-400">No comments</span>
                       )}
-                    </div>
-                  </div>
+                          </div>
+                        </div>
 
                   {/* Actions */}
                   <div className="col-span-1">
@@ -844,6 +856,15 @@ export default function WeeklyLogbookDashboard() {
                         title="View Logbook"
                       >
                         <Eye className="h-4 w-4" />
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleViewAuditTrail(logbook)}
+                        title="View Audit Trail"
+                      >
+                        <Activity className="h-4 w-4" />
                       </Button>
                       
                       {logbook.status === 'ready' && (
@@ -862,11 +883,11 @@ export default function WeeklyLogbookDashboard() {
                           size="sm"
                           title="Lock"
                         >
-                          <Lock className="h-4 w-4" />
+                              <Lock className="h-4 w-4" />
                         </Button>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
                 </div>
               ))}
 
@@ -885,24 +906,24 @@ export default function WeeklyLogbookDashboard() {
                     >
                       Previous
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                      <Button
+                        variant="outline"
+                        size="sm"
                       onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                       disabled={currentPage === totalPages}
                     >
                       Next
-                    </Button>
+                      </Button>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
       {/* Compliance Checklist */}
-      <Card>
+            <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5" />
@@ -951,9 +972,19 @@ export default function WeeklyLogbookDashboard() {
                 </div>
               </>
             )}
-          </div>
-        </CardContent>
-      </Card>
+                </div>
+              </CardContent>
+            </Card>
+
+      {/* Audit Trail Modal */}
+      <LogbookAuditTrailModal
+        logbookId={selectedLogbookId}
+        isOpen={auditModalOpen}
+        onClose={() => {
+          setAuditModalOpen(false)
+          setSelectedLogbookId(null)
+        }}
+      />
     </div>
   )
 }
