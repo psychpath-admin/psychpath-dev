@@ -8,22 +8,49 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         epas_data = [
             {
-                'code': 'EPA-001',
+                'code': 'C4-01',
                 'title': 'Conduct initial psychological assessment',
                 'description': 'Perform comprehensive psychological assessment including clinical interview, standardized testing, and case formulation to inform treatment planning.',
-                'descriptors': ['4.1', '4.2', '4.3', '4.4', '4.5', '4.6', '6.1', '6.3']
+                'descriptors': ['4.1', '4.2', '4.3', '4.4', '4.5', '4.6', '6.1', '6.3'],
+                'milestones': ['L1', 'L2', 'L3', 'L4'],
+                'tag': 'Assessment',
+                'm3_behaviours': [
+                    'Selects appropriate assessment tools',
+                    'Explains assessment process to client',
+                    'Interprets results accurately',
+                    'Provides clear feedback'
+                ],
+                'prompt': 'Reflect on your assessment approach. What tools did you select and why? How did you ensure the client understood the process? What challenges did you encounter in interpretation?'
             },
             {
-                'code': 'EPA-002',
+                'code': 'C5-02',
                 'title': 'Deliver evidence-based psychological intervention',
                 'description': 'Implement culturally appropriate, evidence-based psychological interventions with clients across diverse populations and settings.',
-                'descriptors': ['5.1', '5.2', '5.3', '5.4', '5.5', '5.6', '7.1', '7.6', '7.7']
+                'descriptors': ['5.1', '5.2', '5.3', '5.4', '5.5', '5.6', '7.1', '7.6', '7.7'],
+                'milestones': ['L1', 'L2', 'L3', 'L4'],
+                'tag': 'Intervention',
+                'm3_behaviours': [
+                    'Adapts intervention to client needs',
+                    'Monitors client progress',
+                    'Uses evidence-based techniques',
+                    'Maintains therapeutic boundaries'
+                ],
+                'prompt': 'Describe your intervention approach. How did you adapt your techniques to meet the client\'s specific needs? What evidence informed your choices? How did you monitor progress?'
             },
             {
-                'code': 'EPA-003',
+                'code': 'C6-03',
                 'title': 'Provide clinical supervision to psychology trainees',
                 'description': 'Supervise psychology trainees in clinical practice, providing feedback, guidance, and professional development support.',
-                'descriptors': ['6.1', '6.6', '6.7', '6.8', '3.1', '3.2', '3.3', '2.1', '2.2']
+                'descriptors': ['6.1', '6.6', '6.7', '6.8', '3.1', '3.2', '3.3', '2.1', '2.2'],
+                'milestones': ['L2', 'L3', 'L4'],
+                'tag': 'Supervision',
+                'm3_behaviours': [
+                    'Provides constructive feedback',
+                    'Models professional behavior',
+                    'Supports trainee development',
+                    'Maintains ethical standards'
+                ],
+                'prompt': 'Reflect on your supervision approach. How did you provide feedback that was both supportive and challenging? What professional behaviors did you model? How did you support the trainee\'s development?'
             },
             {
                 'code': 'EPA-004',
@@ -78,7 +105,11 @@ class Command(BaseCommand):
                 defaults={
                     'title': epa_data['title'],
                     'description': epa_data['description'],
-                    'descriptors': epa_data['descriptors']
+                    'descriptors': epa_data['descriptors'],
+                    'milestones': epa_data.get('milestones', []),
+                    'tag': epa_data.get('tag', ''),
+                    'm3_behaviours': epa_data.get('m3_behaviours', []),
+                    'prompt': epa_data.get('prompt', '')
                 }
             )
             
@@ -91,11 +122,19 @@ class Command(BaseCommand):
                 # Update existing EPA if data has changed
                 if (epa.title != epa_data['title'] or 
                     epa.description != epa_data['description'] or
-                    epa.descriptors != epa_data['descriptors']):
+                    epa.descriptors != epa_data['descriptors'] or
+                    epa.milestones != epa_data.get('milestones', []) or
+                    epa.tag != epa_data.get('tag', '') or
+                    epa.m3_behaviours != epa_data.get('m3_behaviours', []) or
+                    epa.prompt != epa_data.get('prompt', '')):
                     
                     epa.title = epa_data['title']
                     epa.description = epa_data['description']
                     epa.descriptors = epa_data['descriptors']
+                    epa.milestones = epa_data.get('milestones', [])
+                    epa.tag = epa_data.get('tag', '')
+                    epa.m3_behaviours = epa_data.get('m3_behaviours', [])
+                    epa.prompt = epa_data.get('prompt', '')
                     epa.save()
                     updated_count += 1
                     self.stdout.write(

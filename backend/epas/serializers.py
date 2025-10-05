@@ -13,6 +13,10 @@ class EPASerializer(serializers.ModelSerializer):
             'title',
             'description',
             'descriptors',
+            'milestones',
+            'tag',
+            'm3_behaviours',
+            'prompt',
             'created_at',
             'updated_at'
         ]
