@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { Link } from 'react-router-dom'
 import HeaderNotificationBell from '@/components/HeaderNotificationBell'
-import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar } from 'lucide-react'
+import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar, Award } from 'lucide-react'
 // Logo is served from public folder
 
 export function Navbar() {
@@ -85,6 +85,13 @@ export function Navbar() {
                           <div className="text-xs text-gray-500">Submit & Review</div>
                         </div>
                       </Link>
+                      <Link to="/competencies" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <Award className="h-4 w-4 text-amber-600" />
+                        <div>
+                          <div className="font-medium">Core Competencies</div>
+                          <div className="text-xs text-gray-500">AHPRA Reference</div>
+                        </div>
+                      </Link>
                     </div>
                   </div>
                 </NavigationMenuContent>
@@ -114,6 +121,13 @@ export function Navbar() {
                         <div>
                           <div className="font-medium">Manage Trainees</div>
                           <div className="text-xs text-gray-500">Invite & supervise trainees</div>
+                        </div>
+                      </Link>
+                      <Link to="/competencies" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <Award className="h-4 w-4 text-amber-600" />
+                        <div>
+                          <div className="font-medium">Core Competencies</div>
+                          <div className="text-xs text-gray-500">AHPRA Reference</div>
                         </div>
                       </Link>
                     </div>

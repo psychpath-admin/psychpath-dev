@@ -37,6 +37,7 @@ import SupervisorLogbookReview from '@/pages/SupervisorLogbookReview'
 import LogbookReview from '@/pages/LogbookReview'
 import NotificationCenter from '@/pages/NotificationCenter'
 import CalendarPage from '@/pages/CalendarPage'
+import CoreCompetencyReference from '@/pages/CoreCompetencyReference'
 import ErrorHelp from '@/pages/ErrorHelp'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { setupGlobalErrorHandling } from '@/lib/errorLogger'
@@ -162,6 +163,7 @@ function App() {
           <Route path="/section-a/cra-edit" element={<RequireAuth><CRAEdit /></RequireAuth>} />
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
+          <Route path="/competencies" element={<RequireAuth><CoreCompetencyReference /></RequireAuth>} />
           <Route path="/help/errors" element={<ErrorHelp />} />
           <Route path="/competencies-help" element={<CompetenciesHelp />} />
           {/* Registrar Routes */}
