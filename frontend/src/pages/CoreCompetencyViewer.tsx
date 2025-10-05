@@ -30,6 +30,10 @@ interface EPA {
   title: string
   description: string
   descriptors: string[]
+  milestones: string[]
+  tag: string
+  m3_behaviours: string[]
+  prompt: string
   created_at: string
   updated_at: string
 }
@@ -98,7 +102,9 @@ export default function CoreCompetencyViewer() {
   }
 
   const getLinkedEPAs = (descriptor: string) => {
-    return epas.filter(epa => epa.descriptors.includes(descriptor))
+    // Extract the descriptor number (e.g., "1.1" from "1.1 Possesses knowledge...")
+    const descriptorNumber = descriptor.split(' ')[0]
+    return epas.filter(epa => epa.descriptors.includes(descriptorNumber))
   }
 
   if (loading) {
@@ -232,7 +238,14 @@ export default function CoreCompetencyViewer() {
                               >
                                 <div className="flex items-center gap-3">
                                   <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                  <span className="font-medium text-gray-900">{descriptor}</span>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary" className="text-xs font-mono">
+                                        {descriptor.split(' ')[0]}
+                                      </Badge>
+                                      <span className="font-medium text-gray-900">{descriptor}</span>
+                                    </div>
+                                  </div>
                                   <Badge variant="outline" className="text-xs">
                                     {linkedEPAs.length} EPA{linkedEPAs.length !== 1 ? 's' : ''}
                                   </Badge>
@@ -247,20 +260,40 @@ export default function CoreCompetencyViewer() {
                               {isDescriptorExpanded && (
                                 <div className="px-3 pb-3 border-t border-gray-100 bg-gray-50">
                                   {linkedEPAs.length > 0 ? (
-                                    <div className="pt-3 space-y-2">
+                                    <div className="pt-3 space-y-3">
                                       <p className="text-sm text-gray-600 mb-2">Linked EPAs:</p>
                                       {linkedEPAs.map((epa) => (
-                                        <div key={epa.id} className="flex items-center gap-2 p-2 bg-white rounded border">
-                                          <Badge variant="secondary" className="text-xs font-mono">
-                                            {epa.code}
-                                          </Badge>
-                                          <Link 
-                                            to={`/epas#${epa.code}`}
-                                            className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
-                                          >
-                                            {epa.title}
-                                            <ExternalLink className="h-3 w-3" />
-                                          </Link>
+                                        <div key={epa.id} className="p-3 bg-white rounded border hover:shadow-sm transition-shadow">
+                                          <div className="flex items-start justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                              <Badge variant="secondary" className="text-xs font-mono">
+                                                {epa.code}
+                                              </Badge>
+                                              <Link 
+                                                to={`/epas#${epa.code}`}
+                                                className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                                              >
+                                                {epa.title}
+                                                <ExternalLink className="h-3 w-3" />
+                                              </Link>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              {epa.milestones.map((milestone, idx) => (
+                                                <Badge key={idx} variant="outline" className="text-xs">
+                                                  {milestone}
+                                                </Badge>
+                                              ))}
+                                            </div>
+                                          </div>
+                                          <p className="text-xs text-gray-600 mb-2">{epa.description}</p>
+                                          <div className="flex items-center gap-2">
+                                            <Badge variant="outline" className="text-xs">
+                                              {epa.tag}
+                                            </Badge>
+                                            <span className="text-xs text-gray-500">
+                                              {epa.m3_behaviours.length} behaviours
+                                            </span>
+                                          </div>
                                         </div>
                                       ))}
                                     </div>
