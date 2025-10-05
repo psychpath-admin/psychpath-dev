@@ -4,8 +4,6 @@ import Navbar from '@/components/Navbar'
 import RegistrarNavigation from '@/components/registrar/RegistrarNavigation'
 import PathwaySwitcher from '@/components/PathwaySwitcher'
 import { AuthProvider } from '@/context/AuthContext'
-import EPAList from '@/components/EPAList'
-import ReflectionLog from '@/components/ReflectionLog'
 import LoginPage from '@/pages/LoginPage'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import EPADetail from '@/pages/EPADetail'
@@ -15,8 +13,6 @@ import SupervisorLinks from '@/pages/SupervisorLinks'
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import MyReflections from '@/pages/MyReflections'
-import LogbookDashboard from '@/pages/LogbookDashboard'
-import WeeklyLogbookDashboard from '@/pages/WeeklyLogbookDashboard'
 import WeeklyLogbookEditor from '@/pages/WeeklyLogbookEditor'
 import LogbookPage from '@/pages/LogbookPage'
 import LogbookEditor from '@/pages/LogbookEditor'
@@ -149,7 +145,6 @@ function App() {
           <Route path="/register/subscribe" element={<PublicRoute><RegisterSubscribe /></PublicRoute>} />
 
           <Route path="/" element={<RequireAuth><DashboardRedirect userRole={me?.role} /></RequireAuth>} />
-          <Route path="/epas" element={<RequireAuth><><EPAList /><section id="reflections"><ReflectionLog /></section></></RequireAuth>} />
           <Route path="/epa/:code" element={<RequireAuth><EPADetail /></RequireAuth>} />
           <Route path="/section-a" element={<RequireAuth><SectionA /></RequireAuth>} />
           <Route path="/section-a/create" element={<RequireAuth><SectionA /></RequireAuth>} />
