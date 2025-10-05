@@ -30,6 +30,7 @@ urlpatterns = [
     path('api/section-c/', include('section_c.urls')),
     path('api/registrar/', include('registrar_logbook.urls')),
     path('api/competencies/', include('competencies.urls')),
+    path('api/epas/', include('epas.urls')),
     path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('support/', include('support.urls')),
