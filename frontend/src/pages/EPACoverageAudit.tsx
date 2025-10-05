@@ -33,6 +33,10 @@ interface EPA {
   title: string
   description: string
   descriptors: string[]
+  milestones: string[]
+  tag: string
+  m3_behaviours: string[]
+  prompt: string
   created_at: string
   updated_at: string
 }
