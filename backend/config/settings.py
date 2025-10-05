@@ -113,6 +113,7 @@ INSTALLED_APPS = [
     'support',
     'internship_validation', # Added internship validation app
     'registrar_logbook', # Registrar program logbook app
+    'competencies', # AHPRA 8 Core Competencies
 ]
 
 # Strong password hashers: prefer Argon2
