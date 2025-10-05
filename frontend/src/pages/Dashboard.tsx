@@ -106,6 +106,7 @@ interface LogbookStatus {
     rejected: number
     overdue: number
     new: number
+    draft: number
   }
   total_weeks: number
   submitted?: number // For supervisor compatibility
@@ -794,7 +795,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
     if (savedOrder) {
       const parsed = JSON.parse(savedOrder)
       // Ensure essential cards are always included based on role
-      const userRole = programSummary?.role || 'PROVISIONAL'
+      const currentUserRole = programSummary?.role || userRole || 'PROVISIONAL'
       const essentialCards = {
         'PROVISIONAL': ['pd', 'supervision_hours', 'internship_validation'],
         'REGISTRAR': ['pd', 'supervision_hours', 'registrar_summary'],
@@ -802,7 +803,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
         'ORG_ADMIN': []
       }
       
-      const requiredCards = essentialCards[userRole as keyof typeof essentialCards] || []
+      const requiredCards = essentialCards[currentUserRole as keyof typeof essentialCards] || []
       requiredCards.forEach((cardId: string) => {
         if (!parsed.includes(cardId)) {
           parsed.push(cardId)
@@ -812,13 +813,13 @@ export default function Dashboard({ userRole }: DashboardProps) {
       cardOrderToSet = parsed
     } else {
       // Use role-specific default order
-      const userRole = programSummary?.role || 'PROVISIONAL'
-      cardOrderToSet = defaultCardOrders[userRole as keyof typeof defaultCardOrders] || defaultCardOrders['PROVISIONAL']
+      const currentUserRole = programSummary?.role || userRole || 'PROVISIONAL'
+      cardOrderToSet = defaultCardOrders[currentUserRole as keyof typeof defaultCardOrders] || defaultCardOrders['PROVISIONAL']
     }
     
     console.log('Dashboard: Setting card order:', cardOrderToSet)
     setCardOrder(cardOrderToSet)
-  }, [programSummary?.role])
+  }, [programSummary?.role, userRole])
 
   useEffect(() => {
     let mounted = true
@@ -1187,7 +1188,14 @@ export default function Dashboard({ userRole }: DashboardProps) {
   // Simple test to see if component renders
   if (cardOrder.length === 0) {
     console.log('Dashboard: cardOrder is empty, showing loading')
-    return <div>Loading dashboard...</div>
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p>Loading dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
   console.log('Dashboard: cardOrder =', cardOrder)
@@ -1218,8 +1226,8 @@ export default function Dashboard({ userRole }: DashboardProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg p-6">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex-1">
             <h1 className="text-3xl font-bold mb-2">
               {user?.first_name && user?.last_name 
                 ? `${user.first_name} ${user.last_name}'s Dashboard`
@@ -1230,17 +1238,17 @@ export default function Dashboard({ userRole }: DashboardProps) {
               Track your progress through the 5+1 provisional psychology internship program
             </p>
           </div>
-          <div className="flex gap-2">
-            <Link to="/section-a" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+          <div className="flex flex-wrap gap-2">
+            <Link to="/section-a" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors whitespace-nowrap">
               Open Section A
             </Link>
-            <Link to="/section-b" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+            <Link to="/section-b" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors whitespace-nowrap">
               Open Section B
             </Link>
-            <Link to="/section-c" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+            <Link to="/section-c" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors whitespace-nowrap">
               Open Section C
             </Link>
-            <Link to="/logbook" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+            <Link to="/logbook" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors whitespace-nowrap">
               Weekly Logbook
             </Link>
           </div>

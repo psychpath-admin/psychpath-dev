@@ -207,7 +207,7 @@ class WeeklyLogbook(models.Model):
     
     def has_supervisor_comments(self):
         """Check if supervisor has provided comments"""
-        return bool(self.supervisor_comments.strip()) if self.supervisor_comments else False
+        return bool(self.review_comments.strip()) if self.review_comments else False
     
     @property
     def is_editable(self):
@@ -340,9 +340,10 @@ class WeeklyLogbook(models.Model):
     
     def resubmit(self, user):
         """Resubmit logbook after edits"""
-        if self.status != 'returned_for_edits':
-            raise ValueError("Only returned logbooks can be resubmitted")
+        if self.status not in ['returned_for_edits', 'rejected']:
+            raise ValueError("Only returned or rejected logbooks can be resubmitted")
         
+        previous_status = self.status
         self.status = 'submitted'
         self.resubmitted_at = timezone.now()
         self.save()
@@ -354,7 +355,7 @@ class WeeklyLogbook(models.Model):
             user=user,
             user_role=self._get_user_role(user),
             comments='Logbook resubmitted after edits',
-            previous_status='returned_for_edits',
+            previous_status=previous_status,
             new_status='submitted'
         )
         

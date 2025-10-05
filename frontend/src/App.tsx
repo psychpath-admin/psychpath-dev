@@ -20,6 +20,7 @@ import WeeklyLogbookDashboard from '@/pages/WeeklyLogbookDashboard'
 import WeeklyLogbookEditor from '@/pages/WeeklyLogbookEditor'
 import LogbookPage from '@/pages/LogbookPage'
 import LogbookEditor from '@/pages/LogbookEditor'
+import EditRejectedLogbook from '@/pages/EditRejectedLogbook'
 import SectionA from '@/pages/SectionA'
 import SectionB from '@/pages/SectionB'
 import SectionC from '@/pages/SectionC'
@@ -32,6 +33,7 @@ import RegisterDetails from '@/pages/RegisterDetails'
 import RegisterVerify from '@/pages/RegisterVerify'
 import RegisterSubscribe from '@/pages/RegisterSubscribe'
 import SupervisorDashboard from '@/pages/SupervisorDashboard'
+import SupervisorLogbookReview from '@/pages/SupervisorLogbookReview'
 import LogbookReview from '@/pages/LogbookReview'
 import NotificationCenter from '@/pages/NotificationCenter'
 import CalendarPage from '@/pages/CalendarPage'
@@ -156,7 +158,7 @@ function App() {
           <Route path="/logbook/week/:weekStart" element={<RequireAuth><WeeklyLogbookEditor /></RequireAuth>} />
           <Route path="/logbook/old" element={<RequireAuth><LogbookPage /></RequireAuth>} />
           <Route path="/logbook/:id" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
-          <Route path="/logbook/:id/edit" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
+          <Route path="/logbook/:id/edit" element={<RequireAuth><EditRejectedLogbook /></RequireAuth>} />
           <Route path="/section-a/cra-edit" element={<RequireAuth><CRAEdit /></RequireAuth>} />
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
@@ -170,9 +172,10 @@ function App() {
                     {me?.role === 'REGISTRAR' && <Route path="/registrar/practice/:id/edit" element={<RequireAuth><RegistrarPracticeEntryForm /></RequireAuth>} />}
                     {me?.role === 'REGISTRAR' && <Route path="/registrar/supervision" element={<RequireAuth><RegistrarSupervisionLog /></RequireAuth>} />}
                     {me?.role === 'REGISTRAR' && <Route path="/registrar/reports" element={<RequireAuth><RegistrarReports /></RequireAuth>} />}
-          {me?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
-          {me?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
-          {me?.role === 'SUPERVISOR' && <Route path="/supervisor/dashboard" element={<RequireAuth><SupervisorDashboard /></RequireAuth>} />}
+      {me?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
+      {me?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
+      {me?.role === 'SUPERVISOR' && <Route path="/supervisor/dashboard" element={<RequireAuth><SupervisorDashboard /></RequireAuth>} />}
+      {me?.role === 'SUPERVISOR' && <Route path="/supervisor/logbook-review" element={<RequireAuth><SupervisorLogbookReview /></RequireAuth>} />}
           {me?.role === 'SUPERVISOR' && <Route path="/logbooks/:id/review" element={<RequireAuth><LogbookReview /></RequireAuth>} />}
           {me?.role === 'ORG_ADMIN' && <Route path="/org" element={<RequireAuth><OrgDashboard /></RequireAuth>} />}
           <Route path="*" element={<Navigate to="/login" replace />} />

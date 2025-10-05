@@ -8,8 +8,18 @@ BACKUP_DIR="$ROOT_DIR/backend/backups"
 TS="$(date +%Y%m%d-%H%M)"
 TAG="eod-$TS"
 
-# 1) DB snapshot
+# 1) DB snapshot and sync
 "$ROOT_DIR/backend/scripts/db_backup.sh"
+
+# 1.5) Sync databases (SQLite <-> PostgreSQL)
+echo "Synchronizing databases..."
+if "$ROOT_DIR/backend/scripts/sync_databases_simple.sh" sync; then
+  echo "Database synchronization completed successfully"
+else
+  echo "Database synchronization failed - this is expected if databases have schema differences"
+  echo "Creating comparison report for manual review..."
+  "$ROOT_DIR/backend/scripts/sync_databases_simple.sh" report || echo "Comparison report failed"
+fi
 
 # 2) Commit and tag code (non-invasive: add changes only if present)
 cd "$REPO_DIR"

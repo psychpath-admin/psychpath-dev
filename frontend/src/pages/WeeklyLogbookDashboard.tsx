@@ -23,7 +23,8 @@ import {
   Download,
   Send,
   Lock,
-  Activity
+  Activity,
+  Edit
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
@@ -882,6 +883,18 @@ export default function WeeklyLogbookDashboard() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
+
+                      {logbook.status === 'rejected' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => navigate(`/logbook/${logbook.id}/edit`)}
+                          title="Edit Rejected Logbook"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
 
                       <Button
                         variant="ghost"

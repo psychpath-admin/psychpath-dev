@@ -50,6 +50,8 @@ interface LogbookForReview {
   week_display: string
   status: string
   submitted_at: string
+  reviewed_at?: string
+  resubmitted_at?: string
   section_totals: any
   message_count: number
 }
@@ -167,9 +169,17 @@ export default function SupervisorDashboard() {
     const superviseesData = await fetchSupervisees()
     const logbooksData = await fetchLogbooksForReview()
     
+    // Only count logbooks that need review (submitted and either never reviewed or resubmitted after review)
+    const logbooksNeedingReview = logbooksData.filter((logbook: LogbookForReview) => {
+      if (logbook.status !== 'submitted') return false
+      if (!logbook.reviewed_at) return true // Never reviewed
+      // If resubmitted after review, it needs review again
+      return logbook.resubmitted_at && new Date(logbook.resubmitted_at) > new Date(logbook.reviewed_at)
+    })
+    
     const stats = {
       superviseesOnTrack: superviseesData.length, // All active supervisees are considered on track for now
-      logbooksNeedingReview: logbooksData.length,
+      logbooksNeedingReview: logbooksNeedingReview.length,
       overdueLogbooks: 0, // TODO: Calculate overdue logbooks
       totalActiveSupervisees: superviseesData.length
     }
@@ -343,7 +353,7 @@ export default function SupervisorDashboard() {
             enabled={tooltipsEnabled}
           >
             <Card className="hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => window.location.href = '/logbook/review'}>
+                  onClick={() => window.location.href = '/supervisor/logbook-review'}>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -397,14 +407,19 @@ export default function SupervisorDashboard() {
         </div>
 
         {/* This Week's Logbook Review Tasks */}
-        {logbooksForReview.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                📋 This Week's Logbook Review Tasks
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              📋 This Week's Logbook Review Tasks
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {logbooksForReview.filter(logbook => {
+              if (logbook.status !== 'submitted') return false
+              if (!logbook.reviewed_at) return true // Never reviewed
+              // If resubmitted after review, it needs review again
+              return logbook.resubmitted_at && new Date(logbook.resubmitted_at) > new Date(logbook.reviewed_at)
+            }).length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -416,7 +431,12 @@ export default function SupervisorDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {logbooksForReview.map((logbook) => (
+                  {logbooksForReview.filter(logbook => {
+                    if (logbook.status !== 'submitted') return false
+                    if (!logbook.reviewed_at) return true // Never reviewed
+                    // If resubmitted after review, it needs review again
+                    return logbook.resubmitted_at && new Date(logbook.resubmitted_at) > new Date(logbook.reviewed_at)
+                  }).map((logbook) => (
                     <TableRow key={logbook.id}>
                       <TableCell className="font-medium">{logbook.trainee_name}</TableCell>
                       <TableCell>{logbook.week_display}</TableCell>
@@ -434,7 +454,7 @@ export default function SupervisorDashboard() {
                       <TableCell>
                         <Button 
                           size="sm" 
-                          onClick={() => window.location.href = `/logbook/review/${logbook.id}`}
+                          onClick={() => window.location.href = `/logbooks/${logbook.id}/review`}
                         >
                           <Eye className="h-4 w-4 mr-2" />
                           Review
@@ -444,9 +464,15 @@ export default function SupervisorDashboard() {
                   ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                <p className="text-lg font-medium">All caught up!</p>
+                <p>No logbooks currently need review.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Supervisee Tracker */}
         <Card>

@@ -4,6 +4,7 @@ SHELL := /bin/bash
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 VENV_PY := $(BACKEND_DIR)/venv/bin/python3
+# Always use SQLite for development
 MANAGE := USE_SQLITE=1 $(VENV_PY) $(BACKEND_DIR)/manage.py
 
 # Default target
@@ -20,6 +21,10 @@ help:
 	@echo "  db-backup         - Create timestamped SQLite backup"
 	@echo "  db-restore        - Restore SQLite from SNAPSHOT=path/to/file"
 	@echo "  db-reset          - Backup, reset DB, run migrations"
+	@echo "  db-sync           - Sync data between SQLite and PostgreSQL"
+	@echo "  db-sync-sqltopg   - Sync from SQLite (dev) to PostgreSQL (prod)"
+	@echo "  db-sync-pgtosql   - Sync from PostgreSQL (prod) to SQLite (dev)"
+	@echo "  db-compare        - Compare SQLite and PostgreSQL content"
 	@echo "  migrate           - Apply migrations"
 	@echo "  makemigrations    - Create migrations"
 	@echo "  eod-complete      - Complete EOD workflow: checkpoint, push, update docs, shutdown"
@@ -134,6 +139,22 @@ db-reset:
 	@echo "Resetting SQLite database..."
 	@rm -f $(BACKEND_DIR)/db.sqlite3
 	@$(MANAGE) migrate --noinput
+
+.PHONY: db-sync
+db-sync:
+	@bash $(BACKEND_DIR)/scripts/sync_databases_simple.sh sync
+
+.PHONY: db-sync-sqltopg
+db-sync-sqltopg:
+	@bash $(BACKEND_DIR)/scripts/sync_databases_simple.sh sync
+
+.PHONY: db-sync-pgtosql
+db-sync-pgtosql:
+	@bash $(BACKEND_DIR)/scripts/sync_databases_simple.sh sync
+
+.PHONY: db-compare
+db-compare:
+	@bash $(BACKEND_DIR)/scripts/sync_databases_simple.sh report
 
 .PHONY: migrate
 migrate:

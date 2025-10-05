@@ -37,6 +37,7 @@ interface LogbookForReview {
   status: 'submitted' | 'approved' | 'rejected' | 'returned_for_edits'
   submitted_at: string
   reviewed_at?: string
+  resubmitted_at?: string
   supervisor_comments?: string
   section_totals: {
     section_a: { weekly_hours: number; cumulative_hours: number }
@@ -93,7 +94,20 @@ export default function SupervisorLogbookReview() {
       const response = await apiFetch(url)
       if (response.ok) {
         const data = await response.json()
-        setLogbooks(data)
+        
+        // Filter logbooks based on status filter
+        const filteredData = data.filter((logbook: LogbookForReview) => {
+          if (statusFilter === 'all' || statusFilter === 'submitted') {
+            // For 'all' or 'submitted' filters, show logbooks that need review
+            if (logbook.status !== 'submitted') return false
+            if (!logbook.reviewed_at) return true // Never reviewed
+            // If resubmitted after review, it needs review again
+            return logbook.resubmitted_at && new Date(logbook.resubmitted_at) > new Date(logbook.reviewed_at)
+          }
+          return true // Show all for other status filters
+        })
+        
+        setLogbooks(filteredData)
       } else {
         console.error('Failed to fetch logbooks:', response.status)
         setLogbooks([])

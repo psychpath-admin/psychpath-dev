@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,7 +22,8 @@ import {
   ChevronUp,
   Download,
   Send,
-  Lock
+  Lock,
+  Edit
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
@@ -76,6 +78,7 @@ interface LogbookFilters {
 }
 
 export default function LogbookDashboard() {
+  const navigate = useNavigate()
   const [logbooks, setLogbooks] = useState<Logbook[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreationModal, setShowCreationModal] = useState(false)
@@ -689,6 +692,17 @@ export default function LogbookDashboard() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
+                      
+                      {logbook.status === 'rejected' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/logbook/${logbook.id}/edit`)}
+                          title="Edit Rejected Logbook"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
                       
                       {logbook.status === 'draft' && (
                         <Button

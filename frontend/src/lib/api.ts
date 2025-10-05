@@ -276,7 +276,7 @@ export async function createSectionAEntry(data: any) {
 }
 
 export async function updateSectionAEntry(id: number, data: any) {
-  const res = await apiFetch(`/api/section-a/entries/${id}/`, {
+  const res = await apiFetch(`/api/section-a/entries/${id}/?include_locked=true`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   })
@@ -379,7 +379,7 @@ export async function createPDEntry(entry: Partial<PDEntry>): Promise<PDEntry> {
 }
 
 export async function updatePDEntry(id: number, entry: Partial<PDEntry>): Promise<PDEntry> {
-  const res = await apiFetch(`/api/section-b/entries/${id}/`, {
+  const res = await apiFetch(`/api/section-b/entries/${id}/?include_locked=true`, {
     method: 'PUT',
     body: JSON.stringify(entry)
   })
@@ -423,7 +423,7 @@ export async function createSupervisionEntry(entry: Partial<SupervisionEntry>): 
 }
 
 export async function updateSupervisionEntry(id: number, entry: Partial<SupervisionEntry>): Promise<SupervisionEntry> {
-  const res = await apiFetch(`/api/section-c/entries/${id}/`, {
+  const res = await apiFetch(`/api/section-c/entries/${id}/?include_locked=true`, {
     method: 'PUT',
     body: JSON.stringify(entry)
   })

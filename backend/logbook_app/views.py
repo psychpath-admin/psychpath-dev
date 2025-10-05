@@ -928,7 +928,8 @@ def supervisor_logbooks(request):
             'status': logbook.status,
             'submitted_at': logbook.submitted_at,
             'reviewed_at': logbook.reviewed_at,
-            'supervisor_comments': logbook.supervisor_comments,
+            'resubmitted_at': logbook.resubmitted_at,
+            'review_comments': logbook.review_comments,
             'section_totals': logbook.calculate_section_totals(),
             'message_count': logbook.messages.count()
         })
