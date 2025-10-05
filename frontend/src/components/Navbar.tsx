@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { Link } from 'react-router-dom'
 import HeaderNotificationBell from '@/components/HeaderNotificationBell'
-import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar, Award } from 'lucide-react'
+import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar, Award, Target } from 'lucide-react'
 // Logo is served from public folder
 
 export function Navbar() {
@@ -92,6 +92,20 @@ export function Navbar() {
                           <div className="text-xs text-gray-500">AHPRA Reference</div>
                         </div>
                       </Link>
+                      <Link to="/competency-viewer" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <Target className="h-4 w-4 text-blue-600" />
+                        <div>
+                          <div className="font-medium">Competency Viewer</div>
+                          <div className="text-xs text-gray-500">With EPA Links</div>
+                        </div>
+                      </Link>
+                      <Link to="/epas" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <Award className="h-4 w-4 text-green-600" />
+                        <div>
+                          <div className="font-medium">EPA Browser</div>
+                          <div className="text-xs text-gray-500">Search & Filter</div>
+                        </div>
+                      </Link>
                     </div>
                   </div>
                 </NavigationMenuContent>
@@ -130,6 +144,20 @@ export function Navbar() {
                           <div className="text-xs text-gray-500">AHPRA Reference</div>
                         </div>
                       </Link>
+                      <Link to="/competency-viewer" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <Target className="h-4 w-4 text-blue-600" />
+                        <div>
+                          <div className="font-medium">Competency Viewer</div>
+                          <div className="text-xs text-gray-500">With EPA Links</div>
+                        </div>
+                      </Link>
+                      <Link to="/epas" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <Award className="h-4 w-4 text-green-600" />
+                        <div>
+                          <div className="font-medium">EPA Browser</div>
+                          <div className="text-xs text-gray-500">Search & Filter</div>
+                        </div>
+                      </Link>
                     </div>
                   </div>
                 </NavigationMenuContent>
@@ -152,6 +180,13 @@ export function Navbar() {
                         <div>
                           <div className="font-medium">Organization Dashboard</div>
                           <div className="text-xs text-gray-500">Manage organization data</div>
+                        </div>
+                      </Link>
+                      <Link to="/admin/epa-coverage" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <BarChart3 className="h-4 w-4 text-purple-600" />
+                        <div>
+                          <div className="font-medium">EPA Coverage Audit</div>
+                          <div className="text-xs text-gray-500">Descriptor mapping analysis</div>
                         </div>
                       </Link>
                     </div>

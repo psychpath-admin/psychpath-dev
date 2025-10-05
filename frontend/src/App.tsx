@@ -38,6 +38,9 @@ import LogbookReview from '@/pages/LogbookReview'
 import NotificationCenter from '@/pages/NotificationCenter'
 import CalendarPage from '@/pages/CalendarPage'
 import CoreCompetencyReference from '@/pages/CoreCompetencyReference'
+import CoreCompetencyViewer from '@/pages/CoreCompetencyViewer'
+import EPABrowser from '@/pages/EPABrowser'
+import EPACoverageAudit from '@/pages/EPACoverageAudit'
 import ErrorHelp from '@/pages/ErrorHelp'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { setupGlobalErrorHandling } from '@/lib/errorLogger'
@@ -164,6 +167,9 @@ function App() {
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
           <Route path="/competencies" element={<RequireAuth><CoreCompetencyReference /></RequireAuth>} />
+          <Route path="/competency-viewer" element={<RequireAuth><CoreCompetencyViewer /></RequireAuth>} />
+          <Route path="/epas" element={<RequireAuth><EPABrowser /></RequireAuth>} />
+          {me?.role === 'ORG_ADMIN' && <Route path="/admin/epa-coverage" element={<RequireAuth><EPACoverageAudit /></RequireAuth>} />}
           <Route path="/help/errors" element={<ErrorHelp />} />
           <Route path="/competencies-help" element={<CompetenciesHelp />} />
           {/* Registrar Routes */}
