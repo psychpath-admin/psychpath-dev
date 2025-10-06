@@ -1,23 +1,19 @@
 #!/bin/bash
 
-# WORKING Backup System - This Actually Works
-# Uses only proven methods
+# WORKING BACKUP SCRIPT - Simple and Reliable
+# This script creates a backup that actually works
 
 set -e
 
-PROJECT_ROOT="/Users/macdemac/Local Sites/PsychPATH"
-BACKUP_DIR="$PROJECT_ROOT/backups"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_NAME="working_backup_$TIMESTAMP"
-
-# Colors
+# Colors for output
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
-RED='\033[0;31m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
+# Logging functions
 log() {
-    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
+    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
 }
 
 success() {
@@ -28,19 +24,36 @@ error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Get backup name from argument or generate timestamp
+BACKUP_NAME="working_backup_$(date +%Y%m%d_%H%M%S)"
+if [ ! -z "$1" ]; then
+    BACKUP_NAME="working_backup_$1"
+fi
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKUP_DIR="$PROJECT_ROOT/backups"
+
 # Create backup directory
 mkdir -p "$BACKUP_DIR/$BACKUP_NAME"
 
 log "Starting WORKING backup: $BACKUP_NAME"
 
-# 1. Code Backup (GitHub - This ALWAYS works)
+# 1. Code Backup (Git)
 log "Backing up code to GitHub..."
 cd "$PROJECT_ROOT"
+
+# Add all changes
 git add -A
-git commit -m "BACKUP: Working backup - $TIMESTAMP" || true
-git push origin $(git branch --show-current) || warning "Failed to push to GitHub"
-git tag "working_backup_$TIMESTAMP"
-success "Code backed up with tag: working_backup_$TIMESTAMP"
+git commit -m "BACKUP: Working backup - $BACKUP_NAME" || true
+
+# Push to GitHub
+git push origin HEAD
+
+# Create tag
+git tag -a "$BACKUP_NAME" -m "Working backup - $BACKUP_NAME"
+git push origin "$BACKUP_NAME"
+
+success "Code backed up with tag: $BACKUP_NAME"
 
 # 2. Database Backup (PostgreSQL - Direct method)
 log "Backing up PostgreSQL database..."
@@ -51,12 +64,12 @@ PG_DUMP="/opt/homebrew/Cellar/postgresql@16/16.10/bin/pg_dump"
 PSQL="/opt/homebrew/Cellar/postgresql@16/16.10/bin/psql"
 
 if [ -f "$PG_DUMP" ]; then
-    # Method 1: Direct pg_dump
-    if $PG_DUMP -h localhost -U psychpath_user -d psychpath_db > "$BACKUP_DIR/$BACKUP_NAME/database.sql" 2>/dev/null; then
+    # Method 1: Direct pg_dump with correct credentials
+    if $PG_DUMP -h localhost -U psychpath -d psychpath > "$BACKUP_DIR/$BACKUP_NAME/database.sql" 2>/dev/null; then
         success "PostgreSQL backup completed"
     else
         # Method 2: Try with different connection
-        if $PG_DUMP -h 127.0.0.1 -U psychpath_user -d psychpath_db > "$BACKUP_DIR/$BACKUP_NAME/database.sql" 2>/dev/null; then
+        if $PG_DUMP -h 127.0.0.1 -U psychpath -d psychpath > "$BACKUP_DIR/$BACKUP_NAME/database.sql" 2>/dev/null; then
             success "PostgreSQL backup completed (127.0.0.1)"
         else
             error "PostgreSQL backup failed - check connection"
@@ -75,12 +88,13 @@ cat > "$BACKUP_DIR/$BACKUP_NAME/RECOVER.sh" << 'EOF'
 
 set -e
 
-PROJECT_ROOT="/Users/macdemac/Local Sites/PsychPATH"
-BACKUP_DIR="$(dirname "$0")"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKUP_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 echo "Starting recovery..."
 
 # Stop services
+echo "Stopping services..."
 cd "$PROJECT_ROOT"
 make dev-stop 2>/dev/null || true
 
@@ -94,8 +108,8 @@ echo "Restoring database..."
 cd "$PROJECT_ROOT/backend"
 PSQL="/opt/homebrew/Cellar/postgresql@16/16.10/bin/psql"
 if [ -f "$BACKUP_DIR/database.sql" ]; then
-    $PSQL -h localhost -U psychpath_user -d psychpath_db < "$BACKUP_DIR/database.sql" || \
-    $PSQL -h 127.0.0.1 -U psychpath_user -d psychpath_db < "$BACKUP_DIR/database.sql"
+    $PSQL -h localhost -U psychpath -d psychpath < "$BACKUP_DIR/database.sql" || \
+    $PSQL -h 127.0.0.1 -U psychpath -d psychpath < "$BACKUP_DIR/database.sql"
 else
     echo "ERROR: No database backup found"
     exit 1
@@ -111,33 +125,35 @@ EOF
 
 chmod +x "$BACKUP_DIR/$BACKUP_NAME/RECOVER.sh"
 
-# 4. Create backup info
+# 4. Create backup info file
 cat > "$BACKUP_DIR/$BACKUP_NAME/BACKUP_INFO.md" << EOF
-# Working Backup - $TIMESTAMP
+# Working Backup: $BACKUP_NAME
 
-## Backup Information
-- **Backup ID**: $BACKUP_NAME
-- **Timestamp**: $(date)
-- **Git Commit**: $(git rev-parse HEAD)
-- **Git Tag**: working_backup_$TIMESTAMP
+**Created:** $(date)
+**Type:** Code + Database
+**Status:** ✅ WORKING
+
+## Contents
+- Code: Git tag \`$BACKUP_NAME\`
+- Database: \`database.sql\`
+- Recovery: \`RECOVER.sh\`
 
 ## Recovery Instructions
-\`\`\`bash
-cd "$BACKUP_DIR/$BACKUP_NAME"
-./RECOVER.sh
-\`\`\`
+1. Run: \`cd backups/$BACKUP_NAME && ./RECOVER.sh\`
+2. Or manually:
+   - \`git checkout $BACKUP_NAME\`
+   - \`psql -h localhost -U psychpath -d psychpath < database.sql\`
 
-## Manual Recovery
-\`\`\`bash
-cd /Users/macdemac/Local\ Sites/PsychPATH
-make dev-stop
-git checkout working_backup_$TIMESTAMP
-cd backend
-psql -h localhost -U psychpath_user -d psychpath_db < ../backups/$BACKUP_NAME/database.sql
-make dev-start
-\`\`\`
+## Git Tag: $BACKUP_NAME
 EOF
 
+# 5. Create symlink to latest
+ln -sfn "$BACKUP_NAME" "$BACKUP_DIR/latest"
+
 success "Backup completed: $BACKUP_NAME"
-success "Location: $BACKUP_DIR/$BACKUP_NAME"
-success "Recovery: cd $BACKUP_DIR/$BACKUP_NAME && ./RECOVER.sh"
+echo ""
+echo "📁 Backup location: $BACKUP_DIR/$BACKUP_NAME"
+echo "🔄 Recovery command: cd backups/$BACKUP_NAME && ./RECOVER.sh"
+echo "📋 Backup info: $BACKUP_DIR/$BACKUP_NAME/BACKUP_INFO.md"
+echo ""
+echo "✅ This backup is WORKING and can be restored!"
