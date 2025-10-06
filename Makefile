@@ -33,6 +33,7 @@ help:
 	@echo "  backup-complete   - Create complete system backup (code + DB + config)"
 	@echo "  backup-working    - Create WORKING backup (code + DB) - RECOMMENDED"
 	@echo "  backup-enhanced   - Create ENHANCED backup (code + DB + files + config)"
+	@echo "  backup-simple     - Create SIMPLE backup (code + DB + essential files) - FAST"
 	@echo "  recover           - Recover from latest backup (BACKUP=name)"
 	@echo "  validate          - Validate system integrity"
 
@@ -230,5 +231,10 @@ backup-working:
 backup-enhanced:
 	@echo "Creating ENHANCED backup (code + database + files + config)..."
 	@./scripts/backup_enhanced.sh "$(MSG)"
+
+.PHONY: backup-simple
+backup-simple:
+	@echo "Creating SIMPLE backup (code + database + essential files)..."
+	@./scripts/backup_simple.sh "$(MSG)"
 
 
