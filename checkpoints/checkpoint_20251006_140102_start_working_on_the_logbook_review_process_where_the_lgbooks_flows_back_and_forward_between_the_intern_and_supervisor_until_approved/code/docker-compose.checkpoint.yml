@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database with persistent volume
+  postgres:
+    image: postgres:16
+    container_name: psychpath_postgres
+    environment:
+      POSTGRES_DB: psychpath
+      POSTGRES_USER: psychpath
+      POSTGRES_PASSWORD: psychpath
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/backups:/backups
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U psychpath -d psychpath"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: psychpath_backend
+    environment:
+      - DEBUG=1
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_NAME=psychpath
+      - DB_USER=psychpath
+      - DB_PASSWORD=psychpath
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - USE_SQLITE=0
+    volumes:
+      - ./backend:/app
+      - ./backend/backups:/app/backups
+      - ./logs:/app/logs
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "
+        python manage.py migrate &&
+        python manage.py runserver 0.0.0.0:8000
+      "
+
+  # Frontend (for development)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: psychpath_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  postgres_data:
+    driver: local

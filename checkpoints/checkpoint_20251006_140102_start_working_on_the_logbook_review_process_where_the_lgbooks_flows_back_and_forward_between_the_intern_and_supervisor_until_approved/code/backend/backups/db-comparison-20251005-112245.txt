@@ -1,0 +1,18 @@
+Database Comparison Report - Sun Oct  5 11:22:45 AEDT 2025
+==========================================
+
+Record counts:
+---------------
+auth_user: SQLite: 18, PostgreSQL: 25
+  ⚠️  MISMATCH DETECTED
+api_profile: SQLite: ERROR, PostgreSQL: ERROR
+section_a_sectionaentry: SQLite: 205, PostgreSQL: 808
+  ⚠️  MISMATCH DETECTED
+section_b_professionaldevelopmententry: SQLite: 91, PostgreSQL: 160
+  ⚠️  MISMATCH DETECTED
+section_c_supervisionentry: SQLite: 16, PostgreSQL: 79
+  ⚠️  MISMATCH DETECTED
+logbook_app_weeklylogbook: SQLite: 2, PostgreSQL: 49
+  ⚠️  MISMATCH DETECTED
+
+Report generated at: Sun Oct  5 11:22:49 AEDT 2025

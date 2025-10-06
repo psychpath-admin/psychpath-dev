@@ -1,0 +1,153 @@
+@import '@fontsource/bebas-neue/400.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/lexend-deca/400.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Removed conflicting CSS variables - using the ones defined in @layer base below */
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-background text-foreground font-body antialiased;
+}
+
+
+
+@layer base {
+  :root {
+    /* PsychPathway Brand Colors - Enhanced for better contrast */
+    --color-primary: #2563EB;        /* Brighter Deep Blue */
+    --color-primary-light: #3B82F6;  /* Lighter Blue */
+    --color-secondary: #F59E0B;      /* Brighter Amber */
+    --color-secondary-light: #FBBF24; /* Lighter Amber */
+    --color-accent: #DC2626;         /* Brighter Red-Orange */
+    --color-accent-light: #EF4444;   /* Lighter Red */
+    --color-text-dark: #111827;      /* Darker Charcoal */
+    --color-text-light: #4B5563;     /* Darker Grey for better contrast */
+    --color-bg-card: #FFFFFF;        /* White */
+    --color-bg-section: #F9FAFB;     /* Very Light Grey */
+    --color-border: #D1D5DB;         /* Darker border for visibility */
+    
+    /* Shadcn/ui compatibility */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 1rem; /* 16px border radius */
+  }
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* PsychPathway Brand Components */
+  .brand-card {
+    @apply bg-bgCard border border-border rounded-card shadow-md;
+  }
+  
+  .brand-button-primary {
+    @apply bg-primary text-white hover:bg-primaryLight rounded-lg px-4 py-2 font-semibold transition-colors shadow-sm;
+  }
+  
+  .brand-button-secondary {
+    @apply bg-secondary text-white hover:bg-secondaryLight rounded-lg px-4 py-2 font-semibold transition-colors shadow-sm;
+  }
+  
+  .brand-button-accent {
+    @apply bg-accent text-white hover:bg-accentLight rounded-lg px-4 py-2 font-semibold transition-colors shadow-sm;
+  }
+  
+  .brand-heading {
+    @apply font-headings text-textDark font-bold;
+  }
+  
+  .brand-text {
+    @apply font-body text-textDark;
+  }
+  
+  .brand-label {
+    @apply font-labels text-textLight text-sm font-semibold;
+  }
+  
+  /* Enhanced CRA card variations */
+  .cra-card-primary {
+    @apply bg-blue-50 border-blue-200 hover:border-blue-300;
+  }
+  
+  .cra-card-secondary {
+    @apply bg-amber-50 border-amber-200 hover:border-amber-300;
+  }
+  
+  .cra-card-accent {
+    @apply bg-orange-50 border-orange-200 hover:border-orange-300;
+  }
+  
+  .cra-card-success {
+    @apply bg-green-50 border-green-200 hover:border-green-300;
+  }
+  
+  .cra-card-purple {
+    @apply bg-purple-50 border-purple-200 hover:border-purple-300;
+  }
+}
