@@ -1413,6 +1413,86 @@ def logbook_section_a_entries(request, logbook_id):
     return Response(serializer.data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def logbook_section_b_entries(request, logbook_id):
+    """Get Section B (Professional Development) entries for a specific logbook"""
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not hasattr(request.user, 'profile'):
+        return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+
+    user_role = request.user.profile.role
+
+    if user_role in ['PROVISIONAL', 'REGISTRAR'] and logbook.trainee != request.user:
+        return Response({'error': 'Can only view your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+
+    if user_role == 'SUPERVISOR':
+        from api.models import Supervision
+        supervisee_relationships = Supervision.objects.filter(
+            supervisor=request.user,
+            role='PRIMARY',
+            status='ACCEPTED'
+        )
+        supervisee_users = [rel.supervisee for rel in supervisee_relationships if rel.supervisee]
+        if logbook.trainee not in supervisee_users:
+            return Response({'error': 'Can only view logbooks from your supervisees'}, status=status.HTTP_403_FORBIDDEN)
+
+    from section_b.models import ProfessionalDevelopmentEntry
+    from section_b.serializers import ProfessionalDevelopmentEntrySerializer
+
+    entry_ids = logbook.section_b_entry_ids
+    if not entry_ids:
+        return Response([])
+
+    entries = ProfessionalDevelopmentEntry.objects.filter(id__in=entry_ids).order_by('date_of_activity', 'created_at')
+    serializer = ProfessionalDevelopmentEntrySerializer(entries, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def logbook_section_c_entries(request, logbook_id):
+    """Get Section C (Supervision) entries for a specific logbook"""
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not hasattr(request.user, 'profile'):
+        return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+
+    user_role = request.user.profile.role
+
+    if user_role in ['PROVISIONAL', 'REGISTRAR'] and logbook.trainee != request.user:
+        return Response({'error': 'Can only view your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+
+    if user_role == 'SUPERVISOR':
+        from api.models import Supervision
+        supervisee_relationships = Supervision.objects.filter(
+            supervisor=request.user,
+            role='PRIMARY',
+            status='ACCEPTED'
+        )
+        supervisee_users = [rel.supervisee for rel in supervisee_relationships if rel.supervisee]
+        if logbook.trainee not in supervisee_users:
+            return Response({'error': 'Can only view logbooks from your supervisees'}, status=status.HTTP_403_FORBIDDEN)
+
+    from section_c.models import SupervisionEntry
+    from section_c.serializers import SupervisionEntrySerializer
+
+    entry_ids = logbook.section_c_entry_ids
+    if not entry_ids:
+        return Response([])
+
+    entries = SupervisionEntry.objects.filter(id__in=entry_ids).order_by('date_of_supervision', 'created_at')
+    serializer = SupervisionEntrySerializer(entries, many=True)
+    return Response(serializer.data)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @support_error_handler

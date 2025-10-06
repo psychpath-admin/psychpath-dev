@@ -30,6 +30,7 @@ import { apiFetch } from '@/lib/api'
 import LogbookCreationModal from '@/components/LogbookCreationModal'
 import LogbookPreview from '@/components/LogbookPreview'
 import StructuredLogbookDisplay from '@/components/StructuredLogbookDisplay'
+import { useFilterPersistence, useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
 interface Logbook {
   id: number
@@ -93,18 +94,21 @@ export default function LogbookDashboard() {
   
   // New state for dashboard functionality
   const [metrics, setMetrics] = useState<LogbookMetrics | null>(null)
-  const [filters, setFilters] = useState<LogbookFilters>({
+  
+  // Persistent filters - defaults to oldest first for provisional users
+  const [filters, setFilters, clearFilters] = useFilterPersistence<LogbookFilters>('logbook-dashboard', {
     status: '',
     isLocked: false,
     regenerated: false,
     weekRange: { start: '', end: '' },
     searchTerm: ''
   })
+  
   const [showFilters, setShowFilters] = useState(false)
-  const [sortBy, setSortBy] = useState<'week_start_date' | 'status' | 'submitted_at'>('week_start_date')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [sortBy, setSortBy] = useSimpleFilterPersistence<'week_start_date' | 'status' | 'submitted_at'>('logbook-sort-by', 'week_start_date')
+  const [sortOrder, setSortOrder] = useSimpleFilterPersistence<'asc' | 'desc'>('logbook-sort-order', 'asc') // Default to oldest first
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize, setPageSize] = useSimpleFilterPersistence<number>('logbook-page-size', 10)
 
   useEffect(() => {
     fetchLogbooks()

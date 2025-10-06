@@ -74,26 +74,29 @@ interface StructuredLogbookDisplayProps {
 
 export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerate }: StructuredLogbookDisplayProps) {
   const [sectionAEntries, setSectionAEntries] = useState<SectionAEntry[]>([])
+  const [sectionBEntries, setSectionBEntries] = useState<any[]>([])
+  const [sectionCEntries, setSectionCEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
 
   useEffect(() => {
-    fetchSectionAEntries()
+    fetchAllSections()
   }, [logbook.id])
 
-  const fetchSectionAEntries = async () => {
+  const fetchAllSections = async () => {
     try {
       setLoading(true)
-      const response = await apiFetch(`/api/logbook/${logbook.id}/section-a-entries/`)
-      if (response.ok) {
-        const data = await response.json()
-        setSectionAEntries(data)
-      } else {
-        console.error('Failed to fetch Section A entries')
-      }
+      const [aRes, bRes, cRes] = await Promise.all([
+        apiFetch(`/api/logbook/${logbook.id}/section-a-entries/`),
+        apiFetch(`/api/logbook/${logbook.id}/section-b-entries/`),
+        apiFetch(`/api/logbook/${logbook.id}/section-c-entries/`)
+      ])
+      if (aRes.ok) setSectionAEntries(await aRes.json())
+      if (bRes.ok) setSectionBEntries(await bRes.json())
+      if (cRes.ok) setSectionCEntries(await cRes.json())
     } catch (error) {
-      console.error('Error fetching Section A entries:', error)
+      console.error('Error fetching logbook sections:', error)
     } finally {
       setLoading(false)
     }
@@ -261,7 +264,161 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               </CardContent>
             </Card>
 
-            {/* SECTION A: Weekly record of professional practice */}
+          {/* Section A Totals already rendered above */}
+
+          {/* SECTION B: Professional development (hidden placeholder to preserve diff) */}
+          {false && (
+          <Card className="border-2 border-amber-300 mt-6">
+            <CardHeader className="bg-amber-50 border-b border-amber-200">
+              <CardTitle className="text-lg font-bold text-amber-900">
+                SECTION B: Professional development
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-8 text-center">
+                  <Clock className="h-8 w-8 mx-auto mb-4 text-gray-400 animate-spin" />
+                  <p className="text-gray-600">Loading Section B entries...</p>
+                </div>
+              ) : (
+                <>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-amber-100 border-b border-amber-200">
+                        <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Date</th>
+                        <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Activity</th>
+                        <th className="border border-amber-300 p-3 text-center font-semibold text-amber-900">Duration</th>
+                        <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sectionBEntries.map((e, i) => (
+                        <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
+                          <td className="border p-3">{e.date_of_activity || e.activity_date || ''}</td>
+                          <td className="border p-3">{e.activity_title || e.activity_type || e.title || '—'}</td>
+                          <td className="border p-3 text-center">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
+                          <td className="border p-3">{e.notes || e.summary || ''}</td>
+                        </tr>
+                      ))}
+                      {sectionBEntries.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="border p-6 text-center text-gray-500">
+                            No Section B entries found for this week
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Section B Totals */}
+                <div className="p-4 bg-gray-50 border-t">
+                  <h4 className="font-semibold text-gray-900 mb-3">Section B Totals</h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-gray-100 border-b border-gray-200">
+                          <th className="border border-gray-300 p-3 text-left font-semibold text-gray-900"></th>
+                          <th className="border border-gray-300 p-3 text-center font-semibold text-gray-900">Hours</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b">
+                          <td className="border p-3 font-medium">Weekly total</td>
+                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.weekly_hours}h</td>
+                        </tr>
+                        <tr>
+                          <td className="border p-3 font-medium">Cumulative total</td>
+                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.cumulative_hours}h</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+          )}
+
+          {/* SECTION C: Supervision (hidden placeholder to preserve diff) */}
+          {false && (
+          <Card className="border-2 border-purple-300 mt-6">
+            <CardHeader className="bg-purple-50 border-b border-purple-200">
+              <CardTitle className="text-lg font-bold text-purple-900">
+                SECTION C: Supervision
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-8 text-center">
+                  <Clock className="h-8 w-8 mx-auto mb-4 text-gray-400 animate-spin" />
+                  <p className="text-gray-600">Loading Section C entries...</p>
+                </div>
+              ) : (
+                <>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-purple-100 border-b border-purple-200">
+                        <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Date</th>
+                        <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Supervisor</th>
+                        <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Type</th>
+                        <th className="border border-purple-300 p-3 text-center font-semibold text-purple-900">Duration</th>
+                        <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Summary</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sectionCEntries.map((e, i) => (
+                        <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
+                          <td className="border p-3">{e.date_of_supervision || e.date || ''}</td>
+                          <td className="border p-3">{e.supervisor_name || e.supervisor || '—'}</td>
+                          <td className="border p-3">{e.supervision_type || '—'}</td>
+                          <td className="border p-3 text-center">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
+                          <td className="border p-3">{e.summary || ''}</td>
+                        </tr>
+                      ))}
+                      {sectionCEntries.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="border p-6 text-center text-gray-500">
+                            No Section C entries found for this week
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Section C Totals */}
+                <div className="p-4 bg-gray-50 border-t">
+                  <h4 className="font-semibold text-gray-900 mb-3">Section C Totals</h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-gray-100 border-b border-gray-200">
+                          <th className="border border-gray-300 p-3 text-left font-semibold text-gray-900"></th>
+                          <th className="border border-gray-300 p-3 text-center font-semibold text-gray-900">Hours</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b">
+                          <td className="border p-3 font-medium">Weekly total</td>
+                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.weekly_hours}h</td>
+                        </tr>
+                        <tr>
+                          <td className="border p-3 font-medium">Cumulative total</td>
+                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.cumulative_hours}h</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+          )}
+
+          {/* SECTION A: Weekly record of professional practice */}
             <Card className="border-2 border-blue-300">
               <CardHeader className="bg-blue-50 border-b border-blue-200">
                 <CardTitle className="text-lg font-bold text-blue-900">
@@ -543,6 +700,146 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                 )}
               </CardContent>
             </Card>
+
+          {/* SECTION B: Professional development - after A */}
+          <Card className="border-2 border-amber-300 mt-6">
+            <CardHeader className="bg-amber-50 border-b border-amber-200">
+              <CardTitle className="text-lg font-bold text-amber-900">SECTION B: Professional development</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-8 text-center">
+                  <Clock className="h-8 w-8 mx-auto mb-4 text-gray-400 animate-spin" />
+                  <p className="text-gray-600">Loading Section B entries...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-amber-100 border-b border-amber-200">
+                          <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Date</th>
+                          <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Activity</th>
+                          <th className="border border-amber-300 p-3 text-center font-semibold text-amber-900">Duration</th>
+                          <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sectionBEntries.map((e, i) => (
+                          <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
+                            <td className="border p-3">{e.date_of_activity || e.activity_date || ''}</td>
+                            <td className="border p-3">{e.activity_title || e.activity_type || e.title || '—'}</td>
+                            <td className="border p-3 text-center">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
+                            <td className="border p-3">{e.notes || e.summary || ''}</td>
+                          </tr>
+                        ))}
+                        {sectionBEntries.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="border p-6 text-center text-gray-500">No Section B entries found for this week</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Section B Totals */}
+                  <div className="p-4 bg-gray-50 border-t">
+                    <h4 className="font-semibold text-gray-900 mb-3">Section B Totals</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="bg-gray-100 border-b border-gray-200">
+                            <th className="border border-gray-300 p-3 text-left font-semibold text-gray-900"></th>
+                            <th className="border border-gray-300 p-3 text-center font-semibold text-gray-900">Hours</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b">
+                            <td className="border p-3 font-medium">Weekly total</td>
+                            <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.weekly_hours}h</td>
+                          </tr>
+                          <tr>
+                            <td className="border p-3 font-medium">Cumulative total</td>
+                            <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.cumulative_hours}h</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* SECTION C: Supervision - after B */}
+          <Card className="border-2 border-purple-300 mt-6">
+            <CardHeader className="bg-purple-50 border-b border-purple-200">
+              <CardTitle className="text-lg font-bold text-purple-900">SECTION C: Supervision</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-8 text-center">
+                  <Clock className="h-8 w-8 mx-auto mb-4 text-gray-400 animate-spin" />
+                  <p className="text-gray-600">Loading Section C entries...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-purple-100 border-b border-purple-200">
+                          <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Date</th>
+                          <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Supervisor</th>
+                          <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Type</th>
+                          <th className="border border-purple-300 p-3 text-center font-semibold text-purple-900">Duration</th>
+                          <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Summary</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sectionCEntries.map((e, i) => (
+                          <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
+                            <td className="border p-3">{e.date_of_supervision || e.date || ''}</td>
+                            <td className="border p-3">{e.supervisor_name || e.supervisor || '—'}</td>
+                            <td className="border p-3">{e.supervision_type || '—'}</td>
+                            <td className="border p-3 text-center">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
+                            <td className="border p-3">{e.summary || ''}</td>
+                          </tr>
+                        ))}
+                        {sectionCEntries.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="border p-6 text-center text-gray-500">No Section C entries found for this week</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Section C Totals */}
+                  <div className="p-4 bg-gray-50 border-t">
+                    <h4 className="font-semibold text-gray-900 mb-3">Section C Totals</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="bg-gray-100 border-b border-gray-200">
+                            <th className="border border-gray-300 p-3 text-left font-semibold text-gray-900"></th>
+                            <th className="border border-gray-300 p-3 text-center font-semibold text-gray-900">Hours</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b">
+                            <td className="border p-3 font-medium">Weekly total</td>
+                            <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.weekly_hours}h</td>
+                          </tr>
+                          <tr>
+                            <td className="border p-3 font-medium">Cumulative total</td>
+                            <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.cumulative_hours}h</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
           </div>
 
           {/* Footer with action buttons */}

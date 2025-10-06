@@ -15,7 +15,7 @@ from .views import (
     logbook_reject_with_reason, logbook_review_requests, review_request_respond,
     review_request_complete, logbook_review_history,
     # Section entries endpoint
-    logbook_section_a_entries
+    logbook_section_a_entries, logbook_section_b_entries, logbook_section_c_entries
 )
 
 urlpatterns = [
@@ -70,5 +70,7 @@ urlpatterns = [
     
     # Section entries endpoints
     path('<int:logbook_id>/section-a-entries/', logbook_section_a_entries, name='logbook-section-a-entries'),
+    path('<int:logbook_id>/section-b-entries/', logbook_section_b_entries, name='logbook-section-b-entries'),
+    path('<int:logbook_id>/section-c-entries/', logbook_section_c_entries, name='logbook-section-c-entries'),
 ]
 

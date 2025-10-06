@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +23,7 @@ import {
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
+import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
 interface Notification {
   id: number
@@ -47,10 +48,10 @@ export default function NotificationCenter() {
   const [loading, setLoading] = useState(true)
   const [markingAllRead, setMarkingAllRead] = useState(false)
   
-  // Filters
-  const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
-  const [typeFilter, setTypeFilter] = useState<string>('all')
-  const [limit, setLimit] = useState<number>(50)
+  // Persistent filters
+  const [readFilter, setReadFilter] = useSimpleFilterPersistence<'all' | 'read' | 'unread'>('notifications-read-filter', 'all')
+  const [typeFilter, setTypeFilter] = useSimpleFilterPersistence<string>('notifications-type-filter', 'all')
+  const [limit, setLimit] = useSimpleFilterPersistence<number>('notifications-limit', 50)
 
   useEffect(() => {
     fetchNotifications()

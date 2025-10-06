@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,6 +22,7 @@ import {
 } from '@/lib/api'
 import CRAForm from '@/components/CRAForm'
 import { minutesToHoursMinutes, formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
+import { useFilterPersistence, useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
 // Helper function to format dates in dd/mm/yyyy format
 const formatDateDDMMYYYY = (dateString: string) => {
@@ -137,20 +138,20 @@ export default function SectionADashboard() {
   // Tooltip toggle
   const [showTooltips, setShowTooltips] = useState(true)
   
-  // Filters and sorting
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'duration' | 'client'>('newest')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [sessionType, setSessionType] = useState('all')
-  const [durationMin, setDurationMin] = useState('')
-  const [durationMax, setDurationMax] = useState('')
-  const [groupByWeek, setGroupByWeek] = useState(false)
-  const [weekStarting, setWeekStarting] = useState<string>('')
+  // Persistent filters and sorting
+  const [sortBy, setSortBy] = useSimpleFilterPersistence<'newest' | 'oldest' | 'duration' | 'client'>('section-a-sort-by', 'oldest') // Default to oldest first
+  const [dateFrom, setDateFrom] = useSimpleFilterPersistence<string>('section-a-date-from', '')
+  const [dateTo, setDateTo] = useSimpleFilterPersistence<string>('section-a-date-to', '')
+  const [sessionType, setSessionType] = useSimpleFilterPersistence<string>('section-a-session-type', 'all')
+  const [durationMin, setDurationMin] = useSimpleFilterPersistence<string>('section-a-duration-min', '')
+  const [durationMax, setDurationMax] = useSimpleFilterPersistence<string>('section-a-duration-max', '')
+  const [groupByWeek, setGroupByWeek] = useSimpleFilterPersistence<boolean>('section-a-group-by-week', false)
+  const [weekStarting, setWeekStarting] = useSimpleFilterPersistence<string>('section-a-week-starting', '')
   
   // New Section A-specific filters
-  const [clientPseudonym, setClientPseudonym] = useState('')
-  const [activityType, setActivityType] = useState('all') // 'all', 'DCC', 'CRA', 'ICRA'
-  const [reviewedFilter, setReviewedFilter] = useState('all') // 'all', 'reviewed', 'not_reviewed'
+  const [clientPseudonym, setClientPseudonym] = useSimpleFilterPersistence<string>('section-a-client-pseudonym', '')
+  const [activityType, setActivityType] = useSimpleFilterPersistence<string>('section-a-activity-type', 'all') // 'all', 'DCC', 'CRA', 'ICRA'
+  const [reviewedFilter, setReviewedFilter] = useSimpleFilterPersistence<string>('section-a-reviewed-filter', 'all') // 'all', 'reviewed', 'not_reviewed'
 
   useEffect(() => {
     loadDCCEntries()

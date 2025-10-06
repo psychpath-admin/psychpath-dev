@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
 import LogbookAuditTrailModal from '@/components/LogbookAuditTrailModal'
+import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
 interface LogbookForReview {
   id: number
@@ -55,7 +56,7 @@ export default function SupervisorLogbookReview() {
   const [generalComment, setGeneralComment] = useState('')
   const [entryComments, setEntryComments] = useState<Record<string, string>>({})
   const [entriesBySection, setEntriesBySection] = useState<any | null>(null)
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useSimpleFilterPersistence<string>('supervisor-logbook-status-filter', 'all')
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [showMessages, setShowMessages] = useState(false)

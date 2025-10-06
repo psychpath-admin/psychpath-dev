@@ -30,6 +30,7 @@ import {
 } from '@/lib/api'
 import type { PDEntry, PDCompetency, PDWeeklyGroup } from '@/types/pd'
 import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationUtils'
+import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
 const SectionB: React.FC = () => {
   const [weeklyGroups, setWeeklyGroups] = useState<PDWeeklyGroup[]>([])
@@ -39,15 +40,15 @@ const SectionB: React.FC = () => {
   const [showForm, setShowForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState<PDEntry | null>(null)
 
-  // Filter states (matching Section A)
+  // Persistent filter states (matching Section A)
   const [showFilters, setShowFilters] = useState(false)
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [activityType, setActivityType] = useState('all')
-  const [durationMin, setDurationMin] = useState('')
-  const [durationMax, setDurationMax] = useState('')
-  const [sortBy, setSortBy] = useState('newest')
-  const [groupByWeek, setGroupByWeek] = useState(false)
+  const [dateFrom, setDateFrom] = useSimpleFilterPersistence<string>('section-b-date-from', '')
+  const [dateTo, setDateTo] = useSimpleFilterPersistence<string>('section-b-date-to', '')
+  const [activityType, setActivityType] = useSimpleFilterPersistence<string>('section-b-activity-type', 'all')
+  const [durationMin, setDurationMin] = useSimpleFilterPersistence<string>('section-b-duration-min', '')
+  const [durationMax, setDurationMax] = useSimpleFilterPersistence<string>('section-b-duration-max', '')
+  const [sortBy, setSortBy] = useSimpleFilterPersistence<string>('section-b-sort-by', 'oldest') // Default to oldest first
+  const [groupByWeek, setGroupByWeek] = useSimpleFilterPersistence<boolean>('section-b-group-by-week', false)
   const [entriesPerPage, setEntriesPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())

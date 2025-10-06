@@ -64,13 +64,29 @@ checkpoint() {
   echo "Done. You can push with: git push && git push --tags"
 }
 
+PUSH=false
+for arg in "$@"; do
+  if [[ "$arg" == "--push" ]]; then PUSH=true; fi
+done
+
 case "${1:-}" in
   checkpoint)
     shift || true
-    checkpoint "${1:-manual checkpoint}"
+    # collect message from remaining args excluding --push
+    msg=""
+    for a in "$@"; do
+      [[ "$a" == "--push" ]] && continue
+      if [[ -z "$msg" ]]; then msg="$a"; else msg+=" $a"; fi
+    done
+    checkpoint "${msg:-manual checkpoint}"
+    if [[ "$PUSH" == true ]]; then
+      echo "Pushing branch and tags..."
+      (cd "$PROJECT_ROOT" && git push && git push --tags) || true
+    fi
     ;;
   *)
     echo "Usage: $0 checkpoint \"message\"" >&2
+    echo "       $0 checkpoint \"message\" --push   # also push branch & tags" >&2
     exit 1
     ;;
 esac
