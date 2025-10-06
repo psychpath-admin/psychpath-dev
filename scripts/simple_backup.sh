@@ -44,7 +44,7 @@ success "Code state backed up with tag: backup_$TIMESTAMP"
 # 2. Database Backup (using Django)
 log "Backing up database using Django..."
 cd "$PROJECT_ROOT/backend"
-python manage.py dumpdata --natural-foreign --natural-primary > "$BACKUP_DIR/$BACKUP_NAME/database_django.json"
+./venv/bin/python manage.py dumpdata --natural-foreign --natural-primary > "$BACKUP_DIR/$BACKUP_NAME/database_django.json"
 success "Database backed up using Django dumpdata"
 
 # 3. Environment Files
@@ -86,8 +86,8 @@ git checkout "$(grep 'Git Tag:' "$BACKUP_DIR/BACKUP_INFO.md" | cut -d' ' -f3)"
 # Restore database
 echo "Restoring database..."
 cd "$PROJECT_ROOT/backend"
-python manage.py flush --noinput
-python manage.py loaddata "$BACKUP_DIR/database_django.json"
+./venv/bin/python manage.py flush --noinput
+./venv/bin/python manage.py loaddata "$BACKUP_DIR/database_django.json"
 
 # Start services
 echo "Starting services..."
