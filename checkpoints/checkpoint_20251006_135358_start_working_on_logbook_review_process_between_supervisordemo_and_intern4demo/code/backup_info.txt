@@ -1,0 +1,24 @@
+PsychPATH Development Structure Backup
+=====================================
+
+Backup Date: Sat Sep 20 11:02:37 AEST 2025
+Project Root: /Users/macdemac/Local Sites/CAPE
+Git Branch: main
+Git Commit: 210e257f46447fc8842ddb28348077bfe61aa510
+Git Status:        4 files modified
+
+Contents:
+- psychpath_source_code.tar.gz: Complete source code
+- db_backup.sqlite3: Database backup (if exists)
+- backend.env: Backend environment variables (if exists)
+- frontend.env: Frontend environment variables (if exists)
+- backup_info.txt: This file
+
+To restore:
+1. Extract: tar -xzf psychpath_source_code.tar.gz
+2. Copy database: cp db_backup.sqlite3 backend/db.sqlite3
+3. Copy env files: cp backend.env backend/.env (if needed)
+4. Install dependencies: 
+   - Backend: cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+   - Frontend: cd frontend && npm install
+5. Run migrations: python manage.py migrate

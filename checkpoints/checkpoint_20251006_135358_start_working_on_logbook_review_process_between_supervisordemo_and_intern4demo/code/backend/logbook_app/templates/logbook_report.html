@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Logbook Report - Week {{ logbook.week_display }}</title>
+    <style>
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            @page {
+                margin: 1cm;
+            }
+        }
+        
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #000;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .report-container {
+            background: white;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 15px;
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            margin: 0 0 5px 0;
+            font-weight: bold;
+        }
+        
+        .header h2 {
+            font-size: 14px;
+            margin: 0;
+            font-weight: normal;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+        }
+        
+        .info-item {
+            margin: 0;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            display: inline-block;
+            min-width: 140px;
+        }
+        
+        .section {
+            margin-bottom: 35px;
+            page-break-inside: avoid;
+        }
+        
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            background: #2c3e50;
+            color: white;
+            padding: 8px 12px;
+            margin-bottom: 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            font-size: 10px;
+        }
+        
+        th {
+            background: #34495e;
+            color: white;
+            padding: 8px 6px;
+            text-align: left;
+            font-weight: bold;
+            border: 1px solid #2c3e50;
+        }
+        
+        td {
+            padding: 6px;
+            border: 1px solid #ddd;
+            vertical-align: top;
+        }
+        
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        .totals-row {
+            background: #ecf0f1 !important;
+            font-weight: bold;
+        }
+        
+        .cumulative-row {
+            background: #d5dbdb !important;
+            font-weight: bold;
+        }
+        
+        .hours-cell {
+            text-align: right;
+            font-weight: bold;
+        }
+        
+        .reflection-cell {
+            font-size: 9px;
+            max-width: 300px;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+        
+        .signature-block {
+            padding: 15px 0;
+        }
+        
+        .signature-line {
+            border-bottom: 1px solid #000;
+            margin-bottom: 5px;
+            height: 50px;
+        }
+        
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .print-button:hover {
+            background: #2980b9;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        .status-submitted {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-approved {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-rejected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <button onclick="window.print()" class="print-button no-print">🖨️ Print Report</button>
+    
+    <div class="report-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>5+1 PROVISIONAL PSYCHOLOGY PROGRAM</h1>
+            <h2>Weekly Logbook Report</h2>
+        </div>
+        
+        <!-- Trainee Information -->
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-label">Trainee:</span> {{ trainee_name }}
+            </div>
+            <div class="info-item">
+                <span class="info-label">Week Starting:</span> {{ logbook.week_start_date|date:"d F Y" }}
+            </div>
+            <div class="info-item">
+                <span class="info-label">AHPRA Number:</span> {{ ahpra_number }}
+            </div>
+            <div class="info-item">
+                <span class="info-label">Week Ending:</span> {{ logbook.week_end_date|date:"d F Y" }}
+            </div>
+            <div class="info-item">
+                <span class="info-label">Supervisor:</span> {{ supervisor_name }}
+            </div>
+            <div class="info-item">
+                <span class="info-label">Status:</span> 
+                <span class="status-badge status-{{ logbook.status }}">{{ logbook.status|upper }}</span>
+            </div>
+        </div>
+        
+        <!-- SECTION A: Professional Practice -->
+        <div class="section">
+            <div class="section-title">SECTION A: Weekly Record of Professional Practice</div>
+            
+            {% if section_a_entries %}
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 10%">Date</th>
+                        <th style="width: 12%">Client ID</th>
+                        <th style="width: 8%">Age</th>
+                        <th style="width: 20%">Presenting Issue</th>
+                        <th style="width: 15%">Activity Type</th>
+                        <th style="width: 8%">Duration</th>
+                        <th style="width: 27%">Reflections</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in section_a_entries %}
+                    <tr>
+                        <td>{{ entry.session_date|date:"d/m/Y" }}</td>
+                        <td>{{ entry.client_id|default:"-" }}</td>
+                        <td>{{ entry.client_age|default:"-" }}</td>
+                        <td>{{ entry.presenting_issues|truncatewords:15 }}</td>
+                        <td>
+                            {% if entry.session_activity_types %}
+                                {{ entry.session_activity_types|join:", "|title }}
+                            {% else %}
+                                {{ entry.entry_type|upper }}
+                            {% endif %}
+                            {% if entry.simulated %} (SIM){% endif %}
+                        </td>
+                        <td class="hours-cell">{{ entry.duration_minutes }} min</td>
+                        <td class="reflection-cell">{{ entry.reflections_on_experience|truncatewords:40 }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="totals-row">
+                        <td colspan="5" style="text-align: right;">Week Total:</td>
+                        <td class="hours-cell">{{ section_a_total_minutes }} min</td>
+                        <td>{{ section_a_total_hours }}</td>
+                    </tr>
+                    <tr class="cumulative-row">
+                        <td colspan="5" style="text-align: right;">Cumulative Total:</td>
+                        <td class="hours-cell">{{ section_a_cumulative_minutes }} min</td>
+                        <td>{{ section_a_cumulative_hours }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            {% else %}
+            <p style="padding: 20px; text-align: center; color: #666;">No Section A entries for this week.</p>
+            {% endif %}
+        </div>
+        
+        <!-- SECTION B: Professional Development -->
+        <div class="section">
+            <div class="section-title">SECTION B: Weekly Record of Professional Development</div>
+            
+            {% if section_b_entries %}
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 10%">Date</th>
+                        <th style="width: 15%">Activity Type</th>
+                        <th style="width: 25%">Activity Details</th>
+                        <th style="width: 20%">Topics Covered</th>
+                        <th style="width: 8%">Duration</th>
+                        <th style="width: 22%">Reflection</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in section_b_entries %}
+                    <tr>
+                        <td>{{ entry.date_of_activity|date:"d/m/Y" }}</td>
+                        <td>{{ entry.activity_type }}</td>
+                        <td>{{ entry.activity_details|truncatewords:10 }}</td>
+                        <td>{{ entry.topics_covered|truncatewords:15 }}</td>
+                        <td class="hours-cell">{{ entry.duration_minutes }} min</td>
+                        <td class="reflection-cell">{{ entry.reflection|truncatewords:30 }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="totals-row">
+                        <td colspan="4" style="text-align: right;">Week Total:</td>
+                        <td class="hours-cell">{{ section_b_total_minutes }} min</td>
+                        <td>{{ section_b_total_hours }}</td>
+                    </tr>
+                    <tr class="cumulative-row">
+                        <td colspan="4" style="text-align: right;">Cumulative Total:</td>
+                        <td class="hours-cell">{{ section_b_cumulative_minutes }} min</td>
+                        <td>{{ section_b_cumulative_hours }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            {% else %}
+            <p style="padding: 20px; text-align: center; color: #666;">No Section B entries for this week.</p>
+            {% endif %}
+        </div>
+        
+        <!-- SECTION C: Supervision -->
+        <div class="section">
+            <div class="section-title">SECTION C: Weekly Record of Supervision</div>
+            
+            {% if section_c_entries %}
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 10%">Date</th>
+                        <th style="width: 20%">Supervisor Name</th>
+                        <th style="width: 12%">Type</th>
+                        <th style="width: 12%">Format</th>
+                        <th style="width: 8%">Duration</th>
+                        <th style="width: 38%">Summary</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in section_c_entries %}
+                    <tr>
+                        <td>{{ entry.date_of_supervision|date:"d/m/Y" }}</td>
+                        <td>{{ entry.supervisor_name }}</td>
+                        <td>{{ entry.supervisor_type }}</td>
+                        <td>{{ entry.supervision_type }}</td>
+                        <td class="hours-cell">{{ entry.duration_minutes }} min</td>
+                        <td class="reflection-cell">{{ entry.summary|truncatewords:50 }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="totals-row">
+                        <td colspan="4" style="text-align: right;">Week Total:</td>
+                        <td class="hours-cell">{{ section_c_total_minutes }} min</td>
+                        <td>{{ section_c_total_hours }}</td>
+                    </tr>
+                    <tr class="cumulative-row">
+                        <td colspan="4" style="text-align: right;">Cumulative Total:</td>
+                        <td class="hours-cell">{{ section_c_cumulative_minutes }} min</td>
+                        <td>{{ section_c_cumulative_hours }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            {% else %}
+            <p style="padding: 20px; text-align: center; color: #666;">No Section C entries for this week.</p>
+            {% endif %}
+        </div>
+        
+        <!-- Weekly Summary -->
+        <div class="section">
+            <div class="section-title">WEEKLY SUMMARY</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Section</th>
+                        <th style="width: 15%">Weekly Hours</th>
+                        <th style="width: 15%">Cumulative Hours</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Section A: Professional Practice</td>
+                        <td class="hours-cell">{{ section_a_total_hours }}</td>
+                        <td class="hours-cell">{{ section_a_cumulative_hours }}</td>
+                    </tr>
+                    <tr>
+                        <td>Section B: Professional Development</td>
+                        <td class="hours-cell">{{ section_b_total_hours }}</td>
+                        <td class="hours-cell">{{ section_b_cumulative_hours }}</td>
+                    </tr>
+                    <tr>
+                        <td>Section C: Supervision</td>
+                        <td class="hours-cell">{{ section_c_total_hours }}</td>
+                        <td class="hours-cell">{{ section_c_cumulative_hours }}</td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td><strong>TOTAL ALL SECTIONS</strong></td>
+                        <td class="hours-cell">{{ total_weekly_hours }}</td>
+                        <td class="hours-cell">{{ total_cumulative_hours }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Supervisor Comments (if any) -->
+        {% if logbook.supervisor_comments %}
+        <div class="section">
+            <div class="section-title">SUPERVISOR COMMENTS</div>
+            <div style="padding: 15px; background: #fff9e6; border: 1px solid #f0e68c;">
+                {{ logbook.supervisor_comments }}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Signature Section -->
+        <div class="footer">
+            <div class="signature-block">
+                <strong>Trainee Declaration:</strong>
+                <div class="signature-line"></div>
+                <p style="margin: 5px 0 0 0; font-size: 9px;">
+                    Signature: ___________________________ Date: _______________
+                </p>
+                <p style="margin: 5px 0 0 0; font-size: 9px;">
+                    I certify that this logbook accurately reflects my professional activities for the week.
+                </p>
+            </div>
+            
+            <div class="signature-block">
+                <strong>Supervisor Approval:</strong>
+                <div class="signature-line"></div>
+                <p style="margin: 5px 0 0 0; font-size: 9px;">
+                    Signature: ___________________________ Date: _______________
+                </p>
+                <p style="margin: 5px 0 0 0; font-size: 9px;">
+                    □ Approved  □ Requires Revision
+                </p>
+            </div>
+        </div>
+        
+        <!-- Report Footer -->
+        <div style="margin-top: 30px; text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ddd; padding-top: 15px;">
+            <p>Generated: {{ now|date:"d F Y, H:i" }} | PsychPATH Logbook System | AHPRA-Compliant Format</p>
+            <p>Week {{ logbook.week_number }} | Submitted: {{ logbook.submitted_at|date:"d F Y, H:i"|default:"Not submitted" }}</p>
+        </div>
+    </div>
+</body>
+</html>
+
