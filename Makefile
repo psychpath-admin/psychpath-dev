@@ -28,7 +28,9 @@ help:
 	@echo "  check             - Migrations check (dry-run)"
 	@echo "  eod               - End-of-day: code tag + DB snapshot (MSG='note')"
 	@echo "  checkpoint        - Create detailed checkpoint before major changes"
-	@echo "  backup            - Create comprehensive system backup"
+	@echo "  backup            - Create code backup (Git + local)"
+	@echo "  backup-db         - Create database-only backup"
+	@echo "  backup-complete   - Create complete system backup (code + DB + config)"
 	@echo "  recover           - Recover from latest backup (BACKUP=name)"
 	@echo "  validate          - Validate system integrity"
 
@@ -190,6 +192,16 @@ checkpoint:
 backup:
 	@echo "Creating code backup..."
 	@./scripts/code_backup.sh
+
+.PHONY: backup-db
+backup-db:
+	@echo "Creating database backup..."
+	@./scripts/database_backup.sh
+
+.PHONY: backup-complete
+backup-complete:
+	@echo "Creating complete system backup..."
+	@./scripts/complete_system_backup.sh
 
 .PHONY: recover
 recover:
