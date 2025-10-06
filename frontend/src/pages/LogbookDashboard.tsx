@@ -94,8 +94,8 @@ export default function LogbookDashboard() {
     searchTerm: ''
   })
   const [showFilters, setShowFilters] = useState(false)
-  const [sortBy] = useState<'week_start_date' | 'status' | 'submitted_at'>('week_start_date')
-  const [sortOrder] = useState<'asc' | 'desc'>('desc')
+  const [sortBy, setSortBy] = useState<'week_start_date' | 'status' | 'submitted_at'>('week_start_date')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
@@ -460,7 +460,7 @@ export default function LogbookDashboard() {
         </CardHeader>
         {showFilters && (
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -507,6 +507,33 @@ export default function LogbookDashboard() {
                 />
                 <span className="text-sm text-gray-700">Show Regenerated</span>
               </label>
+            </div>
+
+            {/* Sort Controls */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'week_start_date' | 'status' | 'submitted_at')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="week_start_date">Week Start Date</option>
+                  <option value="status">Status</option>
+                  <option value="submitted_at">Submitted Date</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sort Order</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="desc">Newest First</option>
+                  <option value="asc">Oldest First</option>
+                </select>
+              </div>
             </div>
 
             {/* Filter Chips */}

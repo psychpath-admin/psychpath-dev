@@ -4,33 +4,33 @@ SHELL := /bin/bash
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 VENV_PY := $(BACKEND_DIR)/venv/bin/python3
-# Always use SQLite for development
-MANAGE := USE_SQLITE=1 $(VENV_PY) $(BACKEND_DIR)/manage.py
+# Use PostgreSQL for development (matches production)
+MANAGE := $(VENV_PY) $(BACKEND_DIR)/manage.py
 
 # Default target
 .PHONY: help
 help:
 	@echo "Available targets:"
 	@echo "  setup             - Set up virtual environment and install dependencies"
-	@echo "  dev-up            - Run backend (SQLite) and frontend dev servers (foreground)"
-	@echo "  dev-start         - Start development servers in background"
+	@echo "  dev-up            - Run backend (PostgreSQL) and frontend dev servers (foreground)"
+	@echo "  dev-start         - Start development servers in background (PostgreSQL)"
 	@echo "  dev-stop          - Stop development servers"
 	@echo "  dev-restart       - Stop and restart development servers"
 	@echo "  dev-status        - Check status of development servers"
 	@echo "  dev-logs          - Show development server logs"
-	@echo "  db-backup         - Create timestamped SQLite backup"
-	@echo "  db-restore        - Restore SQLite from SNAPSHOT=path/to/file"
+	@echo "  db-backup         - Create timestamped PostgreSQL backup"
+	@echo "  db-restore        - Restore PostgreSQL from SNAPSHOT=path/to/file"
 	@echo "  db-reset          - Backup, reset DB, run migrations"
-	@echo "  db-sync           - Sync data between SQLite and PostgreSQL"
-	@echo "  db-sync-sqltopg   - Sync from SQLite (dev) to PostgreSQL (prod)"
-	@echo "  db-sync-pgtosql   - Sync from PostgreSQL (prod) to SQLite (dev)"
-	@echo "  db-compare        - Compare SQLite and PostgreSQL content"
 	@echo "  migrate           - Apply migrations"
 	@echo "  makemigrations    - Create migrations"
 	@echo "  eod-complete      - Complete EOD workflow: checkpoint, push, update docs, shutdown"
 	@echo "  seed-demo         - Seed demo users/data"
 	@echo "  check             - Migrations check (dry-run)"
 	@echo "  eod               - End-of-day: code tag + DB snapshot (MSG='note')"
+	@echo "  checkpoint        - Create detailed checkpoint before major changes"
+	@echo "  backup            - Create comprehensive system backup"
+	@echo "  recover           - Recover from latest backup (BACKUP=name)"
+	@echo "  validate          - Validate system integrity"
 
 .PHONY: setup
 setup:
@@ -52,8 +52,8 @@ dev-up:
 		echo "Virtual environment not found. Running setup..."; \
 		$(MAKE) setup; \
 	fi
-	@echo "Starting backend (SQLite) on :8000..."
-	@cd $(BACKEND_DIR) && USE_SQLITE=1 ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 &
+	@echo "Starting backend (PostgreSQL) on :8000..."
+	@cd $(BACKEND_DIR) && ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 &
 	@sleep 1
 	@echo "Starting frontend on :5173..."
 	@cd $(FRONTEND_DIR) && npm run dev
@@ -66,8 +66,8 @@ dev-start:
 		echo "Virtual environment not found. Running setup..."; \
 		$(MAKE) setup; \
 	fi
-	@echo "Starting backend (SQLite) on :8000..."
-	@cd $(BACKEND_DIR) && USE_SQLITE=1 ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 > ../logs/backend.log 2>&1 &
+	@echo "Starting backend (PostgreSQL) on :8000..."
+	@cd $(BACKEND_DIR) && ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 > ../logs/backend.log 2>&1 &
 	@echo $$! > .backend.pid
 	@sleep 2
 	@echo "Starting frontend on :5173..."
@@ -180,5 +180,31 @@ eod:
 eod-complete:
 	@echo "Starting complete EOD workflow..."
 	@./scripts/eod_complete.sh
+
+.PHONY: checkpoint
+checkpoint:
+	@echo "Creating detailed checkpoint..."
+	@./scripts/checkpoint_system.sh "$(MSG)"
+
+.PHONY: backup
+backup:
+	@echo "Creating system backup..."
+	@./scripts/simple_backup.sh
+
+.PHONY: recover
+recover:
+	@if [ -z "$(BACKUP)" ]; then \
+		echo "Usage: make recover BACKUP=backup_name"; \
+		echo "Available backups:"; \
+		ls -la backups/ | grep "psychpath_backup_" | tail -5; \
+		exit 1; \
+	fi
+	@echo "Recovering from backup: $(BACKUP)"
+	@cd backups/$(BACKUP) && ./RECOVER.sh
+
+.PHONY: validate
+validate:
+	@echo "Validating system integrity..."
+	@./scripts/backup_system.sh --validate-only
 
 
