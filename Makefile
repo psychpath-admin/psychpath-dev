@@ -31,6 +31,7 @@ help:
 	@echo "  backup            - Create code backup (Git + local)"
 	@echo "  backup-db         - Create database-only backup"
 	@echo "  backup-complete   - Create complete system backup (code + DB + config)"
+	@echo "  backup-working    - Create WORKING backup (code + DB) - RECOMMENDED"
 	@echo "  recover           - Recover from latest backup (BACKUP=name)"
 	@echo "  validate          - Validate system integrity"
 
@@ -218,5 +219,10 @@ recover:
 validate:
 	@echo "Validating system integrity..."
 	@./scripts/backup_system.sh --validate-only
+
+.PHONY: backup-working
+backup-working:
+	@echo "Creating WORKING backup (code + database)..."
+	@./scripts/working_backup.sh "$(MSG)"
 
 
