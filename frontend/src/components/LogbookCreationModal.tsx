@@ -59,47 +59,37 @@ export default function LogbookCreationModal({ onClose, onLogbookCreated }: Logb
     setSelectedWeek(week)
   }
 
-  const handleCreateLogbook = async () => {
+  const handleCreateLogbook = async (saveAsDraft: boolean = false) => {
     if (!selectedWeek) return
 
     setSubmitting(true)
     try {
-      // First create a draft to preview the logbook
-      const draftResponse = await apiFetch('/api/logbook/draft/', {
+      const response = await apiFetch('/api/logbook/create/', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          week_start: selectedWeek.week_start
+          week_start_date: selectedWeek.week_start,
+          save_as_draft: saveAsDraft
         })
       })
 
-      if (!draftResponse.ok) {
-        throw new Error('Failed to create logbook draft')
-      }
-
-      const draftData = await draftResponse.json()
-
-      // Now submit the logbook
-      const submitResponse = await apiFetch('/api/logbook/submit/', {
-        method: 'POST',
-        body: JSON.stringify({
-          week_start: selectedWeek.week_start,
-          week_end: selectedWeek.week_end,
-          section_a_entry_ids: draftData.section_a_entries.map((entry: any) => entry.id),
-          section_b_entry_ids: draftData.section_b_entries.map((entry: any) => entry.id),
-          section_c_entry_ids: draftData.section_c_entries.map((entry: any) => entry.id)
-        })
-      })
-
-      if (submitResponse.ok) {
-        toast.success('Logbook submitted successfully!')
+      if (response.ok) {
+        const data = await response.json()
+        if (saveAsDraft) {
+          toast.success('Logbook saved as draft successfully!')
+        } else {
+          toast.success('Logbook created and submitted successfully!')
+        }
         onLogbookCreated()
       } else {
-        const errorData = await submitResponse.json()
-        toast.error(errorData.error || 'Failed to submit logbook')
+        const errorData = await response.json()
+        toast.error(errorData.error || `Failed to ${saveAsDraft ? 'save draft' : 'submit logbook'}`)
       }
     } catch (error) {
       console.error('Error creating logbook:', error)
-      toast.error('Error creating logbook')
+      toast.error(`Error ${saveAsDraft ? 'saving draft' : 'creating logbook'}`)
     } finally {
       setSubmitting(false)
     }
@@ -214,27 +204,47 @@ export default function LogbookCreationModal({ onClose, onLogbookCreated }: Logb
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button
-            onClick={handleCreateLogbook}
-            disabled={!selectedWeek || submitting}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {submitting ? (
-              <>
-                <Clock className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <FileText className="h-4 w-4 mr-2" />
-                Create & Submit Logbook
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button
+              onClick={() => handleCreateLogbook(true)}
+              disabled={!selectedWeek || submitting}
+              variant="outline"
+              className="flex-1 sm:flex-none"
+            >
+              {submitting ? (
+                <>
+                  <Clock className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Save as Draft
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={() => handleCreateLogbook(false)}
+              disabled={!selectedWeek || submitting}
+              className="bg-blue-600 hover:bg-blue-700 !text-white flex-1 sm:flex-none"
+            >
+              {submitting ? (
+                <>
+                  <Clock className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Create & Submit
+                </>
+              )}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

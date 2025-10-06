@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification
+from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification, LogbookReviewRequest
 from django.contrib.auth.models import User
 
 
@@ -373,3 +373,94 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['id', 'message', 'link', 'read', 'type', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+
+class LogbookReviewRequestSerializer(serializers.ModelSerializer):
+    """Serializer for LogbookReviewRequest model"""
+    
+    requested_by_name = serializers.SerializerMethodField()
+    days_since_requested = serializers.ReadOnlyField()
+    is_overdue = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = LogbookReviewRequest
+        fields = [
+            'id', 'logbook', 'requested_by', 'requested_by_name', 'request_type', 'title', 'description',
+            'target_section', 'target_entry_id', 'status', 'priority', 'trainee_response', 'supervisor_notes',
+            'requested_at', 'responded_at', 'completed_at', 'days_since_requested', 'is_overdue'
+        ]
+        read_only_fields = ['id', 'requested_by', 'requested_at', 'responded_at', 'completed_at']
+    
+    def get_requested_by_name(self, obj):
+        return f"{obj.requested_by.profile.first_name} {obj.requested_by.profile.last_name}".strip() or obj.requested_by.email
+
+
+class LogbookReviewRequestCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating LogbookReviewRequest"""
+    
+    class Meta:
+        model = LogbookReviewRequest
+        fields = [
+            'request_type', 'title', 'description', 'target_section', 'target_entry_id', 'priority'
+        ]
+    
+    def validate_title(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Title is required")
+        return value.strip()
+    
+    def validate_description(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Description is required")
+        return value.strip()
+
+
+class EnhancedLogbookSerializer(serializers.ModelSerializer):
+    """Enhanced serializer for WeeklyLogbook with review flow information"""
+    
+    week_display = serializers.ReadOnlyField()
+    trainee_name = serializers.SerializerMethodField()
+    supervisor_name = serializers.SerializerMethodField()
+    reviewed_by_name = serializers.SerializerMethodField()
+    section_totals = serializers.SerializerMethodField()
+    active_unlock = serializers.SerializerMethodField()
+    review_requests = LogbookReviewRequestSerializer(many=True, read_only=True)
+    pending_change_requests_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = WeeklyLogbook
+        fields = [
+            'id', 'trainee', 'trainee_name', 'role_type', 'week_start_date', 'week_end_date', 
+            'week_display', 'status', 'is_editable', 'section_a_entry_ids', 'section_b_entry_ids', 
+            'section_c_entry_ids', 'supervisor', 'supervisor_name', 'submitted_at', 
+            'reviewed_by', 'reviewed_by_name', 'reviewed_at', 'review_comments', 'supervisor_decision_at',
+            'section_totals', 'active_unlock', 'review_started_at', 'change_requests_count',
+            'resubmission_count', 'pending_change_requests', 'review_requests', 'pending_change_requests_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'trainee', 'submitted_at', 'reviewed_at', 'created_at', 'updated_at', 'is_editable']
+    
+    def get_trainee_name(self, obj):
+        return f"{obj.trainee.profile.first_name} {obj.trainee.profile.last_name}".strip() or obj.trainee.email
+    
+    def get_supervisor_name(self, obj):
+        if obj.supervisor and hasattr(obj.supervisor, 'profile'):
+            return f"{obj.supervisor.profile.first_name} {obj.supervisor.profile.last_name}".strip() or obj.supervisor.email
+        return None
+    
+    def get_reviewed_by_name(self, obj):
+        if obj.reviewed_by and hasattr(obj.reviewed_by, 'profile'):
+            return f"{obj.reviewed_by.profile.first_name} {obj.reviewed_by.profile.last_name}".strip() or obj.reviewed_by.email
+        return None
+    
+    def get_section_totals(self, obj):
+        return obj.calculate_section_totals()
+    
+    def get_active_unlock(self, obj):
+        unlock = obj.get_active_unlock()
+        if unlock:
+            return UnlockRequestSerializer(unlock).data
+        return None
+    
+    def get_pending_change_requests_count(self, obj):
+        return len(obj.pending_change_requests) if obj.pending_change_requests else 0

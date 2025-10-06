@@ -9,7 +9,13 @@ from .views import (
     review_unlock_request, force_relock_unlock_request,
     user_notifications, notification_stats, mark_notification_read,
     mark_all_notifications_read, create_notification,
-    logbook_html_report, notification_list, notification_mark_read
+    logbook_html_report, notification_list, notification_mark_read,
+    # Enhanced review flow endpoints
+    logbook_start_review, logbook_request_changes, logbook_approve_with_comments,
+    logbook_reject_with_reason, logbook_review_requests, review_request_respond,
+    review_request_complete, logbook_review_history,
+    # Section entries endpoint
+    logbook_section_a_entries
 )
 
 urlpatterns = [
@@ -51,5 +57,18 @@ urlpatterns = [
     path('notifications/', notification_list, name='notification-list'),
     path('notifications/stats/', notification_stats, name='notification-stats'),
     path('notifications/<int:notification_id>/read/', notification_mark_read, name='notification-mark-read'),
+    
+    # Enhanced Review Flow endpoints
+    path('<int:logbook_id>/start-review/', logbook_start_review, name='logbook-start-review'),
+    path('<int:logbook_id>/request-changes/', logbook_request_changes, name='logbook-request-changes'),
+    path('<int:logbook_id>/approve-with-comments/', logbook_approve_with_comments, name='logbook-approve-with-comments'),
+    path('<int:logbook_id>/reject-with-reason/', logbook_reject_with_reason, name='logbook-reject-with-reason'),
+    path('<int:logbook_id>/review-requests/', logbook_review_requests, name='logbook-review-requests'),
+    path('<int:logbook_id>/review-requests/<int:request_id>/respond/', review_request_respond, name='review-request-respond'),
+    path('<int:logbook_id>/review-requests/<int:request_id>/complete/', review_request_complete, name='review-request-complete'),
+    path('<int:logbook_id>/review-history/', logbook_review_history, name='logbook-review-history'),
+    
+    # Section entries endpoints
+    path('<int:logbook_id>/section-a-entries/', logbook_section_a_entries, name='logbook-section-a-entries'),
 ]
 

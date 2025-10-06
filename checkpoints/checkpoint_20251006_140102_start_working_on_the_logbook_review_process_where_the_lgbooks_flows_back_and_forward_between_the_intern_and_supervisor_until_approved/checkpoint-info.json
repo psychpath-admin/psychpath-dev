@@ -1,0 +1,16 @@
+{
+    "name": "checkpoint_20251006_140102_start_working_on_the_logbook_review_process_where_the_lgbooks_flows_back_and_forward_between_the_intern_and_supervisor_until_approved",
+    "description": "START: Working on the logbook review process where the lgbooks flows back and forward between the intern and supervisor until approved.",
+    "created": "2025-10-06T03:01:06Z",
+    "timestamp": "20251006_140102",
+    "git_branch": "feature/fix-logbook-submit-error",
+    "git_commit": "563cbcdaa56d35795420210c189a12f44596b49d",
+    "postgres_version": "PostgreSQL 16.10 (Homebrew) on aarch64-apple-darwin24.4.0, compiled by Apple clang version 17.0.0 (clang-1700.0.13.3), 64-bit",
+    "database_size": "13 MB",
+    "files_count": "10411",
+    "recovery_instructions": {
+        "postgresql": "psql -U psychpath -d postgres -f /Users/macdemac/Local Sites/PsychPATH/checkpoints/checkpoint_20251006_140102_start_working_on_the_logbook_review_process_where_the_lgbooks_flows_back_and_forward_between_the_intern_and_supervisor_until_approved/database/postgres-backup.sql",
+        "git": "git checkout checkpoint/checkpoint_20251006_140102_start_working_on_the_logbook_review_process_where_the_lgbooks_flows_back_and_forward_between_the_intern_and_supervisor_until_approved",
+        "docker": "docker-compose -f docker-compose.checkpoint.yml up -d"
+    }
+}

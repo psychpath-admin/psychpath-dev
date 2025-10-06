@@ -7,13 +7,14 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction
 from django.shortcuts import render
-from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification
+from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification, LogbookReviewRequest
 from api.models import Supervision
 from .serializers import (
     LogbookSerializer, LogbookDraftSerializer, EligibleWeekSerializer, 
     LogbookSubmissionSerializer, LogbookAuditLogSerializer,
     CommentThreadSerializer, CommentMessageSerializer, UnlockRequestSerializer,
-    NotificationSerializer
+    NotificationSerializer, LogbookReviewRequestSerializer, LogbookReviewRequestCreateSerializer,
+    EnhancedLogbookSerializer
 )
 from logging_utils import support_error_handler
 from rest_framework.parsers import JSONParser
@@ -22,15 +23,71 @@ from utils.duration_utils import minutes_to_hours_minutes, minutes_to_display_fo
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@support_error_handler
 def logbook_list(request):
-    """Get all submitted logbooks for the current user"""
-    if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
-        return Response({'error': 'Only trainees can view logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    """Get all logbooks for the current user (trainees) or supervisees (supervisors)"""
+    try:
+        print(f"DEBUG: logbook_list called by user: {request.user.email if request.user.is_authenticated else 'Anonymous'}")
+        
+        if not hasattr(request.user, 'profile'):
+            print(f"DEBUG: User {request.user.email} has no profile")
+            return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+        
+        user_role = request.user.profile.role
+        print(f"DEBUG: User role: {user_role}")
+        
+        if user_role in ['PROVISIONAL', 'REGISTRAR']:
+            # Trainees see their own logbooks
+            print(f"DEBUG: Getting logbooks for trainee: {request.user.email}")
+            try:
+                logbooks = WeeklyLogbook.objects.filter(trainee=request.user).order_by('-week_start_date')
+                print(f"DEBUG: Found {logbooks.count()} logbooks")
+                serializer = LogbookSerializer(logbooks, many=True)
+                return Response(serializer.data)
+            except Exception as e:
+                print(f"DEBUG: Error getting logbooks: {e}")
+                import traceback
+                traceback.print_exc()
+                return Response({'error': f'Error retrieving logbooks: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        elif user_role == 'SUPERVISOR':
+            # Supervisors see logbooks from their supervisees
+            print(f"DEBUG: Getting logbooks for supervisor: {request.user.email}")
+            try:
+                from api.models import Supervision
+                
+                # Get supervisees for this supervisor
+                supervisee_relationships = Supervision.objects.filter(
+                    supervisor=request.user,
+                    role='PRIMARY',
+                    status='ACCEPTED'
+                )
+                supervisee_users = [rel.supervisee for rel in supervisee_relationships if rel.supervisee]
+                
+                print(f"DEBUG: Found {len(supervisee_users)} supervisees")
+                
+                if not supervisee_users:
+                    return Response([])
+                
+                # Get logbooks from supervisees
+                logbooks = WeeklyLogbook.objects.filter(trainee__in=supervisee_users).order_by('-week_start_date')
+                print(f"DEBUG: Found {logbooks.count()} logbooks from supervisees")
+                serializer = LogbookSerializer(logbooks, many=True)
+                return Response(serializer.data)
+            except Exception as e:
+                print(f"DEBUG: Error getting supervisor logbooks: {e}")
+                import traceback
+                traceback.print_exc()
+                return Response({'error': f'Error retrieving logbooks: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        else:
+            print(f"DEBUG: Insufficient permissions for role: {user_role}")
+            return Response({'error': 'Insufficient permissions'}, status=status.HTTP_403_FORBIDDEN)
     
-    logbooks = WeeklyLogbook.objects.filter(trainee=request.user).order_by('-week_start_date')
-    serializer = LogbookSerializer(logbooks, many=True)
-    return Response(serializer.data)
+    except Exception as e:
+        print(f"DEBUG: Unexpected error in logbook_list: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response({'error': f'Internal server error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -603,11 +660,13 @@ def logbook_draft(request):
 @permission_classes([IsAuthenticated])
 @support_error_handler
 def logbook_create(request):
-    """Create a new weekly logbook"""
+    """Create a new weekly logbook (draft or submitted)"""
     if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
         return Response({'error': 'Only trainees can create logbooks'}, status=status.HTTP_403_FORBIDDEN)
     
     week_start_date = request.data.get('week_start_date')
+    save_as_draft = request.data.get('save_as_draft', False)
+    
     if not week_start_date:
         return Response({'error': 'week_start_date is required'}, status=status.HTTP_400_BAD_REQUEST)
     
@@ -664,16 +723,75 @@ def logbook_create(request):
         locked=False
     )
     
+    # Determine initial status based on save_as_draft flag
+    initial_status = 'draft' if save_as_draft else 'submitted'
+    
+    # If submitting, check supervisor requirements
+    if not save_as_draft:
+        # Check if user has a principal supervisor assigned
+        user_profile = request.user.profile
+        if not user_profile.principal_supervisor or not user_profile.principal_supervisor_email:
+            return Response({
+                'error': 'You must have a principal supervisor assigned before submitting a logbook. Please update your profile with supervisor information.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if supervisor relationship is accepted
+        supervisor_relationship = Supervision.objects.filter(
+            supervisee=request.user,
+            role='PRIMARY',
+            status='ACCEPTED'
+        ).first()
+        
+        if not supervisor_relationship:
+            return Response({
+                'error': 'Your supervisor relationship must be accepted before submitting a logbook.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Set supervisor reference
+        supervisor = supervisor_relationship.supervisor
+    
     # Create the logbook
     logbook = WeeklyLogbook.objects.create(
         trainee=request.user,
         week_start_date=week_start_date,
         week_end_date=week_end_date,
-        status='ready',
+        status=initial_status,
         section_a_entry_ids=[entry.id for entry in section_a_entries],
         section_b_entry_ids=[entry.id for entry in section_b_entries],
-        section_c_entry_ids=[entry.id for entry in section_c_entries]
+        section_c_entry_ids=[entry.id for entry in section_c_entries],
+        supervisor=supervisor if not save_as_draft else None,
+        submitted_at=timezone.now() if not save_as_draft else None
     )
+    
+    # Lock entries if submitting (not saving as draft)
+    if not save_as_draft:
+        section_a_entries.update(locked=True)
+        section_b_entries.update(locked=True)
+        section_c_entries.update(locked=True)
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=logbook,
+            action='submitted',
+            user=request.user,
+            user_role='provisional',  # or get from profile
+            comments='Logbook submitted for review',
+            new_status='submitted'
+        )
+        
+        # Send notification to supervisor
+        if supervisor:
+            try:
+                from .models import Notification
+                message = f"{request.user.profile.first_name} {request.user.profile.last_name} submitted a logbook for the week of {week_start_date.strftime('%B %d, %Y')}"
+                Notification.create_notification(
+                    recipient=supervisor,
+                    message=message,
+                    notification_type='logbook_submission',
+                    link=f"/logbooks/{logbook.id}/review"
+                )
+            except Exception:
+                pass  # Handle notification creation errors gracefully
     
     # Calculate and return totals
     totals = logbook.calculate_section_totals()
@@ -1247,6 +1365,54 @@ def logbook_comment_threads(request, logbook_id):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def logbook_section_a_entries(request, logbook_id):
+    """Get Section A entries for a specific logbook"""
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check permissions
+    if not hasattr(request.user, 'profile'):
+        return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+    
+    user_role = request.user.profile.role
+    
+    # Trainees can only view their own logbooks
+    if user_role in ['PROVISIONAL', 'REGISTRAR'] and logbook.trainee != request.user:
+        return Response({'error': 'Can only view your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Supervisors can view logbooks from their supervisees
+    if user_role == 'SUPERVISOR':
+        from api.models import Supervision
+        supervisee_relationships = Supervision.objects.filter(
+            supervisor=request.user,
+            role='PRIMARY',
+            status='ACCEPTED'
+        )
+        supervisee_users = [rel.supervisee for rel in supervisee_relationships if rel.supervisee]
+        
+        if logbook.trainee not in supervisee_users:
+            return Response({'error': 'Can only view logbooks from your supervisees'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Fetch Section A entries
+    from section_a.models import SectionAEntry
+    
+    entry_ids = logbook.section_a_entry_ids
+    if not entry_ids:
+        return Response([])
+    
+    entries = SectionAEntry.objects.filter(id__in=entry_ids).order_by('session_date', 'created_at')
+    
+    # Serialize entries
+    from section_a.serializers import SectionAEntrySerializer
+    serializer = SectionAEntrySerializer(entries, many=True)
+    
+    return Response(serializer.data)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @support_error_handler
@@ -1699,28 +1865,6 @@ def user_notifications(request):
     return Response(serializer.data)
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, DenyOrgAdmin])
-@support_error_handler
-def notification_stats(request):
-    """Get notification statistics for the user"""
-    user = request.user
-    
-    total_notifications = Notification.objects.filter(user=user).count()
-    unread_count = Notification.objects.filter(user=user, read=False).count()
-    
-    # Get counts by type
-    type_counts = {}
-    for notification_type, _ in Notification.TYPE_CHOICES:
-        count = Notification.objects.filter(user=user, notification_type=notification_type, read=False).count()
-        if count > 0:
-            type_counts[notification_type] = count
-    
-    return Response({
-        'total': total_notifications,
-        'unread': unread_count,
-        'by_type': type_counts
-    })
 
 
 @api_view(['PATCH'])
@@ -2148,3 +2292,253 @@ def notification_mark_read(request, notification_id):
         return Response({'message': 'Notification marked as read'})
     except Notification.DoesNotExist:
         return Response({'error': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+# Enhanced Review Flow API Endpoints
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_start_review(request, logbook_id):
+    """Start the review process for a submitted logbook"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
+        return Response({'error': 'Only supervisors can start reviews'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    try:
+        logbook.start_review(request.user)
+        serializer = EnhancedLogbookSerializer(logbook, context={'request': request})
+        return Response({
+            'message': 'Review started successfully',
+            'logbook': serializer.data
+        })
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_request_changes(request, logbook_id):
+    """Request specific changes for a logbook under review"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
+        return Response({'error': 'Only supervisors can request changes'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Validate change requests
+    change_requests_data = request.data.get('change_requests', [])
+    if not change_requests_data:
+        return Response({'error': 'At least one change request is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Create change requests
+    change_requests = []
+    for request_data in change_requests_data:
+        serializer = LogbookReviewRequestCreateSerializer(data=request_data)
+        if serializer.is_valid():
+            change_request = LogbookReviewRequest.objects.create(
+                logbook=logbook,
+                requested_by=request.user,
+                **serializer.validated_data
+            )
+            change_requests.append(change_request)
+        else:
+            return Response({'error': f'Invalid change request: {serializer.errors}'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        logbook.request_changes(request.user, change_requests)
+        serializer = EnhancedLogbookSerializer(logbook, context={'request': request})
+        return Response({
+            'message': f'{len(change_requests)} change request(s) created successfully',
+            'logbook': serializer.data
+        })
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_approve_with_comments(request, logbook_id):
+    """Approve a logbook with optional comments"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
+        return Response({'error': 'Only supervisors can approve logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    comments = request.data.get('comments', '')
+    
+    try:
+        logbook.approve_with_changes(request.user, comments)
+        serializer = EnhancedLogbookSerializer(logbook, context={'request': request})
+        return Response({
+            'message': 'Logbook approved successfully',
+            'logbook': serializer.data
+        })
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_reject_with_reason(request, logbook_id):
+    """Reject a logbook with detailed reason"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
+        return Response({'error': 'Only supervisors can reject logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    reason = request.data.get('reason', '')
+    if not reason.strip():
+        return Response({'error': 'Reason is required for rejection'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        logbook.reject_with_reason(request.user, reason.strip())
+        serializer = EnhancedLogbookSerializer(logbook, context={'request': request})
+        return Response({
+            'message': 'Logbook rejected successfully',
+            'logbook': serializer.data
+        })
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_review_requests(request, logbook_id):
+    """Get all review requests for a logbook"""
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check permissions
+    if not hasattr(request.user, 'profile'):
+        return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+    
+    user_role = request.user.profile.role
+    if user_role in ['PROVISIONAL', 'REGISTRAR']:
+        # Trainees can only view their own logbooks
+        if logbook.trainee != request.user:
+            return Response({'error': 'Can only view your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    elif user_role != 'SUPERVISOR':
+        return Response({'error': 'Insufficient permissions'}, status=status.HTTP_403_FORBIDDEN)
+    
+    review_requests = logbook.review_requests.all()
+    serializer = LogbookReviewRequestSerializer(review_requests, many=True, context={'request': request})
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def review_request_respond(request, logbook_id, request_id):
+    """Respond to a review request as a trainee"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
+        return Response({'error': 'Only trainees can respond to review requests'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+        review_request = LogbookReviewRequest.objects.get(id=request_id, logbook=logbook)
+    except (WeeklyLogbook.DoesNotExist, LogbookReviewRequest.DoesNotExist):
+        return Response({'error': 'Logbook or review request not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check if user owns this logbook
+    if logbook.trainee != request.user:
+        return Response({'error': 'Can only respond to requests for your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    
+    response_text = request.data.get('response', '')
+    if not response_text.strip():
+        return Response({'error': 'Response is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    review_request.mark_as_responded(response_text.strip())
+    serializer = LogbookReviewRequestSerializer(review_request, context={'request': request})
+    return Response({
+        'message': 'Response submitted successfully',
+        'review_request': serializer.data
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def review_request_complete(request, logbook_id, request_id):
+    """Mark a review request as completed by supervisor"""
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
+        return Response({'error': 'Only supervisors can complete review requests'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+        review_request = LogbookReviewRequest.objects.get(id=request_id, logbook=logbook)
+    except (WeeklyLogbook.DoesNotExist, LogbookReviewRequest.DoesNotExist):
+        return Response({'error': 'Logbook or review request not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    supervisor_notes = request.data.get('supervisor_notes', '')
+    review_request.mark_as_completed(supervisor_notes.strip())
+    serializer = LogbookReviewRequestSerializer(review_request, context={'request': request})
+    return Response({
+        'message': 'Review request marked as completed',
+        'review_request': serializer.data
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_review_history(request, logbook_id):
+    """Get complete review history for a logbook"""
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check permissions
+    if not hasattr(request.user, 'profile'):
+        return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+    
+    user_role = request.user.profile.role
+    if user_role in ['PROVISIONAL', 'REGISTRAR']:
+        # Trainees can only view their own logbooks
+        if logbook.trainee != request.user:
+            return Response({'error': 'Can only view your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+    elif user_role != 'SUPERVISOR':
+        return Response({'error': 'Insufficient permissions'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Get audit logs
+    audit_logs = LogbookAuditLog.objects.filter(logbook=logbook).order_by('-created_at')
+    audit_serializer = LogbookAuditLogSerializer(audit_logs, many=True, context={'request': request})
+    
+    # Get review requests
+    review_requests = logbook.review_requests.all().order_by('-requested_at')
+    review_serializer = LogbookReviewRequestSerializer(review_requests, many=True, context={'request': request})
+    
+    # Get logbook info
+    logbook_serializer = EnhancedLogbookSerializer(logbook, context={'request': request})
+    
+    return Response({
+        'logbook': logbook_serializer.data,
+        'audit_logs': audit_serializer.data,
+        'review_requests': review_serializer.data,
+        'summary': {
+            'total_review_cycles': logbook.resubmission_count + 1,
+            'change_requests_made': logbook.change_requests_count,
+            'pending_requests': len(logbook.pending_change_requests) if logbook.pending_change_requests else 0,
+            'last_review_date': logbook.reviewed_at,
+            'review_started_date': logbook.review_started_at,
+        }
+    })

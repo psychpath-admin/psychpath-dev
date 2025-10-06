@@ -29,6 +29,7 @@ import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
 import LogbookCreationModal from '@/components/LogbookCreationModal'
 import LogbookPreview from '@/components/LogbookPreview'
+import StructuredLogbookDisplay from '@/components/StructuredLogbookDisplay'
 
 interface Logbook {
   id: number
@@ -36,7 +37,7 @@ interface Logbook {
   week_start_date: string
   week_end_date: string
   week_display: string
-  status: 'draft' | 'submitted' | 'approved' | 'rejected'
+  status: 'draft' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
   supervisor_name?: string
   reviewed_by_name?: string
   submitted_at: string
@@ -46,7 +47,12 @@ interface Logbook {
   regenerated?: boolean
   due_date?: string
   section_totals: {
-    section_a: { weekly_hours: number; cumulative_hours: number }
+    section_a: { 
+      weekly_hours: number
+      cumulative_hours: number
+      dcc?: { weekly_hours: number; cumulative_hours: number }
+      cra?: { weekly_hours: number; cumulative_hours: number }
+    }
     section_b: { weekly_hours: number; cumulative_hours: number }
     section_c: { weekly_hours: number; cumulative_hours: number }
     total: { weekly_hours: number; cumulative_hours: number }
@@ -83,6 +89,7 @@ export default function LogbookDashboard() {
   const [loading, setLoading] = useState(true)
   const [showCreationModal, setShowCreationModal] = useState(false)
   const [previewLogbook, setPreviewLogbook] = useState<Logbook | null>(null)
+  const [structuredLogbook, setStructuredLogbook] = useState<Logbook | null>(null)
   
   // New state for dashboard functionality
   const [metrics, setMetrics] = useState<LogbookMetrics | null>(null)
@@ -198,7 +205,8 @@ export default function LogbookDashboard() {
   }
 
   const handlePreviewLogbook = (logbook: Logbook) => {
-    setPreviewLogbook(logbook)
+    // Show the AHPRA-style structured display directly instead of the preview
+    setStructuredLogbook(logbook)
   }
 
 
@@ -852,6 +860,17 @@ export default function LogbookDashboard() {
         <LogbookPreview
           logbook={previewLogbook}
           onClose={() => setPreviewLogbook(null)}
+        />
+      )}
+
+      {structuredLogbook && (
+        <StructuredLogbookDisplay
+          logbook={structuredLogbook}
+          onClose={() => setStructuredLogbook(null)}
+          onRegenerate={() => {
+            setStructuredLogbook(null)
+            fetchLogbooks() // Refresh the logbook list
+          }}
         />
       )}
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -14,12 +14,12 @@ import {
   X, 
   Calendar, 
   Clock, 
-  User, 
   FileText,
   CheckCircle,
   XCircle,
   AlertCircle
 } from 'lucide-react'
+import StructuredLogbookDisplay from './StructuredLogbookDisplay'
 
 interface Logbook {
   id: number
@@ -27,14 +27,19 @@ interface Logbook {
   week_start_date: string
   week_end_date: string
   week_display: string
-  status: 'draft' | 'submitted' | 'approved' | 'rejected'
+  status: 'draft' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
   supervisor_name?: string
   reviewed_by_name?: string
   submitted_at: string
   reviewed_at?: string
   supervisor_comments?: string
   section_totals: {
-    section_a: { weekly_hours: number; cumulative_hours: number }
+    section_a: { 
+      weekly_hours: number
+      cumulative_hours: number
+      dcc?: { weekly_hours: number; cumulative_hours: number }
+      cra?: { weekly_hours: number; cumulative_hours: number }
+    }
     section_b: { weekly_hours: number; cumulative_hours: number }
     section_c: { weekly_hours: number; cumulative_hours: number }
     total: { weekly_hours: number; cumulative_hours: number }
@@ -48,6 +53,21 @@ interface LogbookPreviewProps {
 
 export default function LogbookPreview({ logbook, onClose }: LogbookPreviewProps) {
   const [activeTab, setActiveTab] = useState('overview')
+  const [showStructuredView, setShowStructuredView] = useState(false)
+
+  // If structured view is requested, show the structured display
+  if (showStructuredView) {
+    return (
+      <StructuredLogbookDisplay 
+        logbook={logbook} 
+        onClose={() => setShowStructuredView(false)}
+        onRegenerate={() => {
+          setShowStructuredView(false)
+          onClose() // Close the preview to refresh the dashboard
+        }}
+      />
+    )
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -214,6 +234,28 @@ export default function LogbookPreview({ logbook, onClose }: LogbookPreviewProps
                 </CardContent>
               </Card>
             )}
+
+            {/* View Options */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  View Options
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  onClick={() => setShowStructuredView(true)}
+                  className="w-full"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  View AHPRA-Style Logbook Format
+                </Button>
+                <p className="text-xs text-gray-600 mt-2 text-center">
+                  View the logbook in the traditional AHPRA format with structured tables and cumulative totals
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="section-a">

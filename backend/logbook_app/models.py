@@ -12,6 +12,7 @@ class WeeklyLogbook(models.Model):
     STATUS_CHOICES = [
         ('draft', 'Draft'),
         ('submitted', 'Submitted'),
+        ('under_review', 'Under Review'),
         ('returned_for_edits', 'Returned for Edits'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
@@ -36,6 +37,13 @@ class WeeklyLogbook(models.Model):
     resubmitted_at = models.DateTimeField(null=True, blank=True)
     returned_at = models.DateTimeField(null=True, blank=True)
     rejected_at = models.DateTimeField(null=True, blank=True)
+    
+    # Enhanced review fields
+    review_started_at = models.DateTimeField(null=True, blank=True, help_text="When supervisor started reviewing")
+    change_requests_count = models.PositiveIntegerField(default=0, help_text="Number of change requests made")
+    resubmission_count = models.PositiveIntegerField(default=0, help_text="Number of times resubmitted")
+    pending_change_requests = models.JSONField(default=list, help_text="List of pending change request IDs")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -346,6 +354,11 @@ class WeeklyLogbook(models.Model):
         previous_status = self.status
         self.status = 'submitted'
         self.resubmitted_at = timezone.now()
+        self.resubmission_count += 1
+        
+        # Clear pending change requests when resubmitting
+        self.pending_change_requests = []
+        
         self.save()
         
         # Log audit trail
@@ -362,6 +375,136 @@ class WeeklyLogbook(models.Model):
         # Send notification to supervisor
         if self.supervisor:
             self._send_notification_to_supervisor('resubmitted')
+    
+    def start_review(self, supervisor):
+        """Start the review process"""
+        if self.status != 'submitted':
+            raise ValueError("Can only start review for submitted logbooks")
+        
+        self.status = 'under_review'
+        self.review_started_at = timezone.now()
+        self.reviewed_by = supervisor
+        self.save()
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='review_started',
+            user=supervisor,
+            user_role=self._get_user_role(supervisor),
+            comments='Review process started',
+            new_status='under_review'
+        )
+    
+    def request_changes(self, supervisor, change_requests):
+        """Request specific changes from trainee"""
+        if self.status != 'under_review':
+            raise ValueError("Can only request changes for logbooks under review")
+        
+        self.status = 'returned_for_edits'
+        self.returned_at = timezone.now()
+        self.change_requests_count += len(change_requests)
+        
+        # Add change request IDs to pending list
+        request_ids = [req.id for req in change_requests]
+        self.pending_change_requests = request_ids
+        
+        self.save()
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='changes_requested',
+            user=supervisor,
+            user_role=self._get_user_role(supervisor),
+            comments=f'Requested {len(change_requests)} changes',
+            new_status='returned_for_edits'
+        )
+        
+        # Send notification to trainee
+        self._send_notification_to_trainee('changes_requested', len(change_requests))
+    
+    def approve_with_changes(self, supervisor, comments=""):
+        """Approve logbook with optional comments"""
+        if self.status != 'under_review':
+            raise ValueError("Can only approve logbooks under review")
+        
+        self.status = 'approved'
+        self.reviewed_at = timezone.now()
+        self.reviewed_by = supervisor
+        if comments:
+            self.review_comments = comments
+        self.save()
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='approved',
+            user=supervisor,
+            user_role=self._get_user_role(supervisor),
+            comments=comments or 'Logbook approved',
+            new_status='approved'
+        )
+        
+        # Send notification to trainee
+        self._send_notification_to_trainee('approved')
+    
+    def reject_with_reason(self, supervisor, reason):
+        """Reject logbook with detailed reason"""
+        if self.status != 'under_review':
+            raise ValueError("Can only reject logbooks under review")
+        
+        self.status = 'rejected'
+        self.rejected_at = timezone.now()
+        self.reviewed_by = supervisor
+        self.review_comments = reason
+        self.save()
+        
+        # Log audit trail
+        LogbookAuditLog.objects.create(
+            logbook=self,
+            action='rejected',
+            user=supervisor,
+            user_role=self._get_user_role(supervisor),
+            comments=reason,
+            new_status='rejected'
+        )
+        
+        # Send notification to trainee
+        self._send_notification_to_trainee('rejected')
+    
+    def _send_notification_to_trainee(self, action, change_count=None):
+        """Send notification to trainee"""
+        if not self.trainee:
+            return
+            
+        if action == 'changes_requested':
+            message = f"Your supervisor has requested {change_count} change(s) for your logbook for the week of {self.week_start_date.strftime('%B %d, %Y')}"
+            notification_type = 'logbook_changes_requested'
+            link = f"/logbooks/{self.id}/edit"
+        elif action == 'approved':
+            message = f"Your logbook for the week of {self.week_start_date.strftime('%B %d, %Y')} has been approved by your supervisor"
+            notification_type = 'logbook_approved'
+            link = f"/logbooks/{self.id}"
+        elif action == 'rejected':
+            message = f"Your logbook for the week of {self.week_start_date.strftime('%B %d, %Y')} has been rejected by your supervisor"
+            notification_type = 'logbook_rejected'
+            link = f"/logbooks/{self.id}/edit"
+        else:
+            return
+        
+        # Create notification
+        try:
+            from .models import Notification
+            Notification.create_notification(
+                recipient=self.trainee,
+                message=message,
+                notification_type=notification_type,
+                link=link
+            )
+        except Exception:
+            # Handle case where Notification model doesn't exist
+            pass
     
     def _get_user_role(self, user):
         """Get user role for audit logging"""
@@ -754,3 +897,96 @@ class Notification(models.Model):
             link=link
         )
         return notification
+
+
+class LogbookReviewRequest(models.Model):
+    """Model for tracking specific change requests during logbook review"""
+    
+    REQUEST_TYPE_CHOICES = [
+        ('entry_modification', 'Entry Modification'),
+        ('additional_info', 'Additional Information'),
+        ('clarification', 'Clarification Needed'),
+        ('format_issue', 'Format Issue'),
+        ('completeness', 'Completeness Check'),
+        ('other', 'Other'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('dismissed', 'Dismissed'),
+    ]
+    
+    logbook = models.ForeignKey(WeeklyLogbook, on_delete=models.CASCADE, related_name='review_requests')
+    requested_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='change_requests_made')
+    request_type = models.CharField(max_length=20, choices=REQUEST_TYPE_CHOICES)
+    title = models.CharField(max_length=200, help_text="Brief title of the change request")
+    description = models.TextField(help_text="Detailed description of what needs to be changed")
+    
+    # Entry-specific information
+    target_section = models.CharField(max_length=20, choices=[
+        ('section_a', 'Section A'),
+        ('section_b', 'Section B'), 
+        ('section_c', 'Section C'),
+        ('general', 'General'),
+    ], default='general')
+    target_entry_id = models.CharField(max_length=50, blank=True, help_text="ID of specific entry if applicable")
+    
+    # Status and tracking
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    priority = models.CharField(max_length=10, choices=[
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ], default='medium')
+    
+    # Response information
+    trainee_response = models.TextField(blank=True, help_text="Trainee's response to the change request")
+    supervisor_notes = models.TextField(blank=True, help_text="Additional supervisor notes")
+    
+    # Timestamps
+    requested_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-requested_at']
+        verbose_name = 'Logbook Review Request'
+        verbose_name_plural = 'Logbook Review Requests'
+    
+    def __str__(self):
+        return f"Review Request: {self.title} - {self.logbook.week_display}"
+    
+    def mark_as_responded(self, response_text):
+        """Mark request as responded to by trainee"""
+        self.trainee_response = response_text
+        self.responded_at = timezone.now()
+        self.status = 'in_progress'
+        self.save()
+    
+    def mark_as_completed(self, supervisor_notes=""):
+        """Mark request as completed by supervisor"""
+        self.supervisor_notes = supervisor_notes
+        self.completed_at = timezone.now()
+        self.status = 'completed'
+        self.save()
+    
+    def dismiss(self, reason=""):
+        """Dismiss the request"""
+        self.supervisor_notes = f"Dismissed: {reason}" if reason else "Dismissed"
+        self.status = 'dismissed'
+        self.save()
+    
+    @property
+    def is_overdue(self):
+        """Check if request is overdue (more than 7 days old and pending)"""
+        if self.status != 'pending':
+            return False
+        return (timezone.now() - self.requested_at).days > 7
+    
+    @property
+    def days_since_requested(self):
+        """Get number of days since request was made"""
+        return (timezone.now() - self.requested_at).days

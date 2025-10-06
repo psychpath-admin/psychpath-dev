@@ -145,6 +145,7 @@ export default function SectionADashboard() {
   const [durationMin, setDurationMin] = useState('')
   const [durationMax, setDurationMax] = useState('')
   const [groupByWeek, setGroupByWeek] = useState(false)
+  const [weekStarting, setWeekStarting] = useState<string>('')
   
   // New Section A-specific filters
   const [clientPseudonym, setClientPseudonym] = useState('')
@@ -153,7 +154,7 @@ export default function SectionADashboard() {
 
   useEffect(() => {
     loadDCCEntries()
-  }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax, groupByWeek, clientPseudonym, activityType, reviewedFilter])
+  }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax, groupByWeek, clientPseudonym, activityType, reviewedFilter, weekStarting])
 
   // Load custom activity types from localStorage
   useEffect(() => {
@@ -179,14 +180,18 @@ export default function SectionADashboard() {
     try {
       // For now, we'll use the existing API and filter on frontend
       // TODO: Update backend to support pagination and filtering
-      const fetchedEntries = await getSectionAEntries()
+      const fetchedEntries = await getSectionAEntries({
+        week_starting: weekStarting || undefined,
+        include_locked: true
+      })
+      
       
       // Store unfiltered entries for cumulative totals calculation
       setAllEntries(fetchedEntries)
       
-      // Filter for DCC and ICRA entries
+      // Include all Section A entry types (DCC, CRA, ICRA)
       let filteredEntries = fetchedEntries.filter((entry: DCCEntry) => 
-        entry.entry_type === 'client_contact' || entry.entry_type === 'independent_activity'
+        entry.entry_type === 'client_contact' || entry.entry_type === 'cra' || entry.entry_type === 'independent_activity'
       )
       
       // Apply filters
@@ -283,6 +288,19 @@ export default function SectionADashboard() {
       setLoading(false)
     }
   }
+
+  // Default weekStarting to latest Monday from existing entries on first load
+  useEffect(() => {
+    if (!weekStarting && allEntries.length > 0) {
+      const dates = allEntries
+        .map(e => e.week_starting)
+        .filter(Boolean) as string[]
+      if (dates.length) {
+        const latest = dates.sort().reverse()[0]
+        setWeekStarting(latest)
+      }
+    }
+  }, [allEntries, weekStarting])
 
   const calculateWeekStarting = (dateString: string) => {
     const date = new Date(dateString)
@@ -1151,6 +1169,17 @@ export default function SectionADashboard() {
         })()}
 
         {/* Enhanced Filters and Controls */}
+        <div className="flex flex-col md:flex-row gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">Week starting</label>
+            <input
+              type="date"
+              value={weekStarting}
+              onChange={(e) => setWeekStarting(e.target.value)}
+              className="border border-input rounded-md h-9 px-3"
+            />
+          </div>
+        </div>
         {/* Quick Stats Cards */}
         {(() => {
           const totalEntries = dccEntries.length
@@ -2174,7 +2203,7 @@ export default function SectionADashboard() {
 
       {/* ICRA Entries Section */}
       {(() => {
-        const icraEntries = dccEntries.filter(entry => entry.entry_type === 'icra')
+        const icraEntries = dccEntries.filter(entry => entry.entry_type === 'independent_activity')
         if (icraEntries.length === 0) return null
 
         return (

@@ -248,8 +248,12 @@ export async function deleteLogbookEntry(logbookId: number, type: 'dcc' | 'cra' 
 }
 
 // Section A API functions
-export async function getSectionAEntries() {
-  const res = await apiFetch('/api/section-a/entries/')
+export async function getSectionAEntries(params?: { week_starting?: string; include_locked?: boolean }) {
+  const query: string[] = []
+  if (params?.week_starting) query.push(`week_starting=${encodeURIComponent(params.week_starting)}`)
+  if (typeof params?.include_locked === 'boolean') query.push(`include_locked=${params.include_locked ? 'true' : 'false'}`)
+  const qs = query.length ? `?${query.join('&')}` : ''
+  const res = await apiFetch(`/api/section-a/entries/${qs}`)
   if (!res.ok) throw new Error('Failed to fetch Section A entries')
   return res.json()
 }

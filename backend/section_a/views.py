@@ -15,7 +15,7 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Return entries for the current user only"""
-        queryset = SectionAEntry.objects.all()  # Temporary: allow all entries for logbook editing
+        queryset = SectionAEntry.objects.filter(trainee=self.request.user)
         
         # Filter by week_starting if provided
         week_starting = self.request.query_params.get('week_starting', None)
