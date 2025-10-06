@@ -188,8 +188,8 @@ checkpoint:
 
 .PHONY: backup
 backup:
-	@echo "Creating system backup..."
-	@./scripts/simple_backup.sh
+	@echo "Creating code backup..."
+	@./scripts/code_backup.sh
 
 .PHONY: recover
 recover:
