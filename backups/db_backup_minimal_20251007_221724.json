@@ -1,0 +1,966 @@
+[
+{
+  "model": "auth.user",
+  "pk": 1,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$TVdERXlhRXJRNXhmQ1kzMmc0NHBSeQ$HZTLY4TICX3slZK/oN4esk6IgUnBnVE5HCHBiUrxOPw",
+    "last_login": "2025-10-06T03:14:41.308Z",
+    "is_superuser": false,
+    "username": "supervisor@demo.test",
+    "first_name": "",
+    "last_name": "",
+    "email": "supervisor@demo.test",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-20T06:30:10.301Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 2,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$Z2lrWDdyYkk5akR1MVQ1cUxyRjZJRw$MkhhJb4O3Pk7/5Al3wXaVg3poIIJNKosEdCilUXHKqE",
+    "last_login": "2025-10-02T05:33:06.356Z",
+    "is_superuser": false,
+    "username": "intern@demo.test",
+    "first_name": "",
+    "last_name": "",
+    "email": "intern@demo.test",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-20T06:30:26.727Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 3,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$YlR4b2Vhem1RSE1LdjFSZ3FHWHZLTA$JpFmam2U93AyY1GTt4TFuVoy37jwqV0TxAPiDR2W+9Y",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "registrar@demo.test",
+    "first_name": "",
+    "last_name": "",
+    "email": "registrar@demo.test",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-20T06:31:05.213Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 4,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$eW5MNUpUOGJzY2xqdG56UlhUZ3JHSw$V6ENTZerNC9NfCtUo7FoskYEtjxOOvLPCD//Yc2ANsA",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "admin@demo.test",
+    "first_name": "",
+    "last_name": "",
+    "email": "admin@demo.test",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-20T06:31:05.427Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 6,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$aXVNUVJKclFGalhxdzN0V2ZlUlRqbQ$6AwjEsjBSn54jAiU0sSAs7aAqDOvJhfbsa/iBQUgGuQ",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "test.supervisor@example.com",
+    "first_name": "Test",
+    "last_name": "Supervisor",
+    "email": "test.supervisor@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-20T23:35:53.174Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 8,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$YjZvOWF0R0RPeFBYazJPRFhFT3lXZQ$B73m76jUn6FYpBXe1t7KdrZKsTjJ41svhnS7dxwfUTI",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "test.provisional@example.com",
+    "first_name": "Test",
+    "last_name": "Provisional",
+    "email": "test.provisional@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-20T23:43:43.090Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 10,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$NGpRcWhrRDV4VFhYRmJ0eWNJNWZLZw$23dfNTp6fZEpWzPcw4iCQn/SGKrXf8FKflP2wsAP0us",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "new.provisional@example.com",
+    "first_name": "New",
+    "last_name": "Provisional",
+    "email": "new.provisional@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-20T23:44:32.922Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 12,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$NjgyR0ZrV1AyM2Z3RlQ5dEx0UmdQOQ$8ylt3qK2s1On7S6IyvPaLhvEGA+VfsDOlPf87CVqMi0",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "test.cleanup@example.com",
+    "first_name": "Test",
+    "last_name": "Cleanup",
+    "email": "test.cleanup@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-20T23:49:08.083Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 16,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$RTJtajRzbndBOU5DSU1RQnoyTUNjYQ$ivYqKqduNJNWoMfpiy8Lq5QDegxBfG6A3xYWKuzPc9o",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "test.new.user@example.com",
+    "first_name": "Test",
+    "last_name": "User",
+    "email": "test.new.user@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-20T23:54:55.990Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 17,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$UVNaWHFRWUFuaDFtN3ZxczB0cm9hUA$c4mIe9r/AEljtLOureXo/TBk7Ce+wyDg5uij9L9urUE",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "test.redirect@example.com",
+    "first_name": "Test",
+    "last_name": "Redirect",
+    "email": "test.redirect@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-21T00:01:53.081Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 24,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$ZXJjbGw0T0dFMVNXd1VpRElJZ0lESw$QZ61/hCmUCeAqNVTBzJApbFuyDLx6q6ABdfhxUEl/TQ",
+    "last_login": "2025-10-06T01:17:23.196Z",
+    "is_superuser": false,
+    "username": "supervisor.demo@cymp.com.au",
+    "first_name": "Brett",
+    "last_name": "Mackie",
+    "email": "supervisor.demo@cymp.com.au",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-21T01:49:02.607Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 25,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$UGJ1WUdiNG81aWh6MWFuMFlOTkhsMQ$Mq46AGcs6cKzQMuS4KDnKVgSK8EFOf7I/9eZuNj44Dw",
+    "last_login": "2025-09-30T21:42:55.371Z",
+    "is_superuser": true,
+    "username": "admin",
+    "first_name": "",
+    "last_name": "",
+    "email": "admin@psychpath.com.au",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2025-09-21T05:28:34.365Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 39,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$QmJuU0VGV1R4R2xaa2VBcGJKRlQ0VQ$rIIoRQ1lpo+Ih4gO3ze4PLgTX14XNsJryKxNflqGBqM",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "intern1.demo@cymp.com.au",
+    "first_name": "Phil",
+    "last_name": "O'Brien",
+    "email": "intern1.demo@cymp.com.au",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-21T21:09:56.706Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 40,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$eEJpSU9VaVZKaGpUWEl0NWwwZlVxbA$VcmfEOaY+AnUsTdnVsqLv6NC9gVgQkrmi816znCRvmI",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "registrar1.demo@cymp.com.au",
+    "first_name": "Registrar",
+    "last_name": "One",
+    "email": "registrar1.demo@cymp.com.au",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-21T21:48:02.577Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 41,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$Wm1oMzVRemJwZUpkbkdiSmdpeXBYVQ$OmYnLdfq+LQP22McaCRtDS+EQv1b9IPck+0AIllUI5U",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "registrar.demo@cymp.com.au",
+    "first_name": "",
+    "last_name": "",
+    "email": "registrar.demo@cymp.com.au",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-21T23:25:13.809Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 42,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$R1UyQ3VEVVpncnh1MjhOTktxd3QzWA$M3yrITEDiGWeoFB4+RU6e2Zo5+94NPZX007fnsFoUJs",
+    "last_login": null,
+    "is_superuser": true,
+    "username": "brett@cymp.com.au",
+    "first_name": "",
+    "last_name": "",
+    "email": "brett@cymp.com.au",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2025-09-23T11:20:14Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 43,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$Sm40dHZRblJ2eUhSOURTczFQME1pVA$NhW6d3ZhFiroIyt9vNeQxA4f+F7Y+eeHwvxtIM2GKhA",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "intern2.demo@cymp.com.au",
+    "first_name": "Maryam",
+    "last_name": "Baboli",
+    "email": "intern2.demo@cymp.com.au",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-26T03:08:55.825Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 44,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$YVVJR0tpYVNnTDJLZHVaOWNHTnBIWg$lCDqsV3wJ+rBl7rtIrrImstNYJlZxuitD4yu7ce/fII",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "supervisor2.demo@cymp.com.au",
+    "first_name": "Supervisor2",
+    "last_name": "Demo",
+    "email": "supervisor2.demo@cymp.com.au",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-26T08:38:50.950Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 45,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$Uk5MaEFYNjFOQmVBM012bm5KZTNSeQ$0VxTQYXMNNkm81N4VtcSELQXwl7adCO1hB73zPzdiiQ",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "registrar",
+    "first_name": "Sarah",
+    "last_name": "Johnson",
+    "email": "registrar@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-30T04:51:26.234Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 46,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$cDNmNWdFcjBxRTNSQmNVbjY5Skl6Uw$qwV2CjzABpuHnTE8iERk1WFyNs/xOc2GhCfkENywI5E",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "principal_supervisor",
+    "first_name": "Dr. Michael",
+    "last_name": "Chen",
+    "email": "principal.supervisor@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-30T04:51:26.330Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 47,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$ZXdGSHVVWjJ3Rm5mbWVtb1VodmNUbA$TgelR6DoXHkp4avNI0w98nyHoGVcFAbzrTGTE0HiaCE",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "secondary_supervisor",
+    "first_name": "Dr. Emma",
+    "last_name": "Williams",
+    "email": "secondary.supervisor@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-30T04:51:26.369Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 48,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$dHE4cGZ5M1pYTVZ6YXJQM2R6NDNRQg$wMWktCqVmXHQuAaDnycywWYpgrWSExHqA2TJxeFLEaI",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "other_supervisor",
+    "first_name": "Dr. James",
+    "last_name": "Brown",
+    "email": "other.supervisor@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-30T04:51:26.407Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 49,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$YUxlVUZHbnlSeWNCTHk3S08yd0FPVQ$VHKUtfWwIJ3gJcI7r/jKRCCqcJOqjV/IZrQ9efKsoUM",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "testregistrar",
+    "first_name": "Test",
+    "last_name": "Registrar",
+    "email": "testregistrar@example.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-09-30T10:21:12.519Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 50,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$SDhoMVBaR0swSHBSNk1mc0lPU2ZUVg$kCFkHVdY3DQwKylsSYDTOcBPPD/OwbG03OdjweXODUo",
+    "last_login": null,
+    "is_superuser": true,
+    "username": "superadmin",
+    "first_name": "",
+    "last_name": "",
+    "email": "superadmin@test.com",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2025-09-30T21:35:07.410Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 51,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$QkprRmhuZ3dldXhPNWpnUkR2ZWYxTw$0bEZ9JsQ8u3VAr0oshNTDTERGyzo4lraNnW0zSk1YwM",
+    "last_login": "2025-10-06T03:23:21.548Z",
+    "is_superuser": false,
+    "username": "intern4.demo@cymp.com.au",
+    "first_name": "Charlotte",
+    "last_name": "Gorham Mackie",
+    "email": "intern4.demo@cymp.com.au",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-10-01T10:52:39.660Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 52,
+  "fields": {
+    "password": "argon2$argon2id$v=19$m=102400,t=2,p=8$Q3MyR0V3WGU1NWFpQVdNek1kSnZMdw$3RrPeOvYwzf8iXFCidahH9m4SL33xKFRLkDTEdnLUhs",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "intern3.demo@cymp.com.au",
+    "first_name": "Intern",
+    "last_name": "Three",
+    "email": "intern3.demo@cymp.com.au",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2025-10-06T01:26:58.736Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 1,
+  "fields": {
+    "app_label": "admin",
+    "model": "logentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 2,
+  "fields": {
+    "app_label": "auth",
+    "model": "permission"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 3,
+  "fields": {
+    "app_label": "auth",
+    "model": "group"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 4,
+  "fields": {
+    "app_label": "auth",
+    "model": "user"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 5,
+  "fields": {
+    "app_label": "contenttypes",
+    "model": "contenttype"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 6,
+  "fields": {
+    "app_label": "sessions",
+    "model": "session"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 7,
+  "fields": {
+    "app_label": "api",
+    "model": "epa"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 8,
+  "fields": {
+    "app_label": "api",
+    "model": "milestone"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 9,
+  "fields": {
+    "app_label": "api",
+    "model": "reflection"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 10,
+  "fields": {
+    "app_label": "api",
+    "model": "userprofile"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 11,
+  "fields": {
+    "app_label": "api",
+    "model": "organization"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 12,
+  "fields": {
+    "app_label": "api",
+    "model": "milestoneprogress"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 13,
+  "fields": {
+    "app_label": "api",
+    "model": "emailverificationcode"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 14,
+  "fields": {
+    "app_label": "api",
+    "model": "supervision"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 15,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "weeklylogbook"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 16,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "logbookauditlog"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 17,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "craentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 18,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "dccentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 19,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "pdentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 20,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "supentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 21,
+  "fields": {
+    "app_label": "section_a",
+    "model": "sectionaentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 22,
+  "fields": {
+    "app_label": "section_a",
+    "model": "customsessionactivitytype"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 23,
+  "fields": {
+    "app_label": "section_b",
+    "model": "pdcompetency"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 24,
+  "fields": {
+    "app_label": "section_b",
+    "model": "professionaldevelopmententry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 25,
+  "fields": {
+    "app_label": "section_b",
+    "model": "pdweeklysummary"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 26,
+  "fields": {
+    "app_label": "section_c",
+    "model": "supervisionentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 27,
+  "fields": {
+    "app_label": "section_c",
+    "model": "supervisionweeklysummary"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 28,
+  "fields": {
+    "app_label": "support",
+    "model": "supportticket"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 29,
+  "fields": {
+    "app_label": "support",
+    "model": "supportmessage"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 30,
+  "fields": {
+    "app_label": "support",
+    "model": "supportuser"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 31,
+  "fields": {
+    "app_label": "support",
+    "model": "systemalert"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 32,
+  "fields": {
+    "app_label": "support",
+    "model": "useractivity"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 33,
+  "fields": {
+    "app_label": "support",
+    "model": "weeklystats"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 34,
+  "fields": {
+    "app_label": "internship_validation",
+    "model": "internshipprogram"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 35,
+  "fields": {
+    "app_label": "internship_validation",
+    "model": "internshipprogress"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 36,
+  "fields": {
+    "app_label": "internship_validation",
+    "model": "validationalert"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 37,
+  "fields": {
+    "app_label": "internship_validation",
+    "model": "weeklysummary"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 38,
+  "fields": {
+    "app_label": "api",
+    "model": "message"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 39,
+  "fields": {
+    "app_label": "api",
+    "model": "supervisorrequest"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 40,
+  "fields": {
+    "app_label": "api",
+    "model": "supervisorinvitation"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 41,
+  "fields": {
+    "app_label": "api",
+    "model": "supervisorendorsement"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 42,
+  "fields": {
+    "app_label": "api",
+    "model": "supervisionnotification"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 43,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "logbookmessage"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 44,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "commentthread"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 45,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "commentmessage"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 46,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "unlockrequest"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 47,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "notification"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 48,
+  "fields": {
+    "app_label": "api",
+    "model": "supervisionassignment"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 49,
+  "fields": {
+    "app_label": "api",
+    "model": "meetinginvite"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 50,
+  "fields": {
+    "app_label": "api",
+    "model": "meeting"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 51,
+  "fields": {
+    "app_label": "registrar_logbook",
+    "model": "competencyframework"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 52,
+  "fields": {
+    "app_label": "registrar_logbook",
+    "model": "registrarprogram"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 53,
+  "fields": {
+    "app_label": "registrar_logbook",
+    "model": "registrarsupervisionentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 54,
+  "fields": {
+    "app_label": "registrar_logbook",
+    "model": "supervisorprofile"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 55,
+  "fields": {
+    "app_label": "registrar_logbook",
+    "model": "auditlog"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 56,
+  "fields": {
+    "app_label": "registrar_logbook",
+    "model": "progresssnapshot"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 57,
+  "fields": {
+    "app_label": "registrar_logbook",
+    "model": "registrarcpdentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 58,
+  "fields": {
+    "app_label": "registrar_logbook",
+    "model": "registrarpracticeentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 59,
+  "fields": {
+    "app_label": "competencies",
+    "model": "competency"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 60,
+  "fields": {
+    "app_label": "epas",
+    "model": "epa"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 61,
+  "fields": {
+    "app_label": "logbook_app",
+    "model": "logbookreviewrequest"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 62,
+  "fields": {
+    "app_label": "api",
+    "model": "disconnectionrequest"
+  }
+}
+]
