@@ -37,15 +37,13 @@ echo -e "${YELLOW}📦 Creating backup archive...${NC}"
 cd "${PROJECT_ROOT}"
 
 # Create tar.gz archive excluding unnecessary files
-tar --exclude='.git' \
-    --exclude='backend/.venv' \
+tar --exclude='backend/.venv' \
     --exclude='frontend/node_modules' \
     --exclude='frontend/dist' \
     --exclude='backend/__pycache__' \
     --exclude='backend/*/__pycache__' \
     --exclude='backend/*/*/__pycache__' \
     --exclude='backend/db.sqlite3' \
-    --exclude='backups' \
     --exclude='*.log' \
     --exclude='.DS_Store' \
     --exclude='*.tmp' \
@@ -72,6 +70,21 @@ if [ -f "frontend/.env" ]; then
     cp "frontend/.env" "${FULL_BACKUP_PATH}/frontend.env"
 fi
 
+# Backup PostgreSQL dumps
+echo -e "${YELLOW}🐘 Backing up PostgreSQL dumps...${NC}"
+if [ -d "backend/backups" ]; then
+    mkdir -p "${FULL_BACKUP_PATH}/postgres_dumps"
+    find backend/backups -name "*.dump" -exec cp {} "${FULL_BACKUP_PATH}/postgres_dumps/" \;
+    DUMP_COUNT=$(find backend/backups -name "*.dump" | wc -l)
+    if [ "$DUMP_COUNT" -gt 0 ]; then
+        echo -e "${GREEN}✅ ${DUMP_COUNT} PostgreSQL dump(s) backed up${NC}"
+    else
+        echo -e "${YELLOW}⚠️  No PostgreSQL dumps found${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  No backend/backups directory found${NC}"
+fi
+
 # Create backup info file
 cat > "${FULL_BACKUP_PATH}/backup_info.txt" << EOF
 PsychPATH Development Structure Backup
@@ -84,8 +97,9 @@ Git Commit: $(git rev-parse HEAD)
 Git Status: $(git status --porcelain | wc -l) files modified
 
 Contents:
-- psychpath_source_code.tar.gz: Complete source code
-- db_backup.sqlite3: Database backup (if exists)
+- psychpath_source_code.tar.gz: Complete source code (includes .git history)
+- db_backup.sqlite3: SQLite database backup (if exists)
+- postgres_dumps/: PostgreSQL dump files (if any exist)
 - backend.env: Backend environment variables (if exists)
 - frontend.env: Frontend environment variables (if exists)
 - backup_info.txt: This file
@@ -93,11 +107,12 @@ Contents:
 To restore:
 1. Extract: tar -xzf psychpath_source_code.tar.gz
 2. Copy database: cp db_backup.sqlite3 backend/db.sqlite3
-3. Copy env files: cp backend.env backend/.env (if needed)
-4. Install dependencies: 
+3. Restore PostgreSQL (if needed): pg_restore -d database_name postgres_dumps/*.dump
+4. Copy env files: cp backend.env backend/.env (if needed)
+5. Install dependencies: 
    - Backend: cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
    - Frontend: cd frontend && npm install
-5. Run migrations: python manage.py migrate
+6. Run migrations: python manage.py migrate
 EOF
 
 # Create final archive

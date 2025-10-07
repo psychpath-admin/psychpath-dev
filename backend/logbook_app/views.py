@@ -1,5 +1,6 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from django.contrib.auth.models import User
 from permissions import DenyOrgAdmin
 from rest_framework.response import Response
 from rest_framework import status
@@ -1928,8 +1929,8 @@ def user_notifications(request):
     except ValueError:
         limit = 50
     
-    # Build queryset
-    notifications = Notification.objects.filter(user=user)
+    # Build queryset (model uses 'recipient' field, not 'user')
+    notifications = Notification.objects.filter(recipient=user)
     
     # Apply filters
     if read_filter is not None:
@@ -1955,7 +1956,7 @@ def mark_notification_read(request, notification_id):
     user = request.user
     
     try:
-        notification = Notification.objects.get(id=notification_id, user=user)
+        notification = Notification.objects.get(id=notification_id, recipient=user)
     except Notification.DoesNotExist:
         return Response({'error': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)
     
@@ -1972,7 +1973,7 @@ def mark_all_notifications_read(request):
     """Mark all notifications as read for the user"""
     user = request.user
     
-    updated_count = Notification.objects.filter(user=user, read=False).update(read=True)
+    updated_count = Notification.objects.filter(recipient=user, read=False).update(read=True)
     
     return Response({
         'message': f'Marked {updated_count} notifications as read',
@@ -1988,15 +1989,16 @@ def create_notification(request):
     if not hasattr(request.user, 'profile') or request.user.profile.role not in ['ORG_ADMIN', 'SUPERVISOR']:
         return Response({'error': 'Only org admins and supervisors can create notifications'}, status=status.HTTP_403_FORBIDDEN)
     
-    notification_type = request.data.get('notification_type')
+    notification_type = request.data.get('type') or request.data.get('notification_type')
     target_user_id = request.data.get('target_user_id')
-    payload = request.data.get('payload', {})
+    message = request.data.get('message') or 'System notification'
+    link = request.data.get('link')
     
     if not notification_type or not target_user_id:
         return Response({'error': 'notification_type and target_user_id are required'}, status=status.HTTP_400_BAD_REQUEST)
     
-    # Validate notification type
-    valid_types = [choice[0] for choice in Notification.TYPE_CHOICES]
+    # Validate notification type (model defines NOTIFICATION_TYPES)
+    valid_types = [choice[0] for choice in Notification.NOTIFICATION_TYPES]
     if notification_type not in valid_types:
         return Response({'error': f'Invalid notification type. Must be one of: {valid_types}'}, status=status.HTTP_400_BAD_REQUEST)
     
@@ -2005,11 +2007,12 @@ def create_notification(request):
     except User.DoesNotExist:
         return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
     
+    # Create notification using model API
     notification = Notification.create_notification(
-        user=target_user,
+        recipient=target_user,
+        message=message,
         notification_type=notification_type,
-        payload=payload,
-        actor=request.user
+        link=link
     )
     
     serializer = NotificationSerializer(notification)

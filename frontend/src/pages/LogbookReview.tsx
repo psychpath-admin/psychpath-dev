@@ -19,6 +19,7 @@ import {
   MessageSquare
 } from 'lucide-react'
 import { toast } from 'sonner'
+import SupervisorLogbookDisplay from '@/components/SupervisorLogbookDisplay'
 
 interface LogbookReview {
   id: number
@@ -32,16 +33,16 @@ interface LogbookReview {
   supervisor_decision_at?: string
   section_totals: {
     section_a: {
-      weekly_hours: { hours: number; minutes: number }
-      cumulative_hours: { hours: number; minutes: number }
+      weekly_hours: string | { hours: number; minutes: number }
+      cumulative_hours: string | { hours: number; minutes: number }
     }
     section_b: {
-      weekly_hours: { hours: number; minutes: number }
-      cumulative_hours: { hours: number; minutes: number }
+      weekly_hours: string | { hours: number; minutes: number }
+      cumulative_hours: string | { hours: number; minutes: number }
     }
     section_c: {
-      weekly_hours: { hours: number; minutes: number }
-      cumulative_hours: { hours: number; minutes: number }
+      weekly_hours: string | { hours: number; minutes: number }
+      cumulative_hours: string | { hours: number; minutes: number }
     }
   }
   entries: {
@@ -58,6 +59,7 @@ export default function LogbookReview() {
   const [reviewComments, setReviewComments] = useState('')
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [reportOpen, setReportOpen] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -70,6 +72,8 @@ export default function LogbookReview() {
       const response = await apiFetch(`/api/logbook/${id}/`)
       if (response.ok) {
         const data = await response.json()
+        // Debug: surface payload shape while we align UI with API
+        try { console.info('[LogbookReview] fetched logbook', data) } catch {}
         setLogbook(data)
         setReviewComments(data.review_comments || '')
       } else {
@@ -119,11 +123,28 @@ export default function LogbookReview() {
     }
   }
 
-  const formatDuration = (duration: { hours: number; minutes: number }) => {
-    if (duration.hours === 0 && duration.minutes === 0) return '0h'
-    if (duration.hours === 0) return `${duration.minutes}m`
-    if (duration.minutes === 0) return `${duration.hours}h`
-    return `${duration.hours}h ${duration.minutes}m`
+  const formatDuration = (duration: string | number | { hours: number; minutes: number } | undefined | null) => {
+    if (duration == null) return '0h'
+    if (typeof duration === 'string') {
+      // Accept "Hh Mm", "H:MM", or plain text
+      const hm = duration.match(/^(\d+):(\d{2})$/)
+      if (hm) {
+        const h = parseInt(hm[1], 10)
+        const m = parseInt(hm[2], 10)
+        return h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`
+      }
+      return duration
+    }
+    if (typeof duration === 'number') {
+      const h = Math.floor(duration / 60)
+      const m = duration % 60
+      return h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`
+    }
+    const { hours = 0, minutes = 0 } = duration
+    if (hours === 0 && minutes === 0) return '0h'
+    if (hours === 0) return `${minutes}m`
+    if (minutes === 0) return `${hours}h`
+    return `${hours}h ${minutes}m`
   }
 
   const getStatusBadge = (status: string) => {
@@ -236,6 +257,7 @@ export default function LogbookReview() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="text-sm text-gray-600">Use the structured report below to review entries and add comments.</div>
           <div className="space-y-2">
             <Label htmlFor="review-comments">Supervisor feedback to registrar/provisional</Label>
             <Textarea
@@ -291,36 +313,26 @@ export default function LogbookReview() {
         </CardContent>
       </Card>
 
-      {/* Logbook Entries Preview */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Logbook Entries</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div>
-              <h4 className="font-medium text-gray-900 mb-2">Section A - Clinical Activities ({logbook.entries.section_a.length} entries)</h4>
-              <div className="text-sm text-gray-600">
-                Total: {formatDuration(logbook.section_totals.section_a.weekly_hours)}
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-medium text-gray-900 mb-2">Section B - Professional Development ({logbook.entries.section_b.length} entries)</h4>
-              <div className="text-sm text-gray-600">
-                Total: {formatDuration(logbook.section_totals.section_b.weekly_hours)}
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-medium text-gray-900 mb-2">Section C - Supervision ({logbook.entries.section_c.length} entries)</h4>
-              <div className="text-sm text-gray-600">
-                Total: {formatDuration(logbook.section_totals.section_c.weekly_hours)}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Embedded structured report */}
+      <SupervisorLogbookDisplay
+        logbook={{
+          id: logbook.id,
+          trainee_name: logbook.trainee_name,
+          week_start_date: logbook.week_start_date,
+          week_end_date: logbook.week_end_date,
+          week_display: logbook.week_display || `${new Date(logbook.week_start_date).toLocaleDateString('en-AU', {day:'2-digit', month:'short', year:'numeric'})} - ${new Date(logbook.week_end_date).toLocaleDateString('en-AU', {day:'2-digit', month:'short', year:'numeric'})}`,
+          status: logbook.status as any,
+          section_totals: logbook.section_totals as any,
+          entries: logbook.entries as any,
+        } as any}
+        onClose={() => setReportOpen(false)}
+        onApprove={() => handleReviewAction('approve')}
+        onReject={() => handleReviewAction('reject')}
+        onRequestEdits={() => handleReviewAction('return_for_edits')}
+        inline
+      />
+
+      {/* Removed old preview list; structured report above is the source of truth. */}
     </div>
   )
 }

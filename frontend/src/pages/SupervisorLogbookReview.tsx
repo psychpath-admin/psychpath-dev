@@ -21,12 +21,13 @@ import {
   Activity,
   ChevronDown,
   ChevronRight,
-  Download
+  Edit
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
 import LogbookAuditTrailModal from '@/components/LogbookAuditTrailModal'
+import SupervisorLogbookDisplay from '@/components/SupervisorLogbookDisplay'
 import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
 interface LogbookForReview {
@@ -42,10 +43,10 @@ interface LogbookForReview {
   resubmitted_at?: string
   supervisor_comments?: string
   section_totals: {
-    section_a: { weekly_hours: number; cumulative_hours: number }
-    section_b: { weekly_hours: number; cumulative_hours: number }
-    section_c: { weekly_hours: number; cumulative_hours: number }
-    total: { weekly_hours: number; cumulative_hours: number }
+    section_a: { weekly_hours: string; cumulative_hours: string }
+    section_b: { weekly_hours: string; cumulative_hours: string }
+    section_c: { weekly_hours: string; cumulative_hours: string }
+    total: { weekly_hours: string; cumulative_hours: string }
   }
 }
 
@@ -70,6 +71,8 @@ export default function SupervisorLogbookReview() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
   const [rejectingLogbookId, setRejectingLogbookId] = useState<number | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
+  const [structuredDisplayOpen, setStructuredDisplayOpen] = useState(false)
+  const [selectedLogbookForDisplay, setSelectedLogbookForDisplay] = useState<LogbookForReview | null>(null)
 
   useEffect(() => {
     fetchLogbooksForReview()
@@ -123,20 +126,10 @@ export default function SupervisorLogbookReview() {
   }
 
   const openReview = async (logbookId: number) => {
-    setActiveLogbookId(logbookId)
-    setGeneralComment('')
-    setEntryComments({})
-    try {
-      const r = await apiFetch(`/api/logbook/${logbookId}/entries/`)
-      if (r.ok) {
-        const data = await r.json()
-        setEntriesBySection(data)
-        fetchCommentThreads(logbookId)
-      } else {
-        setEntriesBySection(null)
-      }
-    } catch {
-      setEntriesBySection(null)
+    const logbook = logbooks.find(l => l.id === logbookId)
+    if (logbook) {
+      setSelectedLogbookForDisplay(logbook)
+      setStructuredDisplayOpen(true)
     }
   }
 
@@ -331,6 +324,40 @@ export default function SupervisorLogbookReview() {
     }
   }
 
+  const handleRequestEdits = async (logbookId: number) => {
+    if (!generalComment.trim()) {
+      toast.error('Please provide comments when requesting edits')
+      return
+    }
+
+    setReviewing(logbookId)
+    try {
+      const response = await apiFetch(`/api/logbook/${logbookId}/review/`, {
+        method: 'POST',
+        body: JSON.stringify({
+          decision: 'return_for_edits',
+          generalComment: generalComment.trim(),
+          entryComments: Object.entries(entryComments).map(([entryId, comment]) => ({ entryId, comment }))
+        })
+      })
+      
+      if (response.ok) {
+        toast.success('Logbook returned for edits successfully!')
+        fetchLogbooksForReview()
+        setGeneralComment('')
+        setEntryComments({})
+      } else {
+        const errorData = await response.json()
+        toast.error(errorData.error || 'Failed to return logbook for edits')
+      }
+    } catch (error) {
+      console.error('Error requesting edits:', error)
+      toast.error('Error requesting edits')
+    } finally {
+      setReviewing(null)
+    }
+  }
+
   const cancelRejectModal = () => {
     setRejectModalOpen(false)
     setRejectingLogbookId(null)
@@ -475,19 +502,19 @@ export default function SupervisorLogbookReview() {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
                         <div>
                           <span className="text-gray-600">Section A:</span>
-                          <span className="ml-1 font-medium">{logbook.section_totals.section_a.weekly_hours}h</span>
+                          <span className="ml-1 font-medium">{logbook.section_totals.section_a.weekly_hours}</span>
                         </div>
                         <div>
                           <span className="text-gray-600">Section B:</span>
-                          <span className="ml-1 font-medium">{logbook.section_totals.section_b.weekly_hours}h</span>
+                          <span className="ml-1 font-medium">{logbook.section_totals.section_b.weekly_hours}</span>
                         </div>
                         <div>
                           <span className="text-gray-600">Section C:</span>
-                          <span className="ml-1 font-medium">{logbook.section_totals.section_c.weekly_hours}h</span>
+                          <span className="ml-1 font-medium">{logbook.section_totals.section_c.weekly_hours}</span>
                         </div>
                         <div>
                           <span className="text-gray-600">Total:</span>
-                          <span className="ml-1 font-medium">{logbook.section_totals.total.weekly_hours}h</span>
+                          <span className="ml-1 font-medium">{logbook.section_totals.total.weekly_hours}</span>
                         </div>
                       </div>
 
@@ -557,6 +584,15 @@ export default function SupervisorLogbookReview() {
                         </Button>
                         <Button
                           size="sm"
+                          onClick={() => handleRequestEdits(logbook.id)}
+                          disabled={reviewing === logbook.id}
+                          className="bg-orange-600 hover:bg-orange-700"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          {reviewing === logbook.id ? 'Requesting...' : 'Request Edits'}
+                        </Button>
+                        <Button
+                          size="sm"
                           onClick={() => openRejectModal(logbook.id)}
                           disabled={reviewing === logbook.id}
                           className="bg-red-600 hover:bg-red-700"
@@ -574,7 +610,8 @@ export default function SupervisorLogbookReview() {
         </div>
       )}
 
-          {activeLogbookId && entriesBySection && (
+          {/* Removed detailed entries view - now using structured display */}
+          {false && activeLogbookId && entriesBySection && (
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
@@ -972,7 +1009,7 @@ export default function SupervisorLogbookReview() {
                 <div className="flex gap-2">
                   <Button
                     size="sm"
-                    onClick={() => handleApproveLogbook(activeLogbookId)}
+                    onClick={() => activeLogbookId && handleApproveLogbook(activeLogbookId)}
                     disabled={reviewing === activeLogbookId || logbooks.find(l => l.id === activeLogbookId)?.status === 'rejected'}
                     className="bg-green-600 hover:bg-green-700"
                   >
@@ -981,7 +1018,16 @@ export default function SupervisorLogbookReview() {
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => openRejectModal(activeLogbookId)}
+                    onClick={() => activeLogbookId && handleRequestEdits(activeLogbookId)}
+                    disabled={reviewing === activeLogbookId || logbooks.find(l => l.id === activeLogbookId)?.status === 'rejected'}
+                    className="bg-orange-600 hover:bg-orange-700"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    {reviewing === activeLogbookId ? 'Requesting...' : 'Request Edits'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => activeLogbookId && openRejectModal(activeLogbookId)}
                     disabled={reviewing === activeLogbookId || logbooks.find(l => l.id === activeLogbookId)?.status === 'rejected'}
                     className="bg-red-600 hover:bg-red-700"
                   >
@@ -1147,6 +1193,39 @@ export default function SupervisorLogbookReview() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Structured Logbook Display */}
+      {structuredDisplayOpen && selectedLogbookForDisplay && (
+        <SupervisorLogbookDisplay
+          logbook={selectedLogbookForDisplay}
+          onClose={() => {
+            setStructuredDisplayOpen(false)
+            setSelectedLogbookForDisplay(null)
+          }}
+          onApprove={() => {
+            if (selectedLogbookForDisplay?.id) {
+              handleApproveLogbook(selectedLogbookForDisplay.id)
+              setStructuredDisplayOpen(false)
+              setSelectedLogbookForDisplay(null)
+            }
+          }}
+          onReject={() => {
+            if (selectedLogbookForDisplay?.id) {
+              setRejectingLogbookId(selectedLogbookForDisplay.id)
+              setRejectModalOpen(true)
+              setStructuredDisplayOpen(false)
+              setSelectedLogbookForDisplay(null)
+            }
+          }}
+          onRequestEdits={() => {
+            if (selectedLogbookForDisplay?.id) {
+              handleRequestEdits(selectedLogbookForDisplay.id)
+              setStructuredDisplayOpen(false)
+              setSelectedLogbookForDisplay(null)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -190,12 +190,15 @@ export async function updateLogbook(id: number, data: any) {
   return res.json()
 }
 
-export async function submitLogbook(id: number, comments?: string) {
-  const res = await apiFetch(`/api/logbook/logbooks/${id}/submit/`, {
+export async function submitLogbook(weekStart: string) {
+  const res = await apiFetch(`/api/logbook/submit/`, {
     method: 'POST',
-    body: JSON.stringify({ comments }),
+    body: JSON.stringify({ week_start: weekStart }),
   })
-  if (!res.ok) throw new Error('Failed to submit logbook')
+  if (!res.ok) {
+    const errorData = await res.json()
+    throw new Error(errorData.error || 'Failed to submit logbook')
+  }
   return res.json()
 }
 

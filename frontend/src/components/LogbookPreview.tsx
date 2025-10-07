@@ -35,14 +35,14 @@ interface Logbook {
   supervisor_comments?: string
   section_totals: {
     section_a: { 
-      weekly_hours: number
-      cumulative_hours: number
-      dcc?: { weekly_hours: number; cumulative_hours: number }
-      cra?: { weekly_hours: number; cumulative_hours: number }
+      weekly_hours: string
+      cumulative_hours: string
+      dcc?: { weekly_hours: string; cumulative_hours: string }
+      cra?: { weekly_hours: string; cumulative_hours: string }
     }
-    section_b: { weekly_hours: number; cumulative_hours: number }
-    section_c: { weekly_hours: number; cumulative_hours: number }
-    total: { weekly_hours: number; cumulative_hours: number }
+    section_b: { weekly_hours: string; cumulative_hours: string }
+    section_c: { weekly_hours: string; cumulative_hours: string }
+    total: { weekly_hours: string; cumulative_hours: string }
   }
 }
 
@@ -195,24 +195,24 @@ export default function LogbookPreview({ logbook, onClose }: LogbookPreviewProps
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-700">{logbook.section_totals.section_a.weekly_hours}h</div>
+                    <div className="text-2xl font-bold text-blue-700">{logbook.section_totals.section_a.weekly_hours}</div>
                     <div className="text-sm text-blue-600">Section A (Weekly)</div>
-                    <div className="text-xs text-blue-500">{logbook.section_totals.section_a.cumulative_hours}h total</div>
+                    <div className="text-xs text-blue-500">{logbook.section_totals.section_a.cumulative_hours} total</div>
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-lg">
-                    <div className="text-2xl font-bold text-green-700">{logbook.section_totals.section_b.weekly_hours}h</div>
+                    <div className="text-2xl font-bold text-green-700">{logbook.section_totals.section_b.weekly_hours}</div>
                     <div className="text-sm text-green-600">Section B (Weekly)</div>
-                    <div className="text-xs text-green-500">{logbook.section_totals.section_b.cumulative_hours}h total</div>
+                    <div className="text-xs text-green-500">{logbook.section_totals.section_b.cumulative_hours} total</div>
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-lg">
-                    <div className="text-2xl font-bold text-purple-700">{logbook.section_totals.section_c.weekly_hours}h</div>
+                    <div className="text-2xl font-bold text-purple-700">{logbook.section_totals.section_c.weekly_hours}</div>
                     <div className="text-sm text-purple-600">Section C (Weekly)</div>
-                    <div className="text-xs text-purple-500">{logbook.section_totals.section_c.cumulative_hours}h total</div>
+                    <div className="text-xs text-purple-500">{logbook.section_totals.section_c.cumulative_hours} total</div>
                   </div>
                   <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <div className="text-2xl font-bold text-gray-700">{logbook.section_totals.total.weekly_hours}h</div>
+                    <div className="text-2xl font-bold text-gray-700">{logbook.section_totals.total.weekly_hours}</div>
                     <div className="text-sm text-gray-600">Total (Weekly)</div>
-                    <div className="text-xs text-gray-500">{logbook.section_totals.total.cumulative_hours}h total</div>
+                    <div className="text-xs text-gray-500">{logbook.section_totals.total.cumulative_hours} total</div>
                   </div>
                 </div>
               </CardContent>
@@ -263,8 +263,8 @@ export default function LogbookPreview({ logbook, onClose }: LogbookPreviewProps
               <CardHeader>
                 <CardTitle>Section A: Direct Client Contact & Client Related Activities</CardTitle>
                 <p className="text-sm text-gray-600">
-                  Weekly: {logbook.section_totals.section_a.weekly_hours}h | 
-                  Cumulative: {logbook.section_totals.section_a.cumulative_hours}h
+                  Weekly: {logbook.section_totals.section_a.weekly_hours} | 
+                  Cumulative: {logbook.section_totals.section_a.cumulative_hours}
                 </p>
               </CardHeader>
               <CardContent>
@@ -282,8 +282,8 @@ export default function LogbookPreview({ logbook, onClose }: LogbookPreviewProps
               <CardHeader>
                 <CardTitle>Section B: Professional Development</CardTitle>
                 <p className="text-sm text-gray-600">
-                  Weekly: {logbook.section_totals.section_b.weekly_hours}h | 
-                  Cumulative: {logbook.section_totals.section_b.cumulative_hours}h
+                  Weekly: {logbook.section_totals.section_b.weekly_hours} | 
+                  Cumulative: {logbook.section_totals.section_b.cumulative_hours}
                 </p>
               </CardHeader>
               <CardContent>
@@ -301,8 +301,8 @@ export default function LogbookPreview({ logbook, onClose }: LogbookPreviewProps
               <CardHeader>
                 <CardTitle>Section C: Supervision</CardTitle>
                 <p className="text-sm text-gray-600">
-                  Weekly: {logbook.section_totals.section_c.weekly_hours}h | 
-                  Cumulative: {logbook.section_totals.section_c.cumulative_hours}h
+                  Weekly: {logbook.section_totals.section_c.weekly_hours} | 
+                  Cumulative: {logbook.section_totals.section_c.cumulative_hours}
                 </p>
               </CardHeader>
               <CardContent>

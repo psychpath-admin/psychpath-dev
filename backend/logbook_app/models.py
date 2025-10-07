@@ -245,8 +245,8 @@ class WeeklyLogbook(models.Model):
         if not self.is_complete():
             raise ValueError("Logbook must be complete before submission")
         
-        if self.status != 'draft':
-            raise ValueError("Only draft logbooks can be submitted")
+        if self.status not in ['draft', 'ready']:
+            raise ValueError("Only draft or ready logbooks can be submitted")
         
         self.status = 'submitted'
         self.submitted_at = timezone.now()

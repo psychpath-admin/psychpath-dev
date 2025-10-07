@@ -28,8 +28,25 @@ class LogbookSerializer(serializers.ModelSerializer):
         return f"{obj.trainee.profile.first_name} {obj.trainee.profile.last_name}".strip() or obj.trainee.email
     
     def get_supervisor_name(self, obj):
+        # First check if supervisor is directly assigned to logbook
         if obj.supervisor and hasattr(obj.supervisor, 'profile'):
             return f"{obj.supervisor.profile.first_name} {obj.supervisor.profile.last_name}".strip() or obj.supervisor.email
+        
+        # If not, look up supervisor from supervision relationship
+        from api.models import Supervision
+        supervision = Supervision.objects.filter(
+            supervisee=obj.trainee,
+            role='PRIMARY',
+            status='ACCEPTED'
+        ).first()
+        
+        if supervision and supervision.supervisor and hasattr(supervision.supervisor, 'profile'):
+            return f"{supervision.supervisor.profile.first_name} {supervision.supervisor.profile.last_name}".strip() or supervision.supervisor.email
+        
+        # If still no supervisor found, try to get from user profile
+        if hasattr(obj.trainee, 'profile') and obj.trainee.profile.principal_supervisor:
+            return obj.trainee.profile.principal_supervisor
+        
         return None
     
     def get_reviewed_by_name(self, obj):
@@ -444,8 +461,25 @@ class EnhancedLogbookSerializer(serializers.ModelSerializer):
         return f"{obj.trainee.profile.first_name} {obj.trainee.profile.last_name}".strip() or obj.trainee.email
     
     def get_supervisor_name(self, obj):
+        # First check if supervisor is directly assigned to logbook
         if obj.supervisor and hasattr(obj.supervisor, 'profile'):
             return f"{obj.supervisor.profile.first_name} {obj.supervisor.profile.last_name}".strip() or obj.supervisor.email
+        
+        # If not, look up supervisor from supervision relationship
+        from api.models import Supervision
+        supervision = Supervision.objects.filter(
+            supervisee=obj.trainee,
+            role='PRIMARY',
+            status='ACCEPTED'
+        ).first()
+        
+        if supervision and supervision.supervisor and hasattr(supervision.supervisor, 'profile'):
+            return f"{supervision.supervisor.profile.first_name} {supervision.supervisor.profile.last_name}".strip() or supervision.supervisor.email
+        
+        # If still no supervisor found, try to get from user profile
+        if hasattr(obj.trainee, 'profile') and obj.trainee.profile.principal_supervisor:
+            return obj.trainee.profile.principal_supervisor
+        
         return None
     
     def get_reviewed_by_name(self, obj):

@@ -46,14 +46,14 @@ interface Logbook {
   due_date?: string
   section_totals: {
     section_a: { 
-      weekly_hours: number
-      cumulative_hours: number
-      dcc?: { weekly_hours: number; cumulative_hours: number }
-      cra?: { weekly_hours: number; cumulative_hours: number }
+      weekly_hours: string
+      cumulative_hours: string
+      dcc?: { weekly_hours: string; cumulative_hours: string }
+      cra?: { weekly_hours: string; cumulative_hours: string }
     }
-    section_b: { weekly_hours: number; cumulative_hours: number }
-    section_c: { weekly_hours: number; cumulative_hours: number }
-    total: { weekly_hours: number; cumulative_hours: number }
+    section_b: { weekly_hours: string; cumulative_hours: string }
+    section_c: { weekly_hours: string; cumulative_hours: string }
+    total: { weekly_hours: string; cumulative_hours: string }
   }
   active_unlock?: {
     unlock_expires_at: string

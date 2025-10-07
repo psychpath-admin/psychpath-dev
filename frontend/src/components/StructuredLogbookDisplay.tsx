@@ -23,7 +23,7 @@ import {
   Send
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, submitLogbook } from '@/lib/api'
 
 interface SectionAEntry {
   id: number
@@ -161,12 +161,47 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
     }
   }
 
+  const handleSubmitForReview = async () => {
+    if (!logbook.week_start_date) {
+      toast.error('No week start date found for this logbook')
+      return
+    }
+
+    console.log('Submitting logbook:', {
+      id: logbook.id,
+      weekStartDate: logbook.week_start_date,
+      status: logbook.status,
+      fullLogbook: logbook
+    })
+
+    try {
+      await submitLogbook(logbook.week_start_date)
+      toast.success('Logbook submitted for review successfully!')
+      onClose() // Close the dialog after successful submission
+    } catch (error) {
+      console.error('Failed to submit logbook:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to submit logbook')
+    }
+  }
+
   const isEditable = () => {
-    return ['draft', 'returned_for_edits'].includes(logbook.status)
+    console.log('isEditable check:', {
+      status: logbook.status,
+      id: logbook.id,
+      hasId: !!logbook.id,
+      weekStartDate: logbook.week_start_date
+    })
+    
+    // For submission, we need logbooks that are ready to be submitted
+    const hasValidStatus = ['draft', 'returned_for_edits', 'rejected', 'ready'].includes(logbook.status)
+    const canSubmit = hasValidStatus || !logbook.id // Allow submission if no id (draft/preview)
+    
+    console.log('isEditable result:', canSubmit)
+    return canSubmit
   }
 
   const canRegenerate = () => {
-    return ['draft', 'rejected'].includes(logbook.status)
+    return ['draft', 'rejected', 'ready'].includes(logbook.status)
   }
 
   const handleRegenerate = async () => {
@@ -356,11 +391,11 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                       <tbody>
                         <tr className="border-b">
                           <td className="border p-3 font-medium">Weekly total</td>
-                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.weekly_hours}h</td>
+                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.weekly_hours}</td>
                         </tr>
                         <tr>
                           <td className="border p-3 font-medium">Cumulative total</td>
-                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.cumulative_hours}h</td>
+                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.cumulative_hours}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -433,11 +468,11 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                       <tbody>
                         <tr className="border-b">
                           <td className="border p-3 font-medium">Weekly total</td>
-                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.weekly_hours}h</td>
+                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.weekly_hours}</td>
                         </tr>
                         <tr>
                           <td className="border p-3 font-medium">Cumulative total</td>
-                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.cumulative_hours}h</td>
+                          <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.cumulative_hours}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -1093,7 +1128,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               {isEditable() && (
                 <Button
                   variant="default"
-                  onClick={() => {/* TODO: Submit for review functionality */}}
+                  onClick={handleSubmitForReview}
                   className="bg-green-600 hover:bg-green-700 text-white"
                 >
                   <Send className="h-4 w-4 mr-2" />

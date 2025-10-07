@@ -37,28 +37,28 @@ interface LogbookEntry {
   reviewed_by_name: string | null
   section_totals: {
     section_a: {
-      weekly_hours: number
-      cumulative_hours: number
+      weekly_hours: string
+      cumulative_hours: string
       dcc?: {
-        weekly_hours: number
-        cumulative_hours: number
+        weekly_hours: string
+        cumulative_hours: string
       }
       cra?: {
-        weekly_hours: number
-        cumulative_hours: number
+        weekly_hours: string
+        cumulative_hours: string
       }
     }
     section_b: {
-      weekly_hours: number
-      cumulative_hours: number
+      weekly_hours: string
+      cumulative_hours: string
     }
     section_c: {
-      weekly_hours: number
-      cumulative_hours: number
+      weekly_hours: string
+      cumulative_hours: string
     }
     total: {
-      weekly_hours: number
-      cumulative_hours: number
+      weekly_hours: string
+      cumulative_hours: string
     }
   }
   active_unlock: {
@@ -680,20 +680,20 @@ export default function WeeklyLogbookEditor() {
                   <tr>
                     <td className="border border-gray-300 p-3 font-medium">Weekly total</td>
                     <td className="border border-gray-300 p-3">
-                      {logbook.section_totals.section_a.dcc?.weekly_hours || 0}h
+                      {logbook.section_totals.section_a.dcc?.weekly_hours || '0:00'}
                     </td>
                     <td className="border border-gray-300 p-3">
-                      {logbook.section_totals.section_a.cra?.weekly_hours || 0}h
+                      {logbook.section_totals.section_a.cra?.weekly_hours || '0:00'}
                     </td>
                     <td className="border border-gray-300 p-3 font-medium">
-                      {logbook.section_totals.section_a.weekly_hours || '0:00h'}
+                      {logbook.section_totals.section_a.weekly_hours || '0:00'}
                     </td>
                   </tr>
                   <tr>
                     <td className="border border-gray-300 p-3 font-medium">Cumulative total</td>
-                    <td className="border border-gray-300 p-3">{logbook.section_totals.section_a.dcc?.cumulative_hours || 0}h</td>
-                    <td className="border border-gray-300 p-3">{logbook.section_totals.section_a.cra?.cumulative_hours || 0}h</td>
-                    <td className="border border-gray-300 p-3 font-medium">{logbook.section_totals.section_a.cumulative_hours || '0:00h'}</td>
+                    <td className="border border-gray-300 p-3">{logbook.section_totals.section_a.dcc?.cumulative_hours || '0:00'}</td>
+                    <td className="border border-gray-300 p-3">{logbook.section_totals.section_a.cra?.cumulative_hours || '0:00'}</td>
+                    <td className="border border-gray-300 p-3 font-medium">{logbook.section_totals.section_a.cumulative_hours || '0:00'}</td>
                   </tr>
                 </tbody>
               </table>
@@ -792,13 +792,13 @@ export default function WeeklyLogbookEditor() {
                   <tr>
                     <td className="border border-gray-300 p-3 font-medium">Weekly total</td>
                     <td className="border border-gray-300 p-3 font-medium">
-                      {logbook.section_totals.section_b.weekly_hours || '0:00h'}
+                      {logbook.section_totals.section_b.weekly_hours || '0:00'}
                     </td>
                   </tr>
                   <tr>
                     <td className="border border-gray-300 p-3 font-medium">Cumulative total</td>
                     <td className="border border-gray-300 p-3 font-medium">
-                      {logbook.section_totals.section_b.cumulative_hours || '0:00h'}
+                      {logbook.section_totals.section_b.cumulative_hours || '0:00'}
                     </td>
                   </tr>
                 </tbody>
@@ -894,13 +894,13 @@ export default function WeeklyLogbookEditor() {
                   <tr>
                     <td className="border border-gray-300 p-3 font-medium">Weekly total</td>
                     <td className="border border-gray-300 p-3 font-medium">
-                      {logbook.section_totals.section_c.weekly_hours || '0:00h'}
+                      {logbook.section_totals.section_c.weekly_hours || '0:00'}
                     </td>
                   </tr>
                   <tr>
                     <td className="border border-gray-300 p-3 font-medium">Cumulative total</td>
                     <td className="border border-gray-300 p-3 font-medium">
-                      {logbook.section_totals.section_c.cumulative_hours || '0:00h'}
+                      {logbook.section_totals.section_c.cumulative_hours || '0:00'}
                     </td>
                   </tr>
                 </tbody>

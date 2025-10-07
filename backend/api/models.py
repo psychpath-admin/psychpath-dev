@@ -396,11 +396,11 @@ class Supervision(models.Model):
     
     supervisor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='supervisions_given')
     supervisee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='supervisions_received', null=True, blank=True)
-    supervisee_email = models.EmailField()  # Store email even if user doesn't exist yet
-    role = models.CharField(max_length=20, choices=SUPERVISION_ROLE_CHOICES)
+    supervisee_email = models.EmailField(blank=True, default="")  # Store email even if user doesn't exist yet
+    role = models.CharField(max_length=20, choices=SUPERVISION_ROLE_CHOICES, default='PRIMARY')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     verification_token = models.CharField(max_length=64, unique=True, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     accepted_at = models.DateTimeField(null=True, blank=True)
     rejected_at = models.DateTimeField(null=True, blank=True)
