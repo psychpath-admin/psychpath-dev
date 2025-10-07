@@ -19,7 +19,8 @@ import {
   AlertCircle,
   Lock,
   Edit,
-  RefreshCw
+  RefreshCw,
+  Send
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
@@ -227,8 +228,38 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           </DialogHeader>
 
           <div className="space-y-6">
-            {/* LOGBOOK HEADER */}
-            <Card className="border-2 border-gray-300 bg-gray-50">
+            {/* AHPRA HEADER */}
+            <div className="text-center bg-blue-50 border-2 border-blue-200 p-6 rounded-lg">
+              <h1 className="text-2xl font-bold text-blue-900 mb-2">Logbook: Record of professional practice</h1>
+              <h2 className="text-xl font-semibold text-blue-800 mb-3">Psychology Board Ahpra</h2>
+              <div className="text-sm text-blue-700 font-medium">
+                <strong>LBPP-76</strong> | <strong>5+1 provisional psychologists</strong> | <strong>Psychology</strong>
+              </div>
+            </div>
+
+            {/* AHPRA PREAMBLE */}
+            <div className="bg-gray-50 border border-gray-300 p-4 rounded-lg text-sm leading-relaxed">
+              <p className="font-semibold mb-2">
+                Provisional psychologists must maintain a record of professional practice throughout their internship. This record needs to be regularly sighted and signed by the supervisor (usually weekly) and specifically when reviewing the supervision plan or preparing a progress report/change of principal supervisor form.
+              </p>
+              <p>
+                The Psychology Board of Australia (the Board) can request this record at any time, requiring submission within 14 days if requested. It explicitly states that this record does not need to be attached to progress reports or final assessment reports.
+              </p>
+            </div>
+
+            {/* INFORMATION AND DEFINITIONS */}
+            <div className="bg-yellow-50 border border-yellow-300 p-4 rounded-lg text-sm">
+              <h3 className="font-bold text-yellow-900 mb-3">Information and definitions</h3>
+              <p className="mb-2">
+                <strong>Client contact:</strong> Defined as performing specific tasks like psychological assessment, diagnosis, intervention, prevention, treatment, consultation, and providing advice/strategies directly with clients under supervisor guidance.
+              </p>
+              <p>
+                <strong>Client-related activity:</strong> Defined as activities necessary to provide high-standard client service and support the provisional psychologist's achievement of core competencies. This includes supervisor guidance on relevant activities, considering individual development needs and work role context, and encompasses reading, researching for problem formulation/diagnosis, case consultation with colleagues, and formal/informal reporting.
+              </p>
+            </div>
+
+            {/* PROVISIONAL PSYCHOLOGIST DETAILS */}
+            <Card className="border-2 border-orange-300 bg-orange-50">
               <CardContent className="p-6">
                 <div className="space-y-4">
                   {/* Full name - top field */}
@@ -419,12 +450,15 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           )}
 
           {/* SECTION A: Weekly record of professional practice */}
-            <Card className="border-2 border-blue-300">
-              <CardHeader className="bg-blue-50 border-b border-blue-200">
-                <CardTitle className="text-lg font-bold text-blue-900">
-                  SECTION A: Weekly record of professional practice
-                </CardTitle>
-              </CardHeader>
+          <div className="mt-6">
+            {/* AHPRA Section A Header */}
+            <div className="bg-blue-600 text-white p-4 font-bold text-lg text-center">
+              SECTION A: Weekly record of professional practice
+            </div>
+          </div>
+
+          {/* Section A Content Card */}
+          <Card className="border-2 border-blue-300">
               <CardContent className="p-0">
                 {loading ? (
                   <div className="p-8 text-center">
@@ -702,10 +736,30 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
             </Card>
 
           {/* SECTION B: Professional development - after A */}
+          <div className="mt-6">
+            {/* AHPRA Section B Header */}
+            <div className="bg-blue-600 text-white p-4 font-bold text-lg">
+              SECTION B: Record of professional development
+            </div>
+            
+            {/* Metadata */}
+            <div className="flex justify-between items-center py-2 px-4 bg-white border-b border-gray-300">
+              <span className="text-sm text-gray-700">Effective from: 28 October 2020</span>
+            </div>
+            
+            {/* Professional Development Definition Box */}
+            <div className="bg-gray-100 border-2 border-green-600 p-4 text-sm">
+              <p className="mb-3">
+                Professional development (PD) is the means by which provisional psychologists maintain, improve and broaden their knowledge, gain competence, and develop the personal qualities required in their professional practice. Professional development activities can include attending lectures, seminars, symposia, presentations, workshops, short courses, conferences, and learning by reading and using audiovisual material, including readings and PD activities undertaken to prepare for the national psychology examination, and other self directed learning. Active PD refers to activities that engage the participant and reinforce learning through written or oral activities designed to enhance and test learning. The active component may already be part of the PD activity or the supervisor may set tasks to reinforce learning.
+              </p>
+              <p>
+                The supervisor should approve all PD activities to ensure they address the provisional psychologist's learning goals and practice requirements, and they relate to the core competencies of the internship. The provisional psychologist should update this list as required and provide this record to their supervisor for review at each supervision meeting or as required and discuss the PD outcomes with their supervisor. The supervisor should initial each activity on this record to confirm it has been reviewed and discussed.
+              </p>
+            </div>
+          </div>
+
+          {/* Section B Content Card */}
           <Card className="border-2 border-amber-300 mt-6">
-            <CardHeader className="bg-amber-50 border-b border-amber-200">
-              <CardTitle className="text-lg font-bold text-amber-900">SECTION B: Professional development</CardTitle>
-            </CardHeader>
             <CardContent className="p-0">
               {loading ? (
                 <div className="p-8 text-center">
@@ -715,54 +769,69 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               ) : (
                 <>
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
+                    <table className="w-full border-collapse text-sm">
                       <thead>
-                        <tr className="bg-amber-100 border-b border-amber-200">
-                          <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Date</th>
-                          <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Activity</th>
-                          <th className="border border-amber-300 p-3 text-center font-semibold text-amber-900">Duration</th>
-                          <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Notes</th>
+                        <tr className="bg-gray-800 text-white">
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Date of activity</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Type of activity</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Active PD?</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Activity details</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Specify core competency area(s)</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Specific topics covered</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Duration</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Supervisor initials</th>
+                        </tr>
+                        <tr className="bg-gray-100 text-gray-600 text-xs">
+                          <td className="border border-gray-300 p-1"></td>
+                          <td className="border border-gray-300 p-1 italic">E.g. workshop, reading, seminar, conference etc</td>
+                          <td className="border border-gray-300 p-1 italic">Specify Yes or No</td>
+                          <td className="border border-gray-300 p-1 italic">E.g. name of course, presenter, institution etc</td>
+                          <td className="border border-gray-300 p-1 italic">E.g. intervention strategies, practice across the lifespan etc</td>
+                          <td className="border border-gray-300 p-1 italic">E.g. behavioural interventions for ADHD in adolescents</td>
+                          <td className="border border-gray-300 p-1 italic">Hours/mins</td>
+                          <td className="border border-gray-300 p-1"></td>
                         </tr>
                       </thead>
                       <tbody>
                         {sectionBEntries.map((e, i) => (
-                          <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
-                            <td className="border p-3">{e.date_of_activity || e.activity_date || ''}</td>
-                            <td className="border p-3">{e.activity_title || e.activity_type || e.title || '—'}</td>
-                            <td className="border p-3 text-center">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
-                            <td className="border p-3">{e.notes || e.summary || ''}</td>
+                          <tr key={i} className="border-b border-gray-300 hover:bg-gray-50">
+                            <td className="border border-gray-300 p-2">{e.date_of_activity || e.activity_date || ''}</td>
+                            <td className="border border-gray-300 p-2">{e.activity_title || e.activity_type || e.title || '—'}</td>
+                            <td className="border border-gray-300 p-2">{e.active_pd || 'No'}</td>
+                            <td className="border border-gray-300 p-2">{e.activity_details || e.presenter || ''}</td>
+                            <td className="border border-gray-300 p-2">{e.core_competency_areas || ''}</td>
+                            <td className="border border-gray-300 p-2">{e.specific_topics || e.notes || e.summary || ''}</td>
+                            <td className="border border-gray-300 p-2">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
+                            <td className="border border-gray-300 p-2">{e.supervisor_initials || ''}</td>
                           </tr>
                         ))}
                         {sectionBEntries.length === 0 && (
                           <tr>
-                            <td colSpan={4} className="border p-6 text-center text-gray-500">No Section B entries found for this week</td>
+                            <td colSpan={8} className="border border-gray-300 p-6 text-center text-gray-500">No Section B entries found for this week</td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
-                  {/* Section B Totals */}
-                  <div className="p-4 bg-gray-50 border-t">
-                    <h4 className="font-semibold text-gray-900 mb-3">Section B Totals</h4>
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse">
-                        <thead>
-                          <tr className="bg-gray-100 border-b border-gray-200">
-                            <th className="border border-gray-300 p-3 text-left font-semibold text-gray-900"></th>
-                            <th className="border border-gray-300 p-3 text-center font-semibold text-gray-900">Hours</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr className="border-b">
-                            <td className="border p-3 font-medium">Weekly total</td>
-                            <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.weekly_hours}h</td>
-                          </tr>
-                          <tr>
-                            <td className="border p-3 font-medium">Cumulative total</td>
-                            <td className="border p-3 text-center font-bold">{logbook.section_totals.section_b.cumulative_hours}h</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                  
+                  {/* Section B Footer with Totals */}
+                  <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
+                    <div className="text-sm text-gray-600">
+                      Please insert additional rows as required
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="text-sm">
+                        <span className="font-semibold">Total hours:</span>
+                        <div className="border border-gray-300 p-1 w-16 text-center bg-white inline-block ml-2">
+                          {logbook.section_totals.section_b.weekly_hours}
+                        </div>
+                      </div>
+                      <div className="text-sm">
+                        <span className="font-semibold">Cumulative hours:</span>
+                        <div className="border border-gray-300 p-1 w-16 text-center bg-white inline-block ml-2">
+                          {logbook.section_totals.section_b.cumulative_hours}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </>
@@ -771,10 +840,70 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           </Card>
 
           {/* SECTION C: Supervision - after B */}
+          <div className="mt-6">
+            {/* Provisional Psychologist Details and Signature Block */}
+            <div className="bg-gray-100 border border-gray-300 p-4 mb-4">
+              <div className="grid grid-cols-2 gap-8">
+                {/* Left Side - Provisional Psychologist Details */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-1">
+                      Provisional psychologist name
+                    </label>
+                    <div className="bg-white border border-gray-300 p-2 h-8">
+                      {logbook.trainee_name}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-1">
+                      Date
+                    </label>
+                    <div className="bg-white border border-gray-300 p-2 h-8">
+                      {/* Empty for signature */}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Right Side - Signature Block */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-1">
+                    Signature
+                  </label>
+                  <div className="bg-white border border-gray-300 p-2 h-16">
+                    {/* Empty signature box */}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION C Header */}
+            <div className="bg-blue-600 text-white p-4 font-bold text-lg text-center">
+              SECTION C: Record of supervision
+            </div>
+            
+            {/* Introduction Text */}
+            <div className="bg-white p-4 text-sm">
+              <p>
+                The provisional psychologist should record an entry in this record of supervision following each supervision meeting, or in time to be tabled at the next supervision meeting. Each entry should be initialled by the supervisor who provided the supervision.
+              </p>
+            </div>
+            
+            {/* Supervision Requirements */}
+            <div className="bg-white p-4 text-sm">
+              <h4 className="font-bold mb-2">Supervision for the 5+1 internship must:</h4>
+              <ul className="list-disc list-inside space-y-1 ml-4">
+                <li>total at least 80 hours over the course of the internship</li>
+                <li>include at least 50 hours of direct, individual supervision provided by the principal supervisor</li>
+                <li>be provided at a ratio of 1 hour of supervision for every 17 hours of internship</li>
+                <li>be provided frequently for the full duration of the internship (usually weekly)</li>
+                <li>be primarily direct (real time verbal) supervision using a visual medium - either in person or via video-conference etc; no more than 20 hours may be via telephone and no more than 10 hours may be asynchronous (i.e. written feedback)</li>
+                <li>be primarily accrued in sessions of 1 hour or more; no more than 10 hours of shorter supervision sessions may be claimed</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Section C Content Card */}
           <Card className="border-2 border-purple-300 mt-6">
-            <CardHeader className="bg-purple-50 border-b border-purple-200">
-              <CardTitle className="text-lg font-bold text-purple-900">SECTION C: Supervision</CardTitle>
-            </CardHeader>
             <CardContent className="p-0">
               {loading ? (
                 <div className="p-8 text-center">
@@ -784,62 +913,165 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               ) : (
                 <>
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
+                    <table className="w-full border-collapse text-sm">
                       <thead>
-                        <tr className="bg-purple-100 border-b border-purple-200">
-                          <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Date</th>
-                          <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Supervisor</th>
-                          <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Type</th>
-                          <th className="border border-purple-300 p-3 text-center font-semibold text-purple-900">Duration</th>
-                          <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Summary</th>
+                        <tr className="bg-gray-800 text-white">
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Date of supervision</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Name of supervisor</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Principal or secondary?</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Individual, group or other?</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Summary of supervision</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Duration</th>
+                          <th className="border border-gray-400 p-2 text-left font-semibold">Supervisor initials</th>
+                        </tr>
+                        <tr className="bg-gray-100 text-gray-600 text-xs">
+                          <td className="border border-gray-300 p-1"></td>
+                          <td className="border border-gray-300 p-1"></td>
+                          <td className="border border-gray-300 p-1 italic">Specify</td>
+                          <td className="border border-gray-300 p-1 italic">Specify</td>
+                          <td className="border border-gray-300 p-1 italic">E.g. brief summary of matters discussed, outcomes/plans for follow up activities and discussions</td>
+                          <td className="border border-gray-300 p-1 italic">Hours/mins</td>
+                          <td className="border border-gray-300 p-1"></td>
                         </tr>
                       </thead>
                       <tbody>
                         {sectionCEntries.map((e, i) => (
-                          <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
-                            <td className="border p-3">{e.date_of_supervision || e.date || ''}</td>
-                            <td className="border p-3">{e.supervisor_name || e.supervisor || '—'}</td>
-                            <td className="border p-3">{e.supervision_type || '—'}</td>
-                            <td className="border p-3 text-center">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
-                            <td className="border p-3">{e.summary || ''}</td>
+                          <tr key={i} className="border-b border-gray-300 hover:bg-gray-50">
+                            <td className="border border-gray-300 p-2">{e.date_of_supervision || e.date || ''}</td>
+                            <td className="border border-gray-300 p-2">{e.supervisor_name || e.supervisor || '—'}</td>
+                            <td className="border border-gray-300 p-2">{e.principal_or_secondary || ''}</td>
+                            <td className="border border-gray-300 p-2">{e.individual_group_other || e.supervision_type || ''}</td>
+                            <td className="border border-gray-300 p-2">{e.summary || ''}</td>
+                            <td className="border border-gray-300 p-2">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
+                            <td className="border border-gray-300 p-2">{e.supervisor_initials || ''}</td>
                           </tr>
                         ))}
                         {sectionCEntries.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="border p-6 text-center text-gray-500">No Section C entries found for this week</td>
+                            <td colSpan={7} className="border border-gray-300 p-6 text-center text-gray-500">No Section C entries found for this week</td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
-                  {/* Section C Totals */}
-                  <div className="p-4 bg-gray-50 border-t">
-                    <h4 className="font-semibold text-gray-900 mb-3">Section C Totals</h4>
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse">
-                        <thead>
-                          <tr className="bg-gray-100 border-b border-gray-200">
-                            <th className="border border-gray-300 p-3 text-left font-semibold text-gray-900"></th>
-                            <th className="border border-gray-300 p-3 text-center font-semibold text-gray-900">Hours</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr className="border-b">
-                            <td className="border p-3 font-medium">Weekly total</td>
-                            <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.weekly_hours}h</td>
-                          </tr>
-                          <tr>
-                            <td className="border p-3 font-medium">Cumulative total</td>
-                            <td className="border p-3 text-center font-bold">{logbook.section_totals.section_c.cumulative_hours}h</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                  
+                  {/* Section C Footer with Totals */}
+                  <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
+                    <div className="text-sm text-gray-600">
+                      Please insert additional rows as required
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="text-sm">
+                        <span className="font-semibold">Total hours:</span>
+                        <div className="border border-gray-300 p-1 w-16 text-center bg-white inline-block ml-2">
+                          {logbook.section_totals.section_c.weekly_hours}
+                        </div>
+                      </div>
+                      <div className="text-sm">
+                        <span className="font-semibold">Cumulative hours:</span>
+                        <div className="border border-gray-300 p-1 w-16 text-center bg-white inline-block ml-2">
+                          {logbook.section_totals.section_c.cumulative_hours}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </>
               )}
             </CardContent>
           </Card>
+          </div>
+
+          {/* AHPRA SIGNATURES BLOCK */}
+          <div className="mt-6">
+            {/* Signatures Header */}
+            <div className="bg-blue-600 text-white p-4 font-bold text-lg text-center">
+              Signatures
+            </div>
+            
+            {/* Truth Statement */}
+            <div className="bg-white p-4 text-sm">
+              <p>The information contained in this record of practice is true and correct.</p>
+            </div>
+            
+            {/* Provisional Psychologist Signature Block */}
+            <div className="bg-gray-100 border border-gray-300 p-4">
+              <div className="grid grid-cols-2 gap-8">
+                {/* Left Side - Provisional Psychologist Details */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-1">
+                      Provisional psychologist name
+                    </label>
+                    <div className="bg-white border border-gray-300 p-2 h-8 flex items-center">
+                      {logbook.trainee_name}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-1">
+                      Date
+                    </label>
+                    <div className="bg-white border border-gray-300 p-2 h-8">
+                      {/* Empty for signature date */}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Right Side - Signature */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-1">
+                    Signature
+                  </label>
+                  <div className="bg-white border border-gray-300 p-2 h-16">
+                    {/* Empty signature box */}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Principal Supervisor Signature Block */}
+            <div className="bg-gray-100 border border-gray-300 p-4 mt-4">
+              <div className="grid grid-cols-2 gap-8">
+                {/* Left Side - Principal Supervisor Details */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-1">
+                      Principal supervisor name
+                    </label>
+                    <div className="bg-white border border-gray-300 p-2 h-8 flex items-center">
+                      {logbook.supervisor_name || 'Not assigned'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-1">
+                      Date
+                    </label>
+                    <div className="bg-white border border-gray-300 p-2 h-8">
+                      {/* Empty for signature date */}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Right Side - Signature */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-1">
+                    Signature
+                  </label>
+                  <div className="bg-white border border-gray-300 p-2 h-16">
+                    {/* Empty signature box */}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* AHPRA FOOTER */}
+          <div className="bg-gray-50 border border-gray-300 p-4 rounded-lg text-xs leading-relaxed">
+            <p className="font-semibold mb-2">
+              Please note that all work roles must be approved by the Board prior to counting any time or training towards the supervised practice program. This form is also available in PDF format at www.psychologyboard.gov.au/Registration/Forms.
+            </p>
+            <div className="text-center text-gray-600">
+              <strong>Effective from: 28 October 2020</strong>
+            </div>
           </div>
 
           {/* Footer with action buttons */}
@@ -857,10 +1089,22 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               )}
             </div>
             
-            <Button variant="outline" onClick={onClose}>
-              <X className="h-4 w-4 mr-2" />
-              Close
-            </Button>
+            <div className="flex items-center gap-2">
+              {isEditable() && (
+                <Button
+                  variant="default"
+                  onClick={() => {/* TODO: Submit for review functionality */}}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Submit for Review
+                </Button>
+              )}
+              <Button variant="outline" onClick={onClose}>
+                <X className="h-4 w-4 mr-2" />
+                Close
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -195,32 +195,52 @@
     <button onclick="window.print()" class="print-button no-print">🖨️ Print Report</button>
     
     <div class="report-container">
-        <!-- Header -->
+        <!-- AHPRA Header -->
         <div class="header">
-            <h1>5+1 PROVISIONAL PSYCHOLOGY PROGRAM</h1>
-            <h2>Weekly Logbook Report</h2>
+            <h1>Logbook: Record of professional practice</h1>
+            <h2>Psychology Board Ahpra</h2>
+            <div style="margin: 10px 0; font-size: 12px;">
+                <strong>LBPP-76</strong> | <strong>5+1 provisional psychologists</strong> | <strong>Psychology</strong>
+            </div>
         </div>
         
-        <!-- Trainee Information -->
-        <div class="info-grid">
-            <div class="info-item">
-                <span class="info-label">Trainee:</span> {{ trainee_name }}
+        <!-- AHPRA Preamble -->
+        <div style="margin-bottom: 25px; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; font-size: 11px; line-height: 1.5;">
+            <p><strong>Provisional psychologists must maintain a record of professional practice throughout their internship. This record needs to be regularly sighted and signed by the supervisor (usually weekly) and specifically when reviewing the supervision plan or preparing a progress report/change of principal supervisor form.</strong></p>
+            
+            <p>The Psychology Board of Australia (the Board) can request this record at any time, requiring submission within 14 days if requested. It explicitly states that this record does not need to be attached to progress reports or final assessment reports.</p>
+        </div>
+        
+        <!-- Information and Definitions -->
+        <div style="margin-bottom: 25px; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; font-size: 11px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 12px; font-weight: bold;">Information and definitions</h3>
+            
+            <p><strong>Client contact:</strong> Defined as performing specific tasks like psychological assessment, diagnosis, intervention, prevention, treatment, consultation, and providing advice/strategies directly with clients under supervisor guidance.</p>
+            
+            <p><strong>Client-related activity:</strong> Defined as activities necessary to provide high-standard client service and support the provisional psychologist's achievement of core competencies. This includes supervisor guidance on relevant activities, considering individual development needs and work role context, and encompasses reading, researching for problem formulation/diagnosis, case consultation with colleagues, and formal/informal reporting.</p>
+        </div>
+        
+        <!-- Provisional Psychologist Details (AHPRA Format) -->
+        <div style="margin-bottom: 25px; padding: 15px; background: #ffcc99; border: 2px solid #ff9900; font-size: 12px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div style="margin-bottom: 10px;">
+                    <strong>Provisional psychologist name:</strong><br>
+                    <div style="margin-top: 5px; padding: 5px; background: white; border: 1px solid #ccc; min-height: 20px;">
+                        {{ trainee_name }}
+                    </div>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <strong>Registration number:</strong><br>
+                    <div style="margin-top: 5px; padding: 5px; background: white; border: 1px solid #ccc; min-height: 20px;">
+                        {{ ahpra_number }}
+                    </div>
+                </div>
             </div>
-            <div class="info-item">
-                <span class="info-label">Week Starting:</span> {{ logbook.week_start_date|date:"d F Y" }}
-            </div>
-            <div class="info-item">
-                <span class="info-label">AHPRA Number:</span> {{ ahpra_number }}
-            </div>
-            <div class="info-item">
-                <span class="info-label">Week Ending:</span> {{ logbook.week_end_date|date:"d F Y" }}
-            </div>
-            <div class="info-item">
-                <span class="info-label">Supervisor:</span> {{ supervisor_name }}
-            </div>
-            <div class="info-item">
-                <span class="info-label">Status:</span> 
-                <span class="status-badge status-{{ logbook.status }}">{{ logbook.status|upper }}</span>
+            <div style="margin-top: 15px;">
+                <strong>Week beginning:</strong><br>
+                <div style="margin-top: 5px; padding: 5px; background: white; border: 1px solid #ccc; min-height: 20px; width: 200px;">
+                    {{ logbook.week_start_date|date:"d/m/Y" }}
+                </div>
             </div>
         </div>
         
@@ -436,8 +456,17 @@
             </div>
         </div>
         
+        <!-- AHPRA Footer Notes -->
+        <div style="margin-top: 30px; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; font-size: 10px; line-height: 1.4;">
+            <p><strong>Please note that all work roles must be approved by the Board prior to counting any time or training towards the supervised practice program. This form is also available in PDF format at www.psychologyboard.gov.au/Registration/Forms.</strong></p>
+            
+            <div style="margin-top: 15px; text-align: center;">
+                <p><strong>Effective from: 28 October 2020</strong> | <strong>Page 1 of 5</strong></p>
+            </div>
+        </div>
+        
         <!-- Report Footer -->
-        <div style="margin-top: 30px; text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ddd; padding-top: 15px;">
+        <div style="margin-top: 15px; text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ddd; padding-top: 15px;">
             <p>Generated: {{ now|date:"d F Y, H:i" }} | PsychPATH Logbook System | AHPRA-Compliant Format</p>
             <p>Week {{ logbook.week_number }} | Submitted: {{ logbook.submitted_at|date:"d F Y, H:i"|default:"Not submitted" }}</p>
         </div>

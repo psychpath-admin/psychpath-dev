@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { 
   BookOpen, 
-  Plus, 
   Calendar, 
   Clock, 
   CheckCircle, 
@@ -14,16 +13,14 @@ import {
   Eye,
   FileText,
   Unlock,
+  Lock,
+  Send,
   TrendingUp,
   BarChart3,
   Filter,
   Search,
   ChevronDown,
-  ChevronUp,
-  Download,
-  Send,
-  Lock,
-  Edit
+  ChevronUp
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
@@ -208,10 +205,6 @@ export default function LogbookDashboard() {
     setShowCreationModal(false)
   }
 
-  const handlePreviewLogbook = (logbook: Logbook) => {
-    // Show the AHPRA-style structured display directly instead of the preview
-    setStructuredLogbook(logbook)
-  }
 
 
   // Filter and sort logbooks
@@ -294,20 +287,29 @@ export default function LogbookDashboard() {
             <Button
               variant="outline"
               size="lg"
-              onClick={() => setShowCreationModal(true)}
+              onClick={() => navigate('/section-a')}
               className="border-white text-white hover:bg-white hover:text-blue-600 font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
             >
-              <Plus className="h-5 w-5 mr-2" />
-              Create New Logbook
+              <FileText className="h-5 w-5 mr-2" />
+              Section A
             </Button>
             <Button
               variant="outline"
               size="lg"
-              onClick={() => {/* TODO: Export functionality */}}
+              onClick={() => navigate('/section-b')}
               className="border-white text-white hover:bg-white hover:text-blue-600 font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
             >
-              <Download className="h-5 w-5 mr-2" />
-              Export Data
+              <FileText className="h-5 w-5 mr-2" />
+              Section B
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => navigate('/section-c')}
+              className="border-white text-white hover:bg-white hover:text-blue-600 font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+            >
+              <FileText className="h-5 w-5 mr-2" />
+              Section C
             </Button>
           </div>
         </div>
@@ -635,12 +637,6 @@ export default function LogbookDashboard() {
                   : "No logbooks match your current filters. Try adjusting your search criteria."
                 }
               </p>
-              {logbooks.length === 0 && (
-                <Button onClick={() => setShowCreationModal(true)} className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Your First Logbook
-                </Button>
-              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -672,7 +668,12 @@ export default function LogbookDashboard() {
 
                   {/* Submitted */}
                   <div className="col-span-2">
-                    <div className="text-sm text-gray-900">{formatDate(logbook.submitted_at)}</div>
+                    <div className="text-sm text-gray-900">
+                      {logbook.submitted_at && new Date(logbook.submitted_at).getTime() > 0 
+                        ? formatDate(logbook.submitted_at) 
+                        : 'Not submitted'
+                      }
+                    </div>
                   </div>
 
                   {/* Reviewed */}
@@ -726,42 +727,11 @@ export default function LogbookDashboard() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handlePreviewLogbook(logbook)}
+                        onClick={() => setStructuredLogbook(logbook)}
                         title="View Logbook"
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      
-                      {logbook.status === 'rejected' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/logbook/${logbook.id}/edit`)}
-                          title="Edit Rejected Logbook"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      )}
-                      
-                      {logbook.status === 'draft' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Submit"
-                        >
-                          <Send className="h-4 w-4" />
-                        </Button>
-                      )}
-                      
-                      {logbook.status === 'approved' && !logbook.is_locked && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Lock"
-                        >
-                          <Lock className="h-4 w-4" />
-                        </Button>
-                      )}
                     </div>
                   </div>
                 </div>
