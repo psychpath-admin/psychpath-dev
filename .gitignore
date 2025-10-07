@@ -138,6 +138,9 @@ temp/
 # Backup files
 *.backup
 *.bak
+*.dump
+backups/*.tar.gz
+backups/*.dump
 
 # Database
 *.sqlite3

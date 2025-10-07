@@ -1,5 +1,13 @@
+# Database backups
 *.sqlite3
+*.dump
+*.sql
+
+# Code backups  
 *.tar.gz
-INDEX.md
+*.zip
+
+# Documentation (keep INDEX.md but ignore other docs)
+# INDEX.md
 
 
