@@ -199,3 +199,22 @@ cd frontend && npm run dev
 **System Status:** Stable and Ready for Production  
 **Error Handling:** Fully Implemented and Tested  
 **Recovery Point:** Safe and Documented
+
+## Checkpoint 2025-10-08 21:25:48
+
+- Frontend
+  - Added status summary cards with tooltips and toggle on `LogbookDashboard.tsx`.
+  - Implemented auto-refresh of logbook list every 30s.
+  - Enabled inline entry click-to-edit from structured report for statuses: rejected and returned_for_edits in `StructuredLogbookDisplay.tsx`.
+  - Added preview modals for Section B and C entries with navigation to respective edit pages.
+  - Implemented return-to navigation: after editing entries in Sections A/B/C, user returns to logbook dashboard instead of section dashboards.
+- Backend
+  - Allowed rejecting logbooks in statuses submitted/under_review/draft; improved `reject_with_reason`.
+  - Fixed provisional resubmit flow and comments API stability; ensured comment threads and section comments.
+- Database
+  - Created full SQLite dump and copied live DB. Latest backup folder under backups/psychpath_backup_*
+
+Artifacts:
+- Latest backup directory created under `backups/` with database.sql.gz and db.sqlite3.
+
+Branch: feature/fix-logbook-submit-error
