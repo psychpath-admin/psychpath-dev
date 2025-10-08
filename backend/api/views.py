@@ -4,8 +4,8 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest
-from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer, MeetingSerializer, MeetingCreateSerializer, MeetingInviteSerializer, MeetingInviteResponseSerializer, DisconnectionRequestSerializer, DisconnectionRequestCreateSerializer, DisconnectionRequestResponseSerializer
+from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest, SupportErrorLog
+from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer, MeetingSerializer, MeetingCreateSerializer, MeetingInviteSerializer, MeetingInviteResponseSerializer, DisconnectionRequestSerializer, DisconnectionRequestCreateSerializer, DisconnectionRequestResponseSerializer, SupportErrorLogSerializer, SupportErrorLogCreateSerializer
 from .email_service import send_supervision_invite_email, send_supervision_response_email, send_supervision_reminder_email, send_supervision_expired_email, send_disconnection_request_email, send_disconnection_response_email
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 import base64
@@ -2500,6 +2500,84 @@ def health_check(request):
         "app": "PsychPath Backend",
         "version": "1.0.0"
     }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def log_error(request):
+    """Log an error to the support audit trail"""
+    try:
+        serializer = SupportErrorLogCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            # Add user and additional context
+            error_log = serializer.save(
+                user=request.user,
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                page_url=request.data.get('page_url', ''),
+                additional_context={
+                    'ip_address': request.META.get('REMOTE_ADDR', ''),
+                    'referer': request.META.get('HTTP_REFERER', ''),
+                    'timestamp': timezone.now().isoformat(),
+                }
+            )
+            
+            # Return the created error log
+            response_serializer = SupportErrorLogSerializer(error_log)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Error logging error: {str(e)}")
+        return Response(
+            {"error": "Failed to log error"}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def get_error_logs(request):
+    """Get error logs for support team (admin only)"""
+    try:
+        # Check if user is admin or has support access
+        if not request.user.is_staff and not request.user.is_superuser:
+            return Response(
+                {"error": "Permission denied"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get query parameters
+        resolved = request.GET.get('resolved')
+        user_id = request.GET.get('user_id')
+        error_id = request.GET.get('error_id')
+        limit = int(request.GET.get('limit', 50))
+        
+        # Build query
+        queryset = SupportErrorLog.objects.all()
+        
+        if resolved is not None:
+            queryset = queryset.filter(resolved=resolved.lower() == 'true')
+        
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+            
+        if error_id:
+            queryset = queryset.filter(error_id=error_id)
+        
+        # Limit results
+        queryset = queryset[:limit]
+        
+        serializer = SupportErrorLogSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error fetching error logs: {str(e)}")
+        return Response(
+            {"error": "Failed to fetch error logs"}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 # Create your views here.

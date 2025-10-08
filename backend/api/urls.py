@@ -50,5 +50,6 @@ urlpatterns = [
     path('disconnection-requests/<int:request_id>/cancel/', views.disconnection_request_cancel, name='disconnection-request-cancel'),
     # Error logging
     path('audit-log/errors/', views.log_error, name='log-error'),
+    path('audit-log/errors/list/', views.get_error_logs, name='get-error-logs'),
 ]
 

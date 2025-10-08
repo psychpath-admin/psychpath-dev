@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, AlertTriangle, RefreshCw, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,6 +8,7 @@ export interface ErrorOverlayProps {
   isOpen: boolean
   onClose: () => void
   onRetry?: () => void
+  onGetHelp?: () => void
   error: {
     title?: string
     summary?: string
@@ -20,8 +22,10 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
   isOpen,
   onClose,
   onRetry,
+  onGetHelp,
   error
 }) => {
+  const navigate = useNavigate()
   const overlayRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -82,6 +86,8 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
 
   if (!isOpen) return null
 
+  console.log('ErrorOverlay is rendering with isOpen=true')
+
   const handleRetry = () => {
     onRetry?.()
     onClose()
@@ -94,6 +100,16 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
 
   const handleGetHelp = () => {
     console.log('handleGetHelp called')
+    
+    // If custom onGetHelp handler provided, use it
+    if (onGetHelp) {
+      onGetHelp()
+      return
+    }
+    
+    // Close the overlay first
+    onClose()
+    
     // Pass error details as URL parameters for highlighting
     const params = new URLSearchParams()
     if (error.errorId) {
@@ -110,6 +126,7 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
     }
     
     const helpUrl = params.toString() ? `/help/errors?${params.toString()}` : '/help/errors'
+    // Open in new tab since there's no navigation back to the app
     window.open(helpUrl, '_blank')
   }
 
@@ -217,9 +234,15 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
                 </Button>
               )}
               <Button
-                onClick={handleGetHelp}
+                onPointerDown={(e) => {
+                  console.log('I Need More Help button pointerdown!', e)
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleGetHelp()
+                }}
                 variant="outline"
                 className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
+                style={{ pointerEvents: 'auto' }}
               >
                 <HelpCircle className="w-4 h-4 mr-2" />
                 I Need More Help

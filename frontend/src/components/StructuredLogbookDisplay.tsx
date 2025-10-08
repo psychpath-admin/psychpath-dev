@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch, submitLogbook } from '@/lib/api'
+import { ErrorOverlay, useErrorHandler } from '@/lib/errors'
 
 interface SectionAEntry {
   id: number
@@ -71,6 +72,7 @@ interface StructuredLogbookDisplayProps {
   logbook: Logbook
   onClose: () => void
   onRegenerate?: () => void
+  onNavigateToHelp?: (errorDetails: { summary?: string, explanation?: string, userAction?: string }) => void
 }
 
 export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerate }: StructuredLogbookDisplayProps) {
@@ -79,6 +81,9 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
   const [sectionCEntries, setSectionCEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  
+  // Use the new error handler hook
+  const { errorOverlay, showError } = useErrorHandler()
   const [regenerating, setRegenerating] = useState(false)
 
   useEffect(() => {
@@ -163,7 +168,12 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
 
   const handleSubmitForReview = async () => {
     if (!logbook.week_start_date) {
-      toast.error('No week start date found for this logbook')
+      await showError('No week start date found for this logbook.', {
+        title: 'Submission Error',
+        category: 'Validation',
+        customExplanation: 'The system requires a valid week start date to submit the logbook, but this information is missing from the current logbook data.',
+        customUserAction: 'Please contact support if this issue persists. They can help restore the missing date information.'
+      })
       return
     }
 
@@ -180,7 +190,41 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
       onClose() // Close the dialog after successful submission
     } catch (error) {
       console.error('Failed to submit logbook:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to submit logbook')
+      
+      // Parse error message for better UX with 3-part system
+      let title = 'Unable to Submit Logbook'
+      let explanation = 'The system encountered an issue when trying to submit your logbook.'
+      let userAction = 'Please try again. If the problem persists, contact your supervisor for assistance.'
+      
+      if (error instanceof Error) {
+        if (error.message.includes('draft, ready, or returned_for_edits')) {
+          const summary = `This logbook cannot be submitted because it is currently marked as "${logbook.status}".`
+          
+          if (logbook.status === 'submitted') {
+            explanation = 'This logbook has already been submitted and is awaiting review by your supervisor. Duplicate submissions are not allowed to prevent confusion.'
+            userAction = 'Wait for your supervisor to review your submission. You can check the status on your dashboard. If you need to make changes, contact your supervisor to return it for edits.'
+          } else if (logbook.status === 'approved') {
+            explanation = 'This logbook has already been approved by your supervisor. Once approved, logbooks cannot be modified or resubmitted to maintain the integrity of the approval process.'
+            userAction = 'No action is needed - your logbook is approved. If you believe there is an error, contact your supervisor to discuss.'
+          } else if (logbook.status === 'rejected') {
+            explanation = 'The system shows this logbook as rejected, but the page data may be outdated. Your supervisor may have already processed this logbook.'
+            userAction = 'Refresh the page (press F5 or click refresh) to see the current status. After refreshing, the logbook should be editable if it was returned to you.'
+          } else {
+            explanation = `The logbook is in an unexpected state: "${logbook.status}". This typically occurs due to a synchronization issue between the browser and server.`
+            userAction = 'Refresh the page to sync the latest status. If the problem continues after refreshing, contact your supervisor for help.'
+          }
+        } else {
+          explanation = 'An unexpected error occurred while communicating with the server. This could be due to a network issue or a temporary server problem.'
+        }
+      }
+      
+      // Use the new error handler with automatic logging
+      await showError(error, {
+        title,
+        category: 'Validation',
+        customExplanation: explanation,
+        customUserAction: userAction
+      })
     }
   }
 
@@ -1177,6 +1221,9 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Error Overlay with 3-part system */}
+      <ErrorOverlay {...errorOverlay} />
     </>
   )
 }

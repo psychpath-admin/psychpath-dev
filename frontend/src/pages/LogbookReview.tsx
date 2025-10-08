@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { apiFetch } from '@/lib/api'
 import { 
   CheckCircle, 
@@ -27,6 +28,7 @@ interface LogbookReview {
   trainee_email: string
   week_start_date: string
   week_end_date: string
+  week_display?: string
   status: string
   review_comments?: string
   reviewed_by?: string
@@ -59,7 +61,17 @@ export default function LogbookReview() {
   const [reviewComments, setReviewComments] = useState('')
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [reportOpen, setReportOpen] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean
+    action: 'approve' | 'reject' | 'return_for_edits' | null
+    title: string
+    message: string
+  }>({
+    open: false,
+    action: null,
+    title: '',
+    message: ''
+  })
 
   useEffect(() => {
     if (id) {
@@ -89,10 +101,49 @@ export default function LogbookReview() {
     }
   }
 
-  const handleReviewAction = async (action: 'approve' | 'return_for_edits' | 'reject') => {
-    if (!logbook) return
+  const initiateReviewAction = (action: 'approve' | 'return_for_edits' | 'reject') => {
+    // Validate that comment is provided for reject
+    if (action === 'reject' && !reviewComments.trim()) {
+      setConfirmDialog({
+        open: true,
+        action: null,
+        title: 'Comment Required',
+        message: 'You must provide a comment explaining why you are rejecting this logbook. Please add your comments in the Review Comments field before rejecting.'
+      })
+      return
+    }
 
+    // Show confirmation dialog with appropriate message
+    const messages = {
+      approve: {
+        title: 'Approve Logbook',
+        message: 'Are you sure you want to approve this logbook? This will lock all entries and mark the logbook as approved.'
+      },
+      reject: {
+        title: 'Reject Logbook',
+        message: 'Are you sure? This will unlock the logbook for full revision.'
+      },
+      return_for_edits: {
+        title: 'Return for Edits',
+        message: 'Are you sure you want to return this logbook for edits? The trainee will be able to make changes and resubmit.'
+      }
+    }
+
+    setConfirmDialog({
+      open: true,
+      action,
+      title: messages[action].title,
+      message: messages[action].message
+    })
+  }
+
+  const handleReviewAction = async () => {
+    const action = confirmDialog.action
+    if (!logbook || !action) return
+
+    setConfirmDialog({ ...confirmDialog, open: false })
     setActionLoading(action)
+    
     try {
       const response = await apiFetch(`/api/logbook/${id}/review/`, {
         method: 'POST',
@@ -101,7 +152,7 @@ export default function LogbookReview() {
         },
         body: JSON.stringify({
           decision: action,
-          general_comment: reviewComments
+          generalComment: reviewComments
         })
       })
 
@@ -271,7 +322,7 @@ export default function LogbookReview() {
 
           <div className="flex flex-wrap gap-3">
             <Button
-              onClick={() => handleReviewAction('approve')}
+              onClick={() => initiateReviewAction('approve')}
               disabled={actionLoading !== null || logbook.status === 'approved'}
               className="bg-green-600 hover:bg-green-700 text-white"
             >
@@ -280,7 +331,7 @@ export default function LogbookReview() {
             </Button>
 
             <Button
-              onClick={() => handleReviewAction('return_for_edits')}
+              onClick={() => initiateReviewAction('return_for_edits')}
               disabled={actionLoading !== null || logbook.status === 'returned_for_edits'}
               variant="outline"
               className="border-orange-200 text-orange-700 hover:bg-orange-50"
@@ -290,11 +341,7 @@ export default function LogbookReview() {
             </Button>
 
             <Button
-              onClick={() => {
-                if (window.confirm('Are you sure? This will unlock the logbook for full revision.')) {
-                  handleReviewAction('reject')
-                }
-              }}
+              onClick={() => initiateReviewAction('reject')}
               disabled={actionLoading !== null || logbook.status === 'rejected'}
               variant="outline"
               className="border-red-200 text-red-700 hover:bg-red-50"
@@ -325,14 +372,56 @@ export default function LogbookReview() {
           section_totals: logbook.section_totals as any,
           entries: logbook.entries as any,
         } as any}
-        onClose={() => setReportOpen(false)}
-        onApprove={() => handleReviewAction('approve')}
-        onReject={() => handleReviewAction('reject')}
-        onRequestEdits={() => handleReviewAction('return_for_edits')}
+        onApprove={() => initiateReviewAction('approve')}
+        onReject={() => initiateReviewAction('reject')}
+        onRequestEdits={() => initiateReviewAction('return_for_edits')}
         inline
       />
 
       {/* Removed old preview list; structured report above is the source of truth. */}
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {confirmDialog.action === 'reject' || confirmDialog.title === 'Comment Required' ? (
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+              ) : confirmDialog.action === 'approve' ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <Edit className="h-5 w-5 text-orange-500" />
+              )}
+              {confirmDialog.title}
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {confirmDialog.message}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}
+            >
+              Cancel
+            </Button>
+            {confirmDialog.action && (
+              <Button
+                onClick={handleReviewAction}
+                className={
+                  confirmDialog.action === 'approve'
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : confirmDialog.action === 'reject'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-orange-600 hover:bg-orange-700'
+                }
+              >
+                OK
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

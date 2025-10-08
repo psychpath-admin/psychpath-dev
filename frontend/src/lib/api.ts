@@ -452,4 +452,57 @@ export async function getProgramSummary(): Promise<ProgramSummary> {
   return res.json()
 }
 
+// Error logging functions
+export interface ErrorLogData {
+  error_id?: string
+  error_title: string
+  error_summary: string
+  error_explanation?: string
+  user_action?: string
+  page_url?: string
+  additional_context?: Record<string, any>
+}
+
+export async function logError(errorData: ErrorLogData): Promise<void> {
+  try {
+    const res = await apiFetch('/api/audit-log/errors/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...errorData,
+        page_url: errorData.page_url || window.location.href,
+        additional_context: {
+          ...errorData.additional_context,
+          user_agent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+        }
+      })
+    })
+    
+    if (!res.ok) {
+      console.error('Failed to log error to support audit trail')
+    }
+  } catch (error) {
+    console.error('Error logging error:', error)
+  }
+}
+
+export async function getErrorLogs(params?: {
+  resolved?: boolean
+  user_id?: number
+  error_id?: string
+  limit?: number
+}): Promise<any[]> {
+  const queryParams = new URLSearchParams()
+  if (params?.resolved !== undefined) queryParams.set('resolved', params.resolved.toString())
+  if (params?.user_id) queryParams.set('user_id', params.user_id.toString())
+  if (params?.error_id) queryParams.set('error_id', params.error_id)
+  if (params?.limit) queryParams.set('limit', params.limit.toString())
+  
+  const url = `/api/audit-log/errors/list/${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+  const res = await apiFetch(url)
+  if (!res.ok) throw new Error('Failed to fetch error logs')
+  return res.json()
+}
+
 

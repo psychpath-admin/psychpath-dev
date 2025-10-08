@@ -686,4 +686,32 @@ class DisconnectionRequest(models.Model):
         self.save()
 
 
+class SupportErrorLog(models.Model):
+    """Log errors for support audit trail"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='error_logs')
+    error_id = models.CharField(max_length=100, blank=True, null=True)
+    error_title = models.CharField(max_length=255)
+    error_summary = models.TextField()
+    error_explanation = models.TextField(blank=True, null=True)
+    user_action = models.TextField(blank=True, null=True)
+    page_url = models.URLField(max_length=500, blank=True, null=True)
+    user_agent = models.TextField(blank=True, null=True)
+    additional_context = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved = models.BooleanField(default=False)
+    resolved_at = models.DateTimeField(blank=True, null=True)
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='resolved_errors')
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['error_id']),
+            models.Index(fields=['resolved']),
+        ]
+
+    def __str__(self):
+        return f"Error {self.error_id} - {self.user.username} - {self.created_at}"
+
+
 # Create your models here.

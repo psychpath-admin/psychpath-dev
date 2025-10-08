@@ -245,8 +245,8 @@ class WeeklyLogbook(models.Model):
         if not self.is_complete():
             raise ValueError("Logbook must be complete before submission")
         
-        if self.status not in ['draft', 'ready']:
-            raise ValueError("Only draft or ready logbooks can be submitted")
+        if self.status not in ['draft', 'ready', 'returned_for_edits']:
+            raise ValueError("Only draft, ready, or returned_for_edits logbooks can be submitted")
         
         self.status = 'submitted'
         self.submitted_at = timezone.now()
@@ -321,11 +321,11 @@ class WeeklyLogbook(models.Model):
         self._send_notification_to_trainee('returned_for_edits')
     
     def reject(self, supervisor, comments):
-        """Reject logbook by supervisor"""
+        """Reject logbook by supervisor - returns to draft for re-editing"""
         if self.status != 'submitted':
             raise ValueError("Only submitted logbooks can be rejected")
         
-        self.status = 'rejected'
+        self.status = 'draft'  # Return to draft so trainee can edit and resubmit
         self.reviewed_by = supervisor
         self.rejected_at = timezone.now()
         self.supervisor_decision_at = timezone.now()
@@ -340,7 +340,7 @@ class WeeklyLogbook(models.Model):
             user_role='supervisor',
             comments=comments,
             previous_status='submitted',
-            new_status='rejected'
+            new_status='draft'  # Show it was rejected but is now back to draft
         )
         
         # Send notification to trainee

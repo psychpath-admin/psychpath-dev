@@ -839,11 +839,22 @@ export default function LogbookDashboard() {
 
       {structuredLogbook && (
         <StructuredLogbookDisplay
-          logbook={structuredLogbook}
+          logbook={structuredLogbook as any}
           onClose={() => setStructuredLogbook(null)}
           onRegenerate={() => {
             setStructuredLogbook(null)
             fetchLogbooks() // Refresh the logbook list
+          }}
+          onNavigateToHelp={(errorDetails) => {
+            console.log('LogbookDashboard onNavigateToHelp called', errorDetails)
+            setStructuredLogbook(null) // Close the dialog
+            const params = new URLSearchParams()
+            if (errorDetails.summary) params.set('summary', errorDetails.summary)
+            if (errorDetails.explanation) params.set('explanation', errorDetails.explanation)
+            if (errorDetails.userAction) params.set('userAction', errorDetails.userAction)
+            const helpUrl = params.toString() ? `/help/errors?${params.toString()}` : '/help/errors'
+            console.log('Navigating to:', helpUrl)
+            navigate(helpUrl)
           }}
         />
       )}

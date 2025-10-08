@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest
+from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest, SupportErrorLog
 
 class UserProfileSerializer(serializers.ModelSerializer):
     # Ensure prior_hours always a dict
@@ -672,3 +672,40 @@ class DisconnectionRequestResponseSerializer(serializers.ModelSerializer):
     def validate(self, data):
         # The action (approve/decline) will be handled in the view
         return data
+
+
+class SupportErrorLogSerializer(serializers.ModelSerializer):
+    """Serializer for logging errors to support audit trail"""
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    user_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportErrorLog
+        fields = [
+            'id', 'user', 'user_email', 'user_name', 'error_id', 'error_title', 
+            'error_summary', 'error_explanation', 'user_action', 'page_url', 
+            'user_agent', 'additional_context', 'created_at', 'resolved', 
+            'resolved_at', 'resolved_by'
+        ]
+        read_only_fields = ['id', 'created_at', 'resolved_at']
+    
+    def get_user_name(self, obj):
+        """Get user's full name from profile"""
+        try:
+            profile = obj.user.profile
+            if profile.first_name and profile.last_name:
+                return f"{profile.first_name} {profile.last_name}"
+            return obj.user.username
+        except:
+            return obj.user.username
+
+
+class SupportErrorLogCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating error logs"""
+    
+    class Meta:
+        model = SupportErrorLog
+        fields = [
+            'error_id', 'error_title', 'error_summary', 'error_explanation', 
+            'user_action', 'page_url', 'user_agent', 'additional_context'
+        ]

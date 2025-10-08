@@ -1270,7 +1270,7 @@ def logbook_resubmit(request, logbook_id):
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
-@support_error_handler
+# @support_error_handler  # Temporarily disabled to see full error
 def logbook_comment_threads(request, logbook_id):
     """Get or create comment threads for a logbook"""
     try:
@@ -1322,12 +1322,15 @@ def logbook_comment_threads(request, logbook_id):
         
         with transaction.atomic():
             # Create or get thread
+            # For section comments, treat them as general with a section identifier
+            actual_thread_type = 'entry' if thread_type == 'entry' else 'general'
+            thread_entry_id = entry_id if thread_type == 'entry' else (f'section_{entry_section}' if thread_type == 'section' else None)
+            
             thread, created = CommentThread.objects.get_or_create(
                 logbook=logbook,
-                entry_id=entry_id if thread_type == 'entry' else None,
-                entry_section=entry_section if thread_type == 'entry' else None,
-                thread_type=thread_type,
-                defaults={'logbook': logbook}
+                entry_id=thread_entry_id,
+                entry_section=entry_section if thread_type in ['entry', 'section'] else None,
+                thread_type=actual_thread_type
             )
             
             # Create the first message
