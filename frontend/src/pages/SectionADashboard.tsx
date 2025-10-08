@@ -146,7 +146,6 @@ export default function SectionADashboard() {
   const [durationMin, setDurationMin] = useSimpleFilterPersistence<string>('section-a-duration-min', '')
   const [durationMax, setDurationMax] = useSimpleFilterPersistence<string>('section-a-duration-max', '')
   const [groupByWeek, setGroupByWeek] = useSimpleFilterPersistence<boolean>('section-a-group-by-week', false)
-  const [weekStarting, setWeekStarting] = useSimpleFilterPersistence<string>('section-a-week-starting', '')
   
   // New Section A-specific filters
   const [clientPseudonym, setClientPseudonym] = useSimpleFilterPersistence<string>('section-a-client-pseudonym', '')
@@ -155,7 +154,7 @@ export default function SectionADashboard() {
 
   useEffect(() => {
     loadDCCEntries()
-  }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax, groupByWeek, clientPseudonym, activityType, reviewedFilter, weekStarting])
+  }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax, groupByWeek, clientPseudonym, activityType, reviewedFilter])
 
   // Load custom activity types from localStorage
   useEffect(() => {
@@ -182,7 +181,6 @@ export default function SectionADashboard() {
       // For now, we'll use the existing API and filter on frontend
       // TODO: Update backend to support pagination and filtering
       const fetchedEntries = await getSectionAEntries({
-        week_starting: weekStarting || undefined,
         include_locked: true
       })
       
@@ -290,18 +288,6 @@ export default function SectionADashboard() {
     }
   }
 
-  // Default weekStarting to latest Monday from existing entries on first load
-  useEffect(() => {
-    if (!weekStarting && allEntries.length > 0) {
-      const dates = allEntries
-        .map(e => e.week_starting)
-        .filter(Boolean) as string[]
-      if (dates.length) {
-        const latest = dates.sort().reverse()[0]
-        setWeekStarting(latest)
-      }
-    }
-  }, [allEntries, weekStarting])
 
   const calculateWeekStarting = (dateString: string) => {
     const date = new Date(dateString)
@@ -1171,15 +1157,6 @@ export default function SectionADashboard() {
 
         {/* Enhanced Filters and Controls */}
         <div className="flex flex-col md:flex-row gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-muted-foreground">Week starting</label>
-            <input
-              type="date"
-              value={weekStarting}
-              onChange={(e) => setWeekStarting(e.target.value)}
-              className="border border-input rounded-md h-9 px-3"
-            />
-          </div>
         </div>
         {/* Quick Stats Cards */}
         {(() => {
