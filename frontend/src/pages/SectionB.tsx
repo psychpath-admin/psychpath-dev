@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,6 +34,8 @@ import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationU
 import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
 const SectionB: React.FC = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [weeklyGroups, setWeeklyGroups] = useState<PDWeeklyGroup[]>([])
   const [competencies, setCompetencies] = useState<PDCompetency[]>([])
   const [loading, setLoading] = useState(true)
@@ -533,6 +536,8 @@ const SectionB: React.FC = () => {
       }
       setShowForm(false)
       setEditingEntry(null)
+      const returnTo = (location.state as any)?.returnTo as string | undefined
+      if (returnTo) navigate(returnTo)
       loadData()
     } catch (error) {
       console.error('Error saving entry:', error)
@@ -1898,7 +1903,16 @@ const SectionB: React.FC = () => {
               <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 mt-6 px-6 pb-6">
                 <Button 
                   variant="outline" 
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false)
+                    const returnTo = (location.state as any)?.returnTo as string | undefined
+                    if (returnTo) navigate(returnTo)
+                  }}
+                  onClick={() => {
+                    setShowForm(false)
+                    const returnTo = (location.state as any)?.returnTo as string | undefined
+                    if (returnTo) navigate(returnTo)
+                  }}
                   className="px-6 py-2 border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
                   Cancel

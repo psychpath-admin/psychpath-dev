@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,6 +32,8 @@ import type { SupervisionEntry, SupervisionWeeklyGroup } from '@/types/supervisi
 import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 
 const SectionC: React.FC = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [weeklyGroups, setWeeklyGroups] = useState<SupervisionWeeklyGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -385,6 +388,8 @@ const SectionC: React.FC = () => {
         await createSupervisionEntry(formData)
       }
       setShowForm(false)
+      const returnTo = (location.state as any)?.returnTo as string | undefined
+      if (returnTo) navigate(returnTo)
       loadData()
     } catch (error) {
       console.error('Error saving supervision entry:', error)
@@ -1619,7 +1624,11 @@ const SectionC: React.FC = () => {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle>Supervision Activity Details</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>×</Button>
+                <Button variant="outline" size="sm" onClick={() => {
+                  setShowForm(false)
+                  const returnTo = (location.state as any)?.returnTo as string | undefined
+                  if (returnTo) navigate(returnTo)
+                }}>×</Button>
               </div>
               <p className="text-sm text-textLight">Section C: Record of Supervision / Supervision Activity Details</p>
             </CardHeader>
@@ -1719,7 +1728,11 @@ const SectionC: React.FC = () => {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+                  <Button type="button" variant="outline" onClick={() => {
+                    setShowForm(false)
+                    const returnTo = (location.state as any)?.returnTo as string | undefined
+                    if (returnTo) navigate(returnTo)
+                  }}>
                     Cancel
                   </Button>
                   {editingEntry && (

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   Dialog,
   DialogContent,
@@ -10,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Textarea } from '@/components/ui/textarea'
 import { 
   X, 
   Clock, 
@@ -19,8 +21,10 @@ import {
   AlertCircle,
   Lock,
   Edit,
+  Edit3,
   RefreshCw,
-  Send
+  Send,
+  Plus
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch, submitLogbook } from '@/lib/api'
@@ -54,7 +58,7 @@ interface Logbook {
   reviewed_by_name?: string
   submitted_at: string
   reviewed_at?: string
-  supervisor_comments?: string
+  review_comments?: string
   section_totals: {
     section_a: { 
       weekly_hours: number
@@ -72,23 +76,44 @@ interface StructuredLogbookDisplayProps {
   logbook: Logbook
   onClose: () => void
   onRegenerate?: () => void
+  onResubmit?: () => void
   onNavigateToHelp?: (errorDetails: { summary?: string, explanation?: string, userAction?: string }) => void
 }
 
-export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerate }: StructuredLogbookDisplayProps) {
+export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerate, onResubmit }: StructuredLogbookDisplayProps) {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [sectionAEntries, setSectionAEntries] = useState<SectionAEntry[]>([])
   const [sectionBEntries, setSectionBEntries] = useState<any[]>([])
   const [sectionCEntries, setSectionCEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
   
+  // State for Section B and C editing modals
+  const [editingBEntry, setEditingBEntry] = useState<any>(null)
+  const [editingCEntry, setEditingCEntry] = useState<any>(null)
+  const [showBEditModal, setShowBEditModal] = useState(false)
+  const [showCEditModal, setShowCEditModal] = useState(false)
+  
+  // Helper: can the provisional click-through to edit from the report?
+  const canInlineEdit = logbook.status === 'rejected' || logbook.status === 'returned_for_edits'
+  
   // Use the new error handler hook
   const { errorOverlay, showError } = useErrorHandler()
   const [regenerating, setRegenerating] = useState(false)
+  
+  // Comment state for rejected logbooks
+  const [newComments, setNewComments] = useState<Record<string, string>>({})
+  const [showCommentInput, setShowCommentInput] = useState<Record<string, boolean>>({})
+  const [existingComments, setExistingComments] = useState<Record<string, any[]>>({})
 
   useEffect(() => {
     fetchAllSections()
-  }, [logbook.id])
+    // Fetch comments for rejected logbooks
+  if (logbook.status === 'rejected' || logbook.status === 'returned_for_edits') {
+      fetchComments()
+    }
+  }, [logbook.id, logbook.status])
 
   const fetchAllSections = async () => {
     try {
@@ -185,8 +210,28 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
     })
 
     try {
-      await submitLogbook(logbook.week_start_date)
+      // Use different endpoint for rejected logbooks (resubmit) vs new submissions
+      if (logbook.status === 'rejected' || logbook.status === 'returned_for_edits') {
+        const response = await apiFetch(`/api/logbook/${logbook.id}/resubmit/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
+        
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to resubmit logbook')
+        }
+      } else {
+        await submitLogbook(logbook.week_start_date)
+      }
+      
       toast.success('Logbook submitted for review successfully!')
+      
+      // Call the resubmit callback to refresh the dashboard
+      if (onResubmit) {
+        onResubmit()
+      }
+      
       onClose() // Close the dialog after successful submission
     } catch (error) {
       console.error('Failed to submit logbook:', error)
@@ -198,7 +243,6 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
       
       if (error instanceof Error) {
         if (error.message.includes('draft, ready, or returned_for_edits')) {
-          const summary = `This logbook cannot be submitted because it is currently marked as "${logbook.status}".`
           
           if (logbook.status === 'submitted') {
             explanation = 'This logbook has already been submitted and is awaiting review by your supervisor. Duplicate submissions are not allowed to prevent confusion.'
@@ -206,7 +250,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           } else if (logbook.status === 'approved') {
             explanation = 'This logbook has already been approved by your supervisor. Once approved, logbooks cannot be modified or resubmitted to maintain the integrity of the approval process.'
             userAction = 'No action is needed - your logbook is approved. If you believe there is an error, contact your supervisor to discuss.'
-          } else if (logbook.status === 'rejected') {
+          } else if (logbook.status === 'rejected' || logbook.status === 'returned_for_edits') {
             explanation = 'The system shows this logbook as rejected, but the page data may be outdated. Your supervisor may have already processed this logbook.'
             userAction = 'Refresh the page (press F5 or click refresh) to see the current status. After refreshing, the logbook should be editable if it was returned to you.'
           } else {
@@ -246,6 +290,118 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
 
   const canRegenerate = () => {
     return ['draft', 'rejected', 'ready'].includes(logbook.status)
+  }
+
+  // Comment functions for rejected logbooks
+  const addEntryComment = async (entryId: number, section: string, comment: string) => {
+    try {
+      const response = await apiFetch(`/api/logbook/${logbook.id}/comments/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          thread_type: 'entry',
+          entry_id: entryId.toString(),
+          entry_section: section,
+          message: comment
+        })
+      })
+
+      if (response.ok) {
+        toast.success('Comment added successfully')
+        setNewComments(prev => ({ ...prev, [`${section}-${entryId}`]: '' }))
+        setShowCommentInput(prev => ({ ...prev, [`${section}-${entryId}`]: false }))
+        // Refresh comments
+        fetchComments()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to add comment')
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error)
+      toast.error('Failed to add comment')
+    }
+  }
+
+  const addSectionComment = async (section: string, comment: string) => {
+    try {
+      const response = await apiFetch(`/api/logbook/${logbook.id}/comments/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          thread_type: 'section',
+          entry_section: section,
+          message: comment
+        })
+      })
+
+      if (response.ok) {
+        toast.success('Section comment added successfully')
+        setNewComments(prev => ({ ...prev, [`section-${section}`]: '' }))
+        setShowCommentInput(prev => ({ ...prev, [`section-${section}`]: false }))
+        // Refresh comments
+        fetchComments()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to add section comment')
+      }
+    } catch (error) {
+      console.error('Error adding section comment:', error)
+      toast.error('Failed to add section comment')
+    }
+  }
+
+  // Click handlers for editing entries
+  const handleSectionAEntryClick = (entryId: number) => {
+    if (canInlineEdit) {
+      navigate(`/section-a/edit/${entryId}`, { state: { returnTo: location.pathname + location.search } })
+    }
+  }
+
+  const handleSectionBEntryClick = (entry: any) => {
+    if (canInlineEdit) {
+      setEditingBEntry(entry)
+      setShowBEditModal(true)
+    }
+  }
+
+  const handleSectionCEntryClick = (entry: any) => {
+    if (canInlineEdit) {
+      setEditingCEntry(entry)
+      setShowCEditModal(true)
+    }
+  }
+
+  const fetchComments = async () => {
+    try {
+      const response = await apiFetch(`/api/logbook/${logbook.id}/comments/`)
+      if (response.ok) {
+        const threads = await response.json()
+        
+        // Transform the thread data into a map of entry_id -> messages
+        const commentsMap: Record<string, any[]> = {}
+        
+        threads.forEach((thread: any) => {
+          if (thread.thread_type === 'entry') {
+            // Entry-specific comments
+            const key = `${thread.entry_section}-${thread.entry_id}`
+            if (thread.messages && thread.messages.length > 0) {
+              commentsMap[key] = thread.messages
+            }
+          } else if (thread.thread_type === 'general' && thread.entry_id && thread.entry_id.startsWith('section_')) {
+            // Section-level comments
+            const section = thread.entry_id.replace('section_', '')
+            const key = `section-${section}`
+            if (thread.messages && thread.messages.length > 0) {
+              commentsMap[key] = thread.messages
+            }
+          }
+        })
+        
+        setExistingComments(commentsMap)
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error)
+    }
   }
 
   const handleRegenerate = async () => {
@@ -307,6 +463,37 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           </DialogHeader>
 
           <div className="space-y-6">
+            {/* Supervisor Comments for Rejected Logbooks */}
+            {logbook.status === 'rejected' && logbook.review_comments && (
+              <Card className="border-red-200 bg-red-50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-red-800 flex items-center gap-2">
+                    <XCircle className="h-5 w-5" />
+                    Supervisor Feedback
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-red-700 bg-white p-4 rounded-md border border-red-200">
+                    <p className="whitespace-pre-wrap">{logbook.review_comments}</p>
+                  </div>
+                  <div className="mt-3 text-sm text-red-600">
+                    <p>Please review the feedback above and make the necessary changes before resubmitting your logbook.</p>
+                  </div>
+                  
+                  {/* Threaded Comments Section */}
+                  <div className="mt-4 pt-4 border-t border-red-200">
+                    <h4 className="text-sm font-semibold text-red-800 mb-3">Discussion Thread</h4>
+                    <div className="space-y-3">
+                      {/* Placeholder for threaded comments - will be implemented */}
+                      <div className="text-sm text-red-600 italic">
+                        Threaded discussion will be available here for responses to supervisor feedback.
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* AHPRA HEADER */}
             <div className="text-center bg-blue-50 border-2 border-blue-200 p-6 rounded-lg">
               <h1 className="text-2xl font-bold text-blue-900 mb-2">Logbook: Record of professional practice</h1>
@@ -404,8 +591,18 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                     </thead>
                     <tbody>
                       {sectionBEntries.map((e, i) => (
-                        <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
-                          <td className="border p-3">{e.date_of_activity || e.activity_date || ''}</td>
+                        <tr 
+                          key={i} 
+                          className={`border-b border-gray-200 hover:bg-gray-50 ${canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                          onClick={() => canInlineEdit && handleSectionBEntryClick(e)}
+                          title={canInlineEdit ? 'Click to edit this entry' : ''}
+                        >
+                          <td className="border p-3 flex items-center justify-between">
+                            <span>{e.date_of_activity || e.activity_date || ''}</span>
+                            {canInlineEdit && (
+                              <Edit3 className="h-4 w-4 text-blue-600 hover:text-blue-800" />
+                            )}
+                          </td>
                           <td className="border p-3">{e.activity_title || e.activity_type || e.title || '—'}</td>
                           <td className="border p-3 text-center">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
                           <td className="border p-3">{e.notes || e.summary || ''}</td>
@@ -480,8 +677,18 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                     </thead>
                     <tbody>
                       {sectionCEntries.map((e, i) => (
-                        <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
-                          <td className="border p-3">{e.date_of_supervision || e.date || ''}</td>
+                        <tr 
+                          key={i} 
+                          className={`border-b border-gray-200 hover:bg-gray-50 ${canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                          onClick={() => canInlineEdit && handleSectionCEntryClick(e)}
+                          title={canInlineEdit ? 'Click to edit this entry' : ''}
+                        >
+                          <td className="border p-3 flex items-center justify-between">
+                            <span>{e.date_of_supervision || e.date || ''}</span>
+                            {canInlineEdit && (
+                              <Edit3 className="h-4 w-4 text-blue-600 hover:text-blue-800" />
+                            )}
+                          </td>
                           <td className="border p-3">{e.supervisor_name || e.supervisor || '—'}</td>
                           <td className="border p-3">{e.supervision_type || '—'}</td>
                           <td className="border p-3 text-center">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
@@ -534,6 +741,76 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
             <div className="bg-blue-600 text-white p-4 font-bold text-lg text-center">
               SECTION A: Weekly record of professional practice
             </div>
+            
+            {/* Section A Comments for rejected logbooks */}
+            {logbook.status === 'rejected' && (
+              <div className="bg-yellow-50 border border-yellow-200 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Add Section A Comment:
+                  </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCommentInput(prev => ({ 
+                      ...prev, 
+                      'section-A': !prev['section-A'] 
+                    }))}
+                    className="h-8 w-8 p-0"
+                    title="Add section comment"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                {showCommentInput['section-A'] && (
+                  <div className="space-y-2">
+                    <Textarea
+                      className="w-full border rounded px-3 py-2 text-sm resize-none"
+                      rows={3}
+                      placeholder="Add your comment about Section A..."
+                      value={newComments['section-A'] || ''}
+                      onChange={(e) => setNewComments(prev => ({ 
+                        ...prev, 
+                        'section-A': e.target.value 
+                      }))}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => addSectionComment('A', newComments['section-A'] || '')}
+                        disabled={!newComments['section-A']?.trim()}
+                      >
+                        Add Comment
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowCommentInput(prev => ({ ...prev, 'section-A': false }))
+                          setNewComments(prev => ({ ...prev, 'section-A': '' }))
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Display existing section comments */}
+                {existingComments['section-A'] && existingComments['section-A'].length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <h4 className="text-sm font-medium text-gray-700">Section A Comments:</h4>
+                    {existingComments['section-A'].map((comment, idx) => (
+                      <div key={idx} className="bg-white p-2 rounded border text-sm">
+                        <div className="font-medium text-gray-900">{comment.author_role}:</div>
+                        <div className="text-gray-700">{comment.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Section A Content Card */}
@@ -609,137 +886,299 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                             const maxRows = Math.max(1, relatedCraEntries.length)
                             
                             return Array.from({ length: maxRows }).map((_, rowIndex) => (
-                              <tr key={`${dccEntry.id}-${rowIndex}`} className="border-b border-gray-200 hover:bg-gray-50">
-                                {/* Session column - only show on first row */}
-                                <td className="border border-gray-300 p-3 align-top">
-                                  {rowIndex === 0 && (
-                                    <div className="space-y-1">
-                                      <div className="font-medium text-sm">
-                                        <strong>Place:</strong> {dccEntry.place_of_practice || 'Not specified'}
+                              <>
+                                <tr 
+                                  key={`${dccEntry.id}-${rowIndex}`} 
+                                  className={`border-b border-gray-200 hover:bg-gray-50 ${canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                                  onClick={() => canInlineEdit && handleSectionAEntryClick(dccEntry.id)}
+                                  title={canInlineEdit ? 'Click to edit this entry' : ''}
+                                >
+                                  {/* Session column - only show on first row */}
+                                  <td className="border border-gray-300 p-3 align-top">
+                                    {rowIndex === 0 && (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                          <div className="font-medium text-sm">
+                                            <strong>Place:</strong> {dccEntry.place_of_practice || 'Not specified'}
+                                          </div>
+                                          {canInlineEdit && (
+                                            <Edit3 className="h-4 w-4 text-blue-600 hover:text-blue-800" />
+                                          )}
+                                        </div>
+                                        <div className="text-sm">
+                                          <strong>Client ID:</strong> {dccEntry.client_id || 'Not specified'}
+                                        </div>
+                                        <div className="text-sm">
+                                          <strong>Issues:</strong> {dccEntry.presenting_issues || 'Not specified'}
+                                        </div>
                                       </div>
+                                    )}
+                                  </td>
+                                  
+                                  {/* Client contact column - only show on first row */}
+                                  <td className="border border-gray-300 p-3 align-top">
+                                    {rowIndex === 0 && (
+                                      <div className="space-y-1">
+                                        <div className="font-medium text-sm">
+                                          <strong>Date:</strong> {formatDate(dccEntry.session_date)}
+                                        </div>
+                                        <div className="text-sm">
+                                          <strong>Activity:</strong> {dccEntry.session_activity_types?.join(', ') || 'Not specified'}
+                                        </div>
+                                        {dccEntry.simulated && (
+                                          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
+                                            Simulated
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+                                  
+                                  {/* Client contact duration - only show on first row */}
+                                  <td className="border border-gray-300 p-3 text-center align-top">
+                                    {rowIndex === 0 && (
+                                      <div className="font-medium">
+                                        {formatDuration(dccEntry.duration_minutes)}
+                                      </div>
+                                    )}
+                                  </td>
+                                  
+                                  {/* Client-related activity column */}
+                                  <td className="border border-gray-300 p-3 align-top">
+                                    {relatedCraEntries[rowIndex] ? (
+                                      <div className="space-y-1">
+                                        <div className="font-medium text-sm">
+                                          <strong>Date:</strong> {formatDate(relatedCraEntries[rowIndex].session_date)}
+                                        </div>
+                                        <div className="text-sm">
+                                          <strong>Activity:</strong> {relatedCraEntries[rowIndex].session_activity_types?.join(', ') || 'Not specified'}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="text-gray-400 text-sm">No related activity</div>
+                                    )}
+                                  </td>
+                                  
+                                  {/* Client-related activity duration */}
+                                  <td className="border border-gray-300 p-3 text-center align-top">
+                                    {relatedCraEntries[rowIndex] && (
+                                      <div className="font-medium">
+                                        {formatDuration(relatedCraEntries[rowIndex].duration_minutes)}
+                                      </div>
+                                    )}
+                                  </td>
+                                  
+                                  {/* Reflections column - only show on first row */}
+                                  <td className="border border-gray-300 p-3 align-top">
+                                    {rowIndex === 0 && (
                                       <div className="text-sm">
-                                        <strong>Client ID:</strong> {dccEntry.client_id || 'Not specified'}
+                                        {dccEntry.reflections_on_experience || 'No reflections provided'}
                                       </div>
-                                      <div className="text-sm">
-                                        <strong>Issues:</strong> {dccEntry.presenting_issues || 'Not specified'}
-                                      </div>
-                                    </div>
-                                  )}
-                                </td>
+                                    )}
+                                  </td>
+                                </tr>
                                 
-                                {/* Client contact column - only show on first row */}
-                                <td className="border border-gray-300 p-3 align-top">
-                                  {rowIndex === 0 && (
-                                    <div className="space-y-1">
-                                      <div className="font-medium text-sm">
-                                        <strong>Date:</strong> {formatDate(dccEntry.session_date)}
+                                {/* Comment section for rejected logbooks - only show on first row */}
+                            {rowIndex === 0 && canInlineEdit && (
+                                  <tr>
+                                    <td colSpan={6} className="border border-gray-300 p-3 bg-yellow-50">
+                                      <div className="ml-4">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <label className="block text-sm font-medium text-gray-700">
+                                            Add Comment for Entry #{dccEntry.id}:
+                                          </label>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setShowCommentInput(prev => ({ 
+                                              ...prev, 
+                                              [`A-${dccEntry.id}`]: !prev[`A-${dccEntry.id}`] 
+                                            }))}
+                                            className="h-8 w-8 p-0"
+                                            title="Add comment"
+                                          >
+                                            <Plus className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                        
+                                        {showCommentInput[`A-${dccEntry.id}`] && (
+                                          <div className="space-y-2">
+                                            <Textarea
+                                              className="w-full border rounded px-3 py-2 text-sm resize-none"
+                                              rows={3}
+                                              placeholder="Add your response to supervisor feedback..."
+                                              value={newComments[`A-${dccEntry.id}`] || ''}
+                                              onChange={(e) => setNewComments(prev => ({ 
+                                                ...prev, 
+                                                [`A-${dccEntry.id}`]: e.target.value 
+                                              }))}
+                                            />
+                                            <div className="flex gap-2">
+                                              <Button
+                                                size="sm"
+                                                onClick={() => addEntryComment(dccEntry.id, 'A', newComments[`A-${dccEntry.id}`] || '')}
+                                                disabled={!newComments[`A-${dccEntry.id}`]?.trim()}
+                                              >
+                                                Add Comment
+                                              </Button>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                  setShowCommentInput(prev => ({ ...prev, [`A-${dccEntry.id}`]: false }))
+                                                  setNewComments(prev => ({ ...prev, [`A-${dccEntry.id}`]: '' }))
+                                                }}
+                                              >
+                                                Cancel
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {/* Display existing comments */}
+                                        {existingComments[`A-${dccEntry.id}`] && existingComments[`A-${dccEntry.id}`].length > 0 && (
+                                          <div className="mt-3 space-y-2">
+                                            <h4 className="text-sm font-medium text-gray-700">Comments:</h4>
+                                            {existingComments[`A-${dccEntry.id}`].map((comment, idx) => (
+                                              <div key={idx} className="bg-white p-2 rounded border text-sm">
+                                                <div className="font-medium text-gray-900">{comment.author_role}:</div>
+                                                <div className="text-gray-700">{comment.message}</div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className="text-sm">
-                                        <strong>Activity:</strong> {dccEntry.session_activity_types?.join(', ') || 'Not specified'}
-                                      </div>
-                                      {dccEntry.simulated && (
-                                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
-                                          Simulated
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-                                
-                                {/* Client contact duration - only show on first row */}
-                                <td className="border border-gray-300 p-3 text-center align-top">
-                                  {rowIndex === 0 && (
-                                    <div className="font-medium">
-                                      {formatDuration(dccEntry.duration_minutes)}
-                                    </div>
-                                  )}
-                                </td>
-                                
-                                {/* Client-related activity column */}
-                                <td className="border border-gray-300 p-3 align-top">
-                                  {relatedCraEntries[rowIndex] ? (
-                                    <div className="space-y-1">
-                                      <div className="font-medium text-sm">
-                                        <strong>Date:</strong> {formatDate(relatedCraEntries[rowIndex].session_date)}
-                                      </div>
-                                      <div className="text-sm">
-                                        <strong>Activity:</strong> {relatedCraEntries[rowIndex].session_activity_types?.join(', ') || 'Not specified'}
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="text-gray-400 text-sm">No related activity</div>
-                                  )}
-                                </td>
-                                
-                                {/* Client-related activity duration */}
-                                <td className="border border-gray-300 p-3 text-center align-top">
-                                  {relatedCraEntries[rowIndex] && (
-                                    <div className="font-medium">
-                                      {formatDuration(relatedCraEntries[rowIndex].duration_minutes)}
-                                    </div>
-                                  )}
-                                </td>
-                                
-                                {/* Reflections column - only show on first row */}
-                                <td className="border border-gray-300 p-3 align-top">
-                                  {rowIndex === 0 && (
-                                    <div className="text-sm">
-                                      {dccEntry.reflections_on_experience || 'No reflections provided'}
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
+                                    </td>
+                                  </tr>
+                                )}
+                              </>
                             ))
                           })}
                           
                           {/* Show standalone CRA entries */}
                           {craEntries.filter(cra => !cra.parent_dcc_entry).map((craEntry) => (
-                            <tr key={`standalone-cra-${craEntry.id}`} className="border-b border-gray-200 hover:bg-gray-50">
-                              <td className="border border-gray-300 p-3 align-top">
-                                <div className="space-y-1">
-                                  <div className="font-medium text-sm">
-                                    <strong>Place:</strong> {craEntry.place_of_practice || 'Not specified'}
+                            <>
+                              <tr key={`standalone-cra-${craEntry.id}`} className="border-b border-gray-200 hover:bg-gray-50">
+                                <td className="border border-gray-300 p-3 align-top">
+                                  <div className="space-y-1">
+                                    <div className="font-medium text-sm">
+                                      <strong>Place:</strong> {craEntry.place_of_practice || 'Not specified'}
+                                    </div>
+                                    <div className="text-sm">
+                                      <strong>Client ID:</strong> {craEntry.client_id || 'Not specified'}
+                                    </div>
+                                    <div className="text-sm">
+                                      <strong>Issues:</strong> {craEntry.presenting_issues || 'Not specified'}
+                                    </div>
                                   </div>
+                                </td>
+                                
+                                <td className="border border-gray-300 p-3 align-top">
+                                  <div className="text-gray-400 text-sm">No client contact</div>
+                                </td>
+                                
+                                <td className="border border-gray-300 p-3 text-center align-top">
+                                  <div className="text-gray-400">-</div>
+                                </td>
+                                
+                                <td className="border border-gray-300 p-3 align-top">
+                                  <div className="space-y-1">
+                                    <div className="font-medium text-sm">
+                                      <strong>Date:</strong> {formatDate(craEntry.session_date)}
+                                    </div>
+                                    <div className="text-sm">
+                                      <strong>Activity:</strong> {craEntry.session_activity_types?.join(', ') || 'Not specified'}
+                                    </div>
+                                  </div>
+                                </td>
+                                
+                                <td className="border border-gray-300 p-3 text-center align-top">
+                                  <div className="font-medium">
+                                    {formatDuration(craEntry.duration_minutes)}
+                                  </div>
+                                </td>
+                                
+                                <td className="border border-gray-300 p-3 align-top">
                                   <div className="text-sm">
-                                    <strong>Client ID:</strong> {craEntry.client_id || 'Not specified'}
+                                    {craEntry.reflections_on_experience || 'No reflections provided'}
                                   </div>
-                                  <div className="text-sm">
-                                    <strong>Issues:</strong> {craEntry.presenting_issues || 'Not specified'}
-                                  </div>
-                                </div>
-                              </td>
+                                </td>
+                              </tr>
                               
-                              <td className="border border-gray-300 p-3 align-top">
-                                <div className="text-gray-400 text-sm">No client contact</div>
-                              </td>
-                              
-                              <td className="border border-gray-300 p-3 text-center align-top">
-                                <div className="text-gray-400">-</div>
-                              </td>
-                              
-                              <td className="border border-gray-300 p-3 align-top">
-                                <div className="space-y-1">
-                                  <div className="font-medium text-sm">
-                                    <strong>Date:</strong> {formatDate(craEntry.session_date)}
-                                  </div>
-                                  <div className="text-sm">
-                                    <strong>Activity:</strong> {craEntry.session_activity_types?.join(', ') || 'Not specified'}
-                                  </div>
-                                </div>
-                              </td>
-                              
-                              <td className="border border-gray-300 p-3 text-center align-top">
-                                <div className="font-medium">
-                                  {formatDuration(craEntry.duration_minutes)}
-                                </div>
-                              </td>
-                              
-                              <td className="border border-gray-300 p-3 align-top">
-                                <div className="text-sm">
-                                  {craEntry.reflections_on_experience || 'No reflections provided'}
-                                </div>
-                              </td>
-                            </tr>
+                              {/* Comment section for rejected logbooks - standalone CRA entries */}
+                              {canInlineEdit && (
+                                <tr>
+                                  <td colSpan={6} className="border border-gray-300 p-3 bg-yellow-50">
+                                    <div className="ml-4">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                          Add Comment for Entry #{craEntry.id}:
+                                        </label>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => setShowCommentInput(prev => ({ 
+                                            ...prev, 
+                                            [`A-${craEntry.id}`]: !prev[`A-${craEntry.id}`] 
+                                          }))}
+                                          className="h-8 w-8 p-0"
+                                          title="Add comment"
+                                        >
+                                          <Plus className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                      
+                                      {showCommentInput[`A-${craEntry.id}`] && (
+                                        <div className="space-y-2">
+                                          <Textarea
+                                            className="w-full border rounded px-3 py-2 text-sm resize-none"
+                                            rows={3}
+                                            placeholder="Add your response to supervisor feedback..."
+                                            value={newComments[`A-${craEntry.id}`] || ''}
+                                            onChange={(e) => setNewComments(prev => ({ 
+                                              ...prev, 
+                                              [`A-${craEntry.id}`]: e.target.value 
+                                            }))}
+                                          />
+                                          <div className="flex gap-2">
+                                            <Button
+                                              size="sm"
+                                              onClick={() => addEntryComment(craEntry.id, 'A', newComments[`A-${craEntry.id}`] || '')}
+                                              disabled={!newComments[`A-${craEntry.id}`]?.trim()}
+                                            >
+                                              Add Comment
+                                            </Button>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => {
+                                                setShowCommentInput(prev => ({ ...prev, [`A-${craEntry.id}`]: false }))
+                                                setNewComments(prev => ({ ...prev, [`A-${craEntry.id}`]: '' }))
+                                              }}
+                                            >
+                                              Cancel
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Display existing comments */}
+                                      {existingComments[`A-${craEntry.id}`] && existingComments[`A-${craEntry.id}`].length > 0 && (
+                                        <div className="mt-3 space-y-2">
+                                          <h4 className="text-sm font-medium text-gray-700">Comments:</h4>
+                                          {existingComments[`A-${craEntry.id}`].map((comment, idx) => (
+                                            <div key={idx} className="bg-white p-2 rounded border text-sm">
+                                              <div className="font-medium text-gray-900">{comment.author_role}:</div>
+                                              <div className="text-gray-700">{comment.message}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
                           ))}
                           
                           {/* Show empty state if no entries */}
@@ -821,6 +1260,76 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               SECTION B: Record of professional development
             </div>
             
+            {/* Section B Comments for rejected logbooks */}
+            {logbook.status === 'rejected' && (
+              <div className="bg-yellow-50 border border-yellow-200 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Add Section B Comment:
+                  </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCommentInput(prev => ({ 
+                      ...prev, 
+                      'section-B': !prev['section-B'] 
+                    }))}
+                    className="h-8 w-8 p-0"
+                    title="Add section comment"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                {showCommentInput['section-B'] && (
+                  <div className="space-y-2">
+                    <Textarea
+                      className="w-full border rounded px-3 py-2 text-sm resize-none"
+                      rows={3}
+                      placeholder="Add your comment about Section B..."
+                      value={newComments['section-B'] || ''}
+                      onChange={(e) => setNewComments(prev => ({ 
+                        ...prev, 
+                        'section-B': e.target.value 
+                      }))}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => addSectionComment('B', newComments['section-B'] || '')}
+                        disabled={!newComments['section-B']?.trim()}
+                      >
+                        Add Comment
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowCommentInput(prev => ({ ...prev, 'section-B': false }))
+                          setNewComments(prev => ({ ...prev, 'section-B': '' }))
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Display existing section comments */}
+                {existingComments['section-B'] && existingComments['section-B'].length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <h4 className="text-sm font-medium text-gray-700">Section B Comments:</h4>
+                    {existingComments['section-B'].map((comment, idx) => (
+                      <div key={idx} className="bg-white p-2 rounded border text-sm">
+                        <div className="font-medium text-gray-900">{comment.author_role}:</div>
+                        <div className="text-gray-700">{comment.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
             {/* Metadata */}
             <div className="flex justify-between items-center py-2 px-4 bg-white border-b border-gray-300">
               <span className="text-sm text-gray-700">Effective from: 28 October 2020</span>
@@ -873,16 +1382,102 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                       </thead>
                       <tbody>
                         {sectionBEntries.map((e, i) => (
-                          <tr key={i} className="border-b border-gray-300 hover:bg-gray-50">
-                            <td className="border border-gray-300 p-2">{e.date_of_activity || e.activity_date || ''}</td>
-                            <td className="border border-gray-300 p-2">{e.activity_title || e.activity_type || e.title || '—'}</td>
-                            <td className="border border-gray-300 p-2">{e.active_pd || 'No'}</td>
-                            <td className="border border-gray-300 p-2">{e.activity_details || e.presenter || ''}</td>
-                            <td className="border border-gray-300 p-2">{e.core_competency_areas || ''}</td>
-                            <td className="border border-gray-300 p-2">{e.specific_topics || e.notes || e.summary || ''}</td>
-                            <td className="border border-gray-300 p-2">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
-                            <td className="border border-gray-300 p-2">{e.supervisor_initials || ''}</td>
-                          </tr>
+                          <>
+                            <tr 
+                              key={i} 
+                              className={`border-b border-gray-300 hover:bg-gray-50 ${logbook.status === 'rejected' ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                              onClick={() => logbook.status === 'rejected' && handleSectionBEntryClick(e)}
+                              title={logbook.status === 'rejected' ? 'Click to edit this entry' : ''}
+                            >
+                              <td className="border border-gray-300 p-2 flex items-center justify-between">
+                                <span>{e.date_of_activity || e.activity_date || ''}</span>
+                                {logbook.status === 'rejected' && (
+                                  <Edit3 className="h-4 w-4 text-blue-600 hover:text-blue-800" />
+                                )}
+                              </td>
+                              <td className="border border-gray-300 p-2">{e.activity_title || e.activity_type || e.title || '—'}</td>
+                              <td className="border border-gray-300 p-2">{e.active_pd || 'No'}</td>
+                              <td className="border border-gray-300 p-2">{e.activity_details || e.presenter || ''}</td>
+                              <td className="border border-gray-300 p-2">{e.core_competency_areas || ''}</td>
+                              <td className="border border-gray-300 p-2">{e.specific_topics || e.notes || e.summary || ''}</td>
+                              <td className="border border-gray-300 p-2">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
+                              <td className="border border-gray-300 p-2">{e.supervisor_initials || ''}</td>
+                            </tr>
+                            
+                            {/* Comment section for rejected logbooks - Section B entries */}
+                            {canInlineEdit && (
+                              <tr>
+                                <td colSpan={8} className="border border-gray-300 p-3 bg-yellow-50">
+                                  <div className="ml-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-medium text-gray-700">
+                                        Add Comment for Entry #{e.id}:
+                                      </label>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowCommentInput(prev => ({ 
+                                          ...prev, 
+                                          [`B-${e.id}`]: !prev[`B-${e.id}`] 
+                                        }))}
+                                        className="h-8 w-8 p-0"
+                                        title="Add comment"
+                                      >
+                                        <Plus className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                    
+                                    {showCommentInput[`B-${e.id}`] && (
+                                      <div className="space-y-2">
+                                        <Textarea
+                                          className="w-full border rounded px-3 py-2 text-sm resize-none"
+                                          rows={3}
+                                          placeholder="Add your response to supervisor feedback..."
+                                          value={newComments[`B-${e.id}`] || ''}
+                                          onChange={(event) => setNewComments(prev => ({ 
+                                            ...prev, 
+                                            [`B-${e.id}`]: event.target.value 
+                                          }))}
+                                        />
+                                        <div className="flex gap-2">
+                                          <Button
+                                            size="sm"
+                                            onClick={() => addEntryComment(e.id, 'B', newComments[`B-${e.id}`] || '')}
+                                            disabled={!newComments[`B-${e.id}`]?.trim()}
+                                          >
+                                            Add Comment
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                              setShowCommentInput(prev => ({ ...prev, [`B-${e.id}`]: false }))
+                                              setNewComments(prev => ({ ...prev, [`B-${e.id}`]: '' }))
+                                            }}
+                                          >
+                                            Cancel
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Display existing comments */}
+                                    {existingComments[`B-${e.id}`] && existingComments[`B-${e.id}`].length > 0 && (
+                                      <div className="mt-3 space-y-2">
+                                        <h4 className="text-sm font-medium text-gray-700">Comments:</h4>
+                                        {existingComments[`B-${e.id}`].map((comment, idx) => (
+                                          <div key={idx} className="bg-white p-2 rounded border text-sm">
+                                            <div className="font-medium text-gray-900">{comment.author_role}:</div>
+                                            <div className="text-gray-700">{comment.message}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
                         ))}
                         {sectionBEntries.length === 0 && (
                           <tr>
@@ -960,6 +1555,76 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               SECTION C: Record of supervision
             </div>
             
+            {/* Section C Comments for rejected logbooks */}
+            {logbook.status === 'rejected' && (
+              <div className="bg-yellow-50 border border-yellow-200 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Add Section C Comment:
+                  </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCommentInput(prev => ({ 
+                      ...prev, 
+                      'section-C': !prev['section-C'] 
+                    }))}
+                    className="h-8 w-8 p-0"
+                    title="Add section comment"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                {showCommentInput['section-C'] && (
+                  <div className="space-y-2">
+                    <Textarea
+                      className="w-full border rounded px-3 py-2 text-sm resize-none"
+                      rows={3}
+                      placeholder="Add your comment about Section C..."
+                      value={newComments['section-C'] || ''}
+                      onChange={(e) => setNewComments(prev => ({ 
+                        ...prev, 
+                        'section-C': e.target.value 
+                      }))}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => addSectionComment('C', newComments['section-C'] || '')}
+                        disabled={!newComments['section-C']?.trim()}
+                      >
+                        Add Comment
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowCommentInput(prev => ({ ...prev, 'section-C': false }))
+                          setNewComments(prev => ({ ...prev, 'section-C': '' }))
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Display existing section comments */}
+                {existingComments['section-C'] && existingComments['section-C'].length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <h4 className="text-sm font-medium text-gray-700">Section C Comments:</h4>
+                    {existingComments['section-C'].map((comment, idx) => (
+                      <div key={idx} className="bg-white p-2 rounded border text-sm">
+                        <div className="font-medium text-gray-900">{comment.author_role}:</div>
+                        <div className="text-gray-700">{comment.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
             {/* Introduction Text */}
             <div className="bg-white p-4 text-sm">
               <p>
@@ -1015,15 +1680,101 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                       </thead>
                       <tbody>
                         {sectionCEntries.map((e, i) => (
-                          <tr key={i} className="border-b border-gray-300 hover:bg-gray-50">
-                            <td className="border border-gray-300 p-2">{e.date_of_supervision || e.date || ''}</td>
-                            <td className="border border-gray-300 p-2">{e.supervisor_name || e.supervisor || '—'}</td>
-                            <td className="border border-gray-300 p-2">{e.principal_or_secondary || ''}</td>
-                            <td className="border border-gray-300 p-2">{e.individual_group_other || e.supervision_type || ''}</td>
-                            <td className="border border-gray-300 p-2">{e.summary || ''}</td>
-                            <td className="border border-gray-300 p-2">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
-                            <td className="border border-gray-300 p-2">{e.supervisor_initials || ''}</td>
-                          </tr>
+                          <>
+                            <tr 
+                              key={i} 
+                              className={`border-b border-gray-300 hover:bg-gray-50 ${logbook.status === 'rejected' ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                              onClick={() => logbook.status === 'rejected' && handleSectionCEntryClick(e)}
+                              title={logbook.status === 'rejected' ? 'Click to edit this entry' : ''}
+                            >
+                              <td className="border border-gray-300 p-2 flex items-center justify-between">
+                                <span>{e.date_of_supervision || e.date || ''}</span>
+                                {logbook.status === 'rejected' && (
+                                  <Edit3 className="h-4 w-4 text-blue-600 hover:text-blue-800" />
+                                )}
+                              </td>
+                              <td className="border border-gray-300 p-2">{e.supervisor_name || e.supervisor || '—'}</td>
+                              <td className="border border-gray-300 p-2">{e.principal_or_secondary || ''}</td>
+                              <td className="border border-gray-300 p-2">{e.individual_group_other || e.supervision_type || ''}</td>
+                              <td className="border border-gray-300 p-2">{e.summary || ''}</td>
+                              <td className="border border-gray-300 p-2">{formatDuration(Number(e.duration_minutes || e.duration || 0))}</td>
+                              <td className="border border-gray-300 p-2">{e.supervisor_initials || ''}</td>
+                            </tr>
+                            
+                            {/* Comment section for rejected logbooks - Section C entries */}
+                            {canInlineEdit && (
+                              <tr>
+                                <td colSpan={7} className="border border-gray-300 p-3 bg-yellow-50">
+                                  <div className="ml-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-medium text-gray-700">
+                                        Add Comment for Entry #{e.id}:
+                                      </label>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowCommentInput(prev => ({ 
+                                          ...prev, 
+                                          [`C-${e.id}`]: !prev[`C-${e.id}`] 
+                                        }))}
+                                        className="h-8 w-8 p-0"
+                                        title="Add comment"
+                                      >
+                                        <Plus className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                    
+                                    {showCommentInput[`C-${e.id}`] && (
+                                      <div className="space-y-2">
+                                        <Textarea
+                                          className="w-full border rounded px-3 py-2 text-sm resize-none"
+                                          rows={3}
+                                          placeholder="Add your response to supervisor feedback..."
+                                          value={newComments[`C-${e.id}`] || ''}
+                                          onChange={(event) => setNewComments(prev => ({ 
+                                            ...prev, 
+                                            [`C-${e.id}`]: event.target.value 
+                                          }))}
+                                        />
+                                        <div className="flex gap-2">
+                                          <Button
+                                            size="sm"
+                                            onClick={() => addEntryComment(e.id, 'C', newComments[`C-${e.id}`] || '')}
+                                            disabled={!newComments[`C-${e.id}`]?.trim()}
+                                          >
+                                            Add Comment
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                              setShowCommentInput(prev => ({ ...prev, [`C-${e.id}`]: false }))
+                                              setNewComments(prev => ({ ...prev, [`C-${e.id}`]: '' }))
+                                            }}
+                                          >
+                                            Cancel
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Display existing comments */}
+                                    {existingComments[`C-${e.id}`] && existingComments[`C-${e.id}`].length > 0 && (
+                                      <div className="mt-3 space-y-2">
+                                        <h4 className="text-sm font-medium text-gray-700">Comments:</h4>
+                                        {existingComments[`C-${e.id}`].map((comment, idx) => (
+                                          <div key={idx} className="bg-white p-2 rounded border text-sm">
+                                            <div className="font-medium text-gray-900">{comment.author_role}:</div>
+                                            <div className="text-gray-700">{comment.message}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
                         ))}
                         {sectionCEntries.length === 0 && (
                           <tr>
@@ -1221,6 +1972,187 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Section B Edit Modal */}
+      {showBEditModal && editingBEntry && (
+        <Dialog open={showBEditModal} onOpenChange={setShowBEditModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit3 className="h-5 w-5" />
+                Edit Section B Entry
+              </DialogTitle>
+              <DialogDescription>
+                Edit this professional development activity entry
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date of Activity
+                  </label>
+                  <input
+                    type="date"
+                    value={editingBEntry.date_of_activity || editingBEntry.activity_date || ''}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Activity Title
+                  </label>
+                  <input
+                    type="text"
+                    value={editingBEntry.activity_title || editingBEntry.activity_type || editingBEntry.title || ''}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    readOnly
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Duration
+                </label>
+                <input
+                  type="text"
+                  value={formatDuration(Number(editingBEntry.duration_minutes || editingBEntry.duration || 0))}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  readOnly
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes/Summary
+                </label>
+                <textarea
+                  value={editingBEntry.notes || editingBEntry.summary || ''}
+                  className="w-full p-2 border border-gray-300 rounded-md h-24"
+                  readOnly
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowBEditModal(false)}>
+                Close
+              </Button>
+              <Button 
+                onClick={() => {
+                  // Navigate to Section B page with edit mode
+                  navigate('/section-b', { state: { returnTo: location.pathname + location.search } })
+                  setShowBEditModal(false)
+                }}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Edit3 className="h-4 w-4 mr-2" />
+                Edit in Section B
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Section C Edit Modal */}
+      {showCEditModal && editingCEntry && (
+        <Dialog open={showCEditModal} onOpenChange={setShowCEditModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit3 className="h-5 w-5" />
+                Edit Section C Entry
+              </DialogTitle>
+              <DialogDescription>
+                Edit this supervision entry
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date of Supervision
+                  </label>
+                  <input
+                    type="date"
+                    value={editingCEntry.date_of_supervision || editingCEntry.date || ''}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Supervisor Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editingCEntry.supervisor_name || editingCEntry.supervisor || ''}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    readOnly
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Supervision Type
+                  </label>
+                  <input
+                    type="text"
+                    value={editingCEntry.supervision_type || editingCEntry.individual_group_other || ''}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Duration
+                  </label>
+                  <input
+                    type="text"
+                    value={formatDuration(Number(editingCEntry.duration_minutes || editingCEntry.duration || 0))}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    readOnly
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Summary
+                </label>
+                <textarea
+                  value={editingCEntry.summary || ''}
+                  className="w-full p-2 border border-gray-300 rounded-md h-24"
+                  readOnly
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowCEditModal(false)}>
+                Close
+              </Button>
+              <Button 
+                onClick={() => {
+                  // Navigate to Section C page with edit mode
+                  navigate('/section-c', { state: { returnTo: location.pathname + location.search } })
+                  setShowCEditModal(false)
+                }}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Edit3 className="h-4 w-4 mr-2" />
+                Edit in Section C
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Error Overlay with 3-part system */}
       <ErrorOverlay {...errorOverlay} />

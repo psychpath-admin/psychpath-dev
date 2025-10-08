@@ -20,7 +20,8 @@ import {
   Filter,
   Search,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Settings
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
@@ -88,9 +89,19 @@ export default function LogbookDashboard() {
   const [showCreationModal, setShowCreationModal] = useState(false)
   const [previewLogbook, setPreviewLogbook] = useState<Logbook | null>(null)
   const [structuredLogbook, setStructuredLogbook] = useState<Logbook | null>(null)
+  const [showTooltips, setShowTooltips] = useState(true)
   
   // New state for dashboard functionality
   const [metrics, setMetrics] = useState<LogbookMetrics | null>(null)
+  const [statusCounts, setStatusCounts] = useState({
+    draft: 0,
+    submitted: 0,
+    under_review: 0,
+    returned_for_edits: 0,
+    approved: 0,
+    rejected: 0,
+    locked: 0
+  })
   
   // Persistent filters - defaults to oldest first for provisional users
   const [filters, setFilters, clearFilters] = useFilterPersistence<LogbookFilters>('logbook-dashboard', {
@@ -118,6 +129,7 @@ export default function LogbookDashboard() {
         const data = await response.json()
         setLogbooks(data)
         calculateMetrics(data)
+        calculateStatusCounts(data)
       } else {
         toast.error('Failed to fetch logbooks')
       }
@@ -128,6 +140,15 @@ export default function LogbookDashboard() {
       setLoading(false)
     }
   }
+
+  // Auto-refresh functionality to catch supervisor actions
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchLogbooks()
+    }, 30000) // Refresh every 30 seconds
+
+    return () => clearInterval(interval)
+  }, [])
 
   const calculateMetrics = (logbookData: Logbook[]) => {
     const now = new Date()
@@ -174,6 +195,27 @@ export default function LogbookDashboard() {
       nextDueDate,
       internshipWeeksEstimate: 52 // Default estimate, could be from user profile
     })
+  }
+
+  const calculateStatusCounts = (logbookData: Logbook[]) => {
+    const counts = {
+      draft: 0,
+      submitted: 0,
+      under_review: 0,
+      returned_for_edits: 0,
+      approved: 0,
+      rejected: 0,
+      locked: 0
+    }
+
+    logbookData.forEach(logbook => {
+      counts[logbook.status as keyof typeof counts]++
+      if (logbook.is_locked) {
+        counts.locked++
+      }
+    })
+
+    setStatusCounts(counts)
   }
 
   const getStatusBadge = (status: string) => {
@@ -313,6 +355,131 @@ export default function LogbookDashboard() {
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* Status Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Tooltip Toggle */}
+        <Card className="lg:col-span-4">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <BarChart3 className="h-5 w-5" />
+                Logbook Status Summary
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTooltips(!showTooltips)}
+                className="flex items-center gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                {showTooltips ? 'Hide' : 'Show'} Tooltips
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+              {/* Draft */}
+              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-gray-600">{statusCounts.draft}</div>
+                  <div className="text-sm text-gray-500">Draft</div>
+                  {showTooltips && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Logbooks in draft status - not yet submitted for review
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Submitted */}
+              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-yellow-600">{statusCounts.submitted}</div>
+                  <div className="text-sm text-gray-500">Submitted</div>
+                  {showTooltips && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Logbooks submitted and waiting for supervisor review
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Under Review */}
+              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-blue-600">{statusCounts.under_review}</div>
+                  <div className="text-sm text-gray-500">Under Review</div>
+                  {showTooltips && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Logbooks currently being reviewed by supervisor
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Returned for Edits */}
+              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-orange-600">{statusCounts.returned_for_edits}</div>
+                  <div className="text-sm text-gray-500">Returned</div>
+                  {showTooltips && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Logbooks returned for edits with supervisor feedback
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Rejected */}
+              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-red-600">{statusCounts.rejected}</div>
+                  <div className="text-sm text-gray-500">Rejected</div>
+                  {showTooltips && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Logbooks rejected by supervisor - requires resubmission
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Approved */}
+              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-green-600">{statusCounts.approved}</div>
+                  <div className="text-sm text-gray-500">Approved</div>
+                  {showTooltips && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Logbooks approved by supervisor - completed
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Locked */}
+              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-purple-600">{statusCounts.locked}</div>
+                  <div className="text-sm text-gray-500">Locked</div>
+                  {showTooltips && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Logbook entries locked from editing
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* KPI Cards */}
@@ -844,6 +1011,10 @@ export default function LogbookDashboard() {
           onRegenerate={() => {
             setStructuredLogbook(null)
             fetchLogbooks() // Refresh the logbook list
+          }}
+          onResubmit={() => {
+            setStructuredLogbook(null)
+            fetchLogbooks() // Refresh the logbook list after resubmit
           }}
           onNavigateToHelp={(errorDetails) => {
             console.log('LogbookDashboard onNavigateToHelp called', errorDetails)

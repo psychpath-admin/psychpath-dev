@@ -245,8 +245,8 @@ class WeeklyLogbook(models.Model):
         if not self.is_complete():
             raise ValueError("Logbook must be complete before submission")
         
-        if self.status not in ['draft', 'ready', 'returned_for_edits']:
-            raise ValueError("Only draft, ready, or returned_for_edits logbooks can be submitted")
+        if self.status not in ['draft', 'ready', 'returned_for_edits', 'rejected']:
+            raise ValueError("Only draft, ready, returned_for_edits, or rejected logbooks can be submitted")
         
         self.status = 'submitted'
         self.submitted_at = timezone.now()
@@ -451,8 +451,8 @@ class WeeklyLogbook(models.Model):
     
     def reject_with_reason(self, supervisor, reason):
         """Reject logbook with detailed reason"""
-        if self.status != 'under_review':
-            raise ValueError("Can only reject logbooks under review")
+        if self.status not in ['under_review', 'submitted', 'draft']:
+            raise ValueError("Can only reject logbooks under review, submitted, or draft")
         
         self.status = 'rejected'
         self.rejected_at = timezone.now()

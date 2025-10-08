@@ -1101,8 +1101,8 @@ def logbook_reject(request, logbook_id):
     except WeeklyLogbook.DoesNotExist:
         return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
     
-    if logbook.status != 'submitted':
-        return Response({'error': 'Can only reject submitted logbooks'}, status=status.HTTP_400_BAD_REQUEST)
+    if logbook.status not in ['submitted', 'under_review', 'draft']:
+        return Response({'error': 'Can only reject submitted, under review, or draft logbooks'}, status=status.HTTP_400_BAD_REQUEST)
     
     comments = request.data.get('comments', '')
     if not comments:
@@ -1111,8 +1111,17 @@ def logbook_reject(request, logbook_id):
     logbook.status = 'rejected'
     logbook.reviewed_at = timezone.now()
     logbook.reviewed_by = request.user
-    logbook.supervisor_comments = comments
+    logbook.review_comments = comments
     logbook.save()
+    
+    # Unlock entries for editing
+    from section_a.models import SectionAEntry
+    from section_b.models import ProfessionalDevelopmentEntry
+    from section_c.models import SupervisionEntry
+    
+    SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=False)
+    ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=False)
+    SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=False)
     
     # Create audit log entry
     LogbookAuditLog.objects.create(
@@ -1121,6 +1130,22 @@ def logbook_reject(request, logbook_id):
         user=request.user,
         new_status='rejected',
         comments=comments
+    )
+    
+    # Create a comment thread for rejection feedback
+    from .models import CommentThread, CommentMessage
+    thread = CommentThread.objects.create(
+        logbook=logbook,
+        thread_type='general',
+        entry_id='rejection_feedback'
+    )
+    
+    # Add the supervisor's rejection comment as the first message
+    CommentMessage.objects.create(
+        thread=thread,
+        author=request.user,
+        author_role='supervisor',
+        message=comments
     )
     
     return Response({'message': 'Logbook rejected successfully'})
@@ -2164,7 +2189,7 @@ def logbook_review(request, logbook_id):
     except WeeklyLogbook.DoesNotExist:
         return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    if logbook.status != 'submitted':
+    if logbook.status not in ['submitted', 'under_review', 'draft']:
         return Response({'error': 'Logbook is not awaiting review'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Persist per-entry supervisor comments
