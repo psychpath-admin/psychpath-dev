@@ -60,6 +60,13 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
     return weekStart.toISOString().split('T')[0]
   }
 
+  // If launched from +A on a specific logbook, default the session date to that week
+  useEffect(() => {
+    if (logbookWeek) {
+      setFormData(prev => ({ ...prev, session_date: logbookWeek }))
+    }
+  }, [logbookWeek])
+
   // Load existing entry data when editing
   useEffect(() => {
     if (entryId) {

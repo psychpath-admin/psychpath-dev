@@ -1427,13 +1427,18 @@ def logbook_section_a_entries(request, logbook_id):
             return Response({'error': 'Can only view logbooks from your supervisees'}, status=status.HTTP_403_FORBIDDEN)
     
     # Fetch Section A entries
+    # IMPORTANT: Do not rely solely on stored IDs; compute by week so newly-added
+    # entries for this trainee/week always appear even if IDs weren’t synced.
     from section_a.models import SectionAEntry
-    
-    entry_ids = logbook.section_a_entry_ids
-    if not entry_ids:
-        return Response([])
-    
-    entries = SectionAEntry.objects.filter(id__in=entry_ids).order_by('session_date', 'created_at')
+
+    # Include any Section A entries whose session_date falls within the
+    # logbook's week window to capture records created with an incorrect
+    # week_starting value in the past.
+    entries = SectionAEntry.objects.filter(
+        trainee=logbook.trainee,
+        session_date__gte=logbook.week_start_date,
+        session_date__lte=logbook.week_end_date
+    ).order_by('session_date', 'created_at')
     
     # Serialize entries
     from section_a.serializers import SectionAEntrySerializer
@@ -1473,11 +1478,13 @@ def logbook_section_b_entries(request, logbook_id):
     from section_b.models import ProfessionalDevelopmentEntry
     from section_b.serializers import ProfessionalDevelopmentEntrySerializer
 
-    entry_ids = logbook.section_b_entry_ids
-    if not entry_ids:
-        return Response([])
-
-    entries = ProfessionalDevelopmentEntry.objects.filter(id__in=entry_ids).order_by('date_of_activity', 'created_at')
+    # Return all PD entries for this trainee whose date falls within the
+    # logbook's week window to ensure newly added records are included
+    entries = ProfessionalDevelopmentEntry.objects.filter(
+        trainee=logbook.trainee,
+        date_of_activity__gte=logbook.week_start_date,
+        date_of_activity__lte=logbook.week_end_date
+    ).order_by('date_of_activity', 'created_at')
     serializer = ProfessionalDevelopmentEntrySerializer(entries, many=True)
     return Response(serializer.data)
 
@@ -1513,11 +1520,12 @@ def logbook_section_c_entries(request, logbook_id):
     from section_c.models import SupervisionEntry
     from section_c.serializers import SupervisionEntrySerializer
 
-    entry_ids = logbook.section_c_entry_ids
-    if not entry_ids:
-        return Response([])
-
-    entries = SupervisionEntry.objects.filter(id__in=entry_ids).order_by('date_of_supervision', 'created_at')
+    # Similarly, include all supervision entries for that week
+    entries = SupervisionEntry.objects.filter(
+        trainee=logbook.trainee.profile,
+        date_of_supervision__gte=logbook.week_start_date,
+        date_of_supervision__lte=logbook.week_end_date
+    ).order_by('date_of_supervision', 'created_at')
     serializer = SupervisionEntrySerializer(entries, many=True)
     return Response(serializer.data)
 

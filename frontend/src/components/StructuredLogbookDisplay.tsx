@@ -1385,13 +1385,13 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                           <>
                             <tr 
                               key={i} 
-                              className={`border-b border-gray-300 hover:bg-gray-50 ${logbook.status === 'rejected' ? 'cursor-pointer hover:bg-blue-50' : ''}`}
-                              onClick={() => logbook.status === 'rejected' && handleSectionBEntryClick(e)}
-                              title={logbook.status === 'rejected' ? 'Click to edit this entry' : ''}
+                              className={`border-b border-gray-300 hover:bg-gray-50 ${canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                              onClick={() => canInlineEdit && handleSectionBEntryClick(e)}
+                              title={canInlineEdit ? 'Click to edit this entry' : ''}
                             >
                               <td className="border border-gray-300 p-2 flex items-center justify-between">
                                 <span>{e.date_of_activity || e.activity_date || ''}</span>
-                                {logbook.status === 'rejected' && (
+                                {canInlineEdit && (
                                   <Edit3 className="h-4 w-4 text-blue-600 hover:text-blue-800" />
                                 )}
                               </td>
@@ -1683,13 +1683,13 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                           <>
                             <tr 
                               key={i} 
-                              className={`border-b border-gray-300 hover:bg-gray-50 ${logbook.status === 'rejected' ? 'cursor-pointer hover:bg-blue-50' : ''}`}
-                              onClick={() => logbook.status === 'rejected' && handleSectionCEntryClick(e)}
-                              title={logbook.status === 'rejected' ? 'Click to edit this entry' : ''}
+                              className={`border-b border-gray-300 hover:bg-gray-50 ${canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                              onClick={() => canInlineEdit && handleSectionCEntryClick(e)}
+                              title={canInlineEdit ? 'Click to edit this entry' : ''}
                             >
                               <td className="border border-gray-300 p-2 flex items-center justify-between">
                                 <span>{e.date_of_supervision || e.date || ''}</span>
-                                {logbook.status === 'rejected' && (
+                                {canInlineEdit && (
                                   <Edit3 className="h-4 w-4 text-blue-600 hover:text-blue-800" />
                                 )}
                               </td>
@@ -2044,7 +2044,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               <Button 
                 onClick={() => {
                   // Navigate to Section B page with edit mode
-                  navigate('/section-b', { state: { returnTo: location.pathname + location.search } })
+                  navigate('/section-b', { state: { returnTo: '/logbook' } })
                   setShowBEditModal(false)
                 }}
                 className="bg-blue-600 hover:bg-blue-700"
@@ -2141,7 +2141,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               <Button 
                 onClick={() => {
                   // Navigate to Section C page with edit mode
-                  navigate('/section-c', { state: { returnTo: location.pathname + location.search } })
+                  navigate('/section-c', { state: { returnTo: '/logbook' } })
                   setShowCEditModal(false)
                 }}
                 className="bg-blue-600 hover:bg-blue-700"

@@ -44,6 +44,17 @@ const SectionC: React.FC = () => {
 
   // Filter states (matching Section A/B)
   const [showFilters, setShowFilters] = useState(false)
+  // Open create form when navigated from dashboard (+C)
+  useEffect(() => {
+    const st: any = location.state
+    if (st?.openCreate) {
+      setShowForm(true)
+      if (st.logbookWeek) {
+        setFormData(prev => ({ ...prev, date_of_supervision: st.logbookWeek }))
+      }
+      navigate(location.pathname, { replace: true, state: { returnTo: st.returnTo, logbookWeek: st.logbookWeek } })
+    }
+  }, [location.state])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [supervisorType, setSupervisorType] = useState('all')

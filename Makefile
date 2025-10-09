@@ -188,8 +188,8 @@ eod-complete:
 
 .PHONY: checkpoint
 checkpoint:
-	@echo "Creating detailed checkpoint..."
-	@./scripts/checkpoint_system.sh "$(MSG)"
+	@echo "Creating daily checkpoint..."
+	@./scripts/daily_checkpoint.sh "$(MSG)"
 
 .PHONY: backup
 backup:

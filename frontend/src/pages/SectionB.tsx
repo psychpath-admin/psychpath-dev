@@ -43,6 +43,21 @@ const SectionB: React.FC = () => {
   const [showForm, setShowForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState<PDEntry | null>(null)
 
+  // Open create form when navigated from dashboard (+B)
+  useEffect(() => {
+    const st: any = location.state
+    if (st?.openCreate) {
+      setShowForm(true)
+      // Pre-fill date to the selected logbook week if provided
+      if (st.logbookWeek) {
+        setFormData(prev => ({ ...prev, date_of_activity: st.logbookWeek }))
+      }
+      // Clear only the openCreate flag but preserve returnTo/logbookWeek so we can
+      // navigate back after save and keep date consistent
+      navigate(location.pathname, { replace: true, state: { returnTo: st.returnTo, logbookWeek: st.logbookWeek } })
+    }
+  }, [location.state])
+
   // Persistent filter states (matching Section A)
   const [showFilters, setShowFilters] = useState(false)
   const [dateFrom, setDateFrom] = useSimpleFilterPersistence<string>('section-b-date-from', '')
@@ -1903,11 +1918,6 @@ const SectionB: React.FC = () => {
               <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 mt-6 px-6 pb-6">
                 <Button 
                   variant="outline" 
-                  onClick={() => {
-                    setShowForm(false)
-                    const returnTo = (location.state as any)?.returnTo as string | undefined
-                    if (returnTo) navigate(returnTo)
-                  }}
                   onClick={() => {
                     setShowForm(false)
                     const returnTo = (location.state as any)?.returnTo as string | undefined

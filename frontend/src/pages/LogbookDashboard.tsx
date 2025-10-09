@@ -156,7 +156,7 @@ export default function LogbookDashboard() {
     }
   }, [])
 
-  const fetchLogbooks = async (isRefresh = false) => {
+  const fetchLogbooks = async (isRefresh = false, showToast = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true)
@@ -169,13 +169,16 @@ export default function LogbookDashboard() {
       if (response.ok) {
         const data = await response.json()
         console.log('Logbooks fetched:', data.length, 'logbooks')
-        setLogbooks(data)
+        // Avoid unnecessary rerenders: only update state if data changed
+        const dataString = JSON.stringify(data)
+        const currentString = JSON.stringify(logbooks)
+        if (dataString !== currentString) {
+          setLogbooks(data)
+        }
         calculateMetrics(data)
         calculateStatusCounts(data)
-        
-        if (isRefresh) {
-          toast.success('Logbooks updated')
-        }
+        // Only show toast for explicit manual refreshes
+        if (showToast) toast.success('Logbooks updated')
       } else {
         console.error('Failed to fetch logbooks:', response.status)
         toast.error('Failed to fetch logbooks')
@@ -192,8 +195,11 @@ export default function LogbookDashboard() {
   // Auto-refresh functionality to catch supervisor actions
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchLogbooks(true) // Use smooth refresh for auto-refresh
-    }, 30000) // Refresh every 30 seconds
+      // Pause auto-refresh when a detailed view/modal is open
+      if (!structuredLogbook) {
+        fetchLogbooks(true, false) // Silent auto-refresh
+      }
+    }, 10 * 60 * 1000) // Refresh every 10 minutes
 
     return () => clearInterval(interval)
   }, [])
@@ -297,7 +303,7 @@ export default function LogbookDashboard() {
   }
 
   const handleLogbookCreated = () => {
-    fetchLogbooks(true)
+    fetchLogbooks(true, false)
     setShowCreationModal(false)
   }
 
@@ -309,13 +315,19 @@ export default function LogbookDashboard() {
   // Helper function to handle adding new records
   const handleAddNewRecord = (section: 'a' | 'b' | 'c', logbook: Logbook) => {
     const returnTo = '/logbook'
-    navigate(`/section-${section}/create`, { 
-      state: { 
-        returnTo,
-        logbookWeek: logbook.week_start_date,
-        logbookId: logbook.id
-      } 
-    })
+    const state = {
+      returnTo,
+      logbookWeek: logbook.week_start_date,
+      logbookId: logbook.id,
+      openCreate: true
+    }
+    if (section === 'a') {
+      navigate('/section-a/create', { state })
+    } else if (section === 'b') {
+      navigate('/section-b', { state })
+    } else {
+      navigate('/section-c', { state })
+    }
   }
 
 
@@ -852,7 +864,7 @@ export default function LogbookDashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => fetchLogbooks(true)}
+                onClick={() => fetchLogbooks(true, true)}
                 disabled={refreshing}
                 className="flex items-center gap-2"
                 title="Refresh logbooks"
