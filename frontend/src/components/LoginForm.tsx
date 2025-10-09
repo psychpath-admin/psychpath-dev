@@ -23,7 +23,24 @@ export default function LoginForm() {
         body: JSON.stringify({ username: email, password }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data?.detail || 'Login failed')
+      if (!res.ok) {
+        // Provide more specific error messages
+        if (res.status === 401) {
+          if (data?.detail?.includes('No active account found') || data?.detail?.includes('Invalid credentials')) {
+            throw new Error('Invalid email or password. Please check your credentials and try again.')
+          } else if (data?.detail?.includes('Unable to log in')) {
+            throw new Error('Account not found. Please check your email address or contact support.')
+          } else {
+            throw new Error('Invalid email or password. Please check your credentials and try again.')
+          }
+        } else if (res.status === 400) {
+          throw new Error('Please enter both email and password.')
+        } else if (res.status >= 500) {
+          throw new Error('Server error. Please try again later or contact support.')
+        } else {
+          throw new Error(data?.detail || 'Login failed. Please try again.')
+        }
+      }
       localStorage.setItem('accessToken', data.access)
       localStorage.setItem('refreshToken', data.refresh)
       setStatus(null)
@@ -37,12 +54,12 @@ export default function LoginForm() {
           const userData = await meRes.json()
           if (!userData.first_login_completed || !userData.profile_completed) {
             // First-time login or profile not completed - redirect to profile page
-            window.location.assign('/profile')
+            navigate('/profile')
             return
           }
           // For supervisors, also redirect to profile if they haven't seen the welcome overlay
           if (userData.role === 'SUPERVISOR' && !userData.supervisor_welcome_seen) {
-            window.location.assign('/profile')
+            navigate('/profile')
             return
           }
         }
@@ -51,7 +68,7 @@ export default function LoginForm() {
       }
       
       // Profile is completed or check failed - redirect to dashboard
-      window.location.assign('/')
+      navigate('/')
     } catch (err: any) {
       setStatus(err.message)
     } finally {
@@ -70,11 +87,15 @@ export default function LoginForm() {
         <label className="font-labels text-sm text-textLight">Password</label>
         <Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" type="password" autoComplete="current-password" />
       </div>
+      {status && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-3">
+          <span className="text-sm text-red-700 font-medium">{status}</span>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <Button type="submit" className="bg-primaryBlue text-white hover:opacity-90" disabled={submitting}>
           {submitting ? 'Logging in…' : 'Login'}
         </Button>
-        {status && <span className="text-sm text-textLight">{status}</span>}
       </div>
       <div className="text-right text-sm">
         <Link to="/forgot-password" className="text-primaryBlue hover:underline">Forgot password?</Link>

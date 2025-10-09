@@ -92,6 +92,7 @@ export default function LogbookDashboard() {
   const [previewLogbook, setPreviewLogbook] = useState<Logbook | null>(null)
   const [structuredLogbook, setStructuredLogbook] = useState<Logbook | null>(null)
   const [showTooltips, setShowTooltips] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   
   // New state for dashboard functionality
   const [metrics, setMetrics] = useState<LogbookMetrics | null>(null)
@@ -155,8 +156,14 @@ export default function LogbookDashboard() {
     }
   }, [])
 
-  const fetchLogbooks = async () => {
+  const fetchLogbooks = async (isRefresh = false) => {
     try {
+      if (isRefresh) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
+      
       console.log('Fetching logbooks...')
       const response = await apiFetch('/api/logbook/')
       if (response.ok) {
@@ -165,6 +172,10 @@ export default function LogbookDashboard() {
         setLogbooks(data)
         calculateMetrics(data)
         calculateStatusCounts(data)
+        
+        if (isRefresh) {
+          toast.success('Logbooks updated')
+        }
       } else {
         console.error('Failed to fetch logbooks:', response.status)
         toast.error('Failed to fetch logbooks')
@@ -174,13 +185,14 @@ export default function LogbookDashboard() {
       toast.error('Error fetching logbooks')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
   // Auto-refresh functionality to catch supervisor actions
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchLogbooks()
+      fetchLogbooks(true) // Use smooth refresh for auto-refresh
     }, 30000) // Refresh every 30 seconds
 
     return () => clearInterval(interval)
@@ -285,7 +297,7 @@ export default function LogbookDashboard() {
   }
 
   const handleLogbookCreated = () => {
-    fetchLogbooks()
+    fetchLogbooks(true)
     setShowCreationModal(false)
   }
 
@@ -840,12 +852,13 @@ export default function LogbookDashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={fetchLogbooks}
+                onClick={() => fetchLogbooks(true)}
+                disabled={refreshing}
                 className="flex items-center gap-2"
                 title="Refresh logbooks"
               >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Refreshing...' : 'Refresh'}
               </Button>
               <span className="text-sm text-gray-600">
                 Showing {paginatedLogbooks.length} of {filteredLogbooks.length} logbooks
@@ -1116,11 +1129,11 @@ export default function LogbookDashboard() {
           onClose={() => setStructuredLogbook(null)}
           onRegenerate={() => {
             setStructuredLogbook(null)
-            fetchLogbooks() // Refresh the logbook list
+            fetchLogbooks(true) // Refresh the logbook list
           }}
           onResubmit={() => {
             setStructuredLogbook(null)
-            fetchLogbooks() // Refresh the logbook list after resubmit
+            fetchLogbooks(true) // Refresh the logbook list after resubmit
           }}
           onNavigateToHelp={(errorDetails) => {
             console.log('LogbookDashboard onNavigateToHelp called', errorDetails)
