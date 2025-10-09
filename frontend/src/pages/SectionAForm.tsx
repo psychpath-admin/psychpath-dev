@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ArrowLeft, Save } from 'lucide-react'
 import { createSectionAEntry, updateSectionAEntry, getSectionAEntry } from '@/lib/api'
@@ -33,6 +33,7 @@ const ACTIVITY_TYPES = [
 ]
 
 function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
+  const location = useLocation()
   const [formData, setFormData] = useState<EntryForm>({
     client_id: '',
     session_date: new Date().toISOString().split('T')[0],
@@ -46,6 +47,18 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const isEditing = !!entryId
+  
+  // Get logbook week information from location state
+  const logbookWeek = (location.state as any)?.logbookWeek as string | undefined
+  
+  // Helper function to calculate week starting date
+  const calculateWeekStarting = (dateString: string) => {
+    const date = new Date(dateString)
+    const dayOfWeek = date.getDay() // 0 for Sunday, 1 for Monday, etc.
+    const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1) // Adjust to Monday
+    const weekStart = new Date(date.setDate(diff))
+    return weekStart.toISOString().split('T')[0]
+  }
 
   // Load existing entry data when editing
   useEffect(() => {
@@ -100,7 +113,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
         simulated: formData.simulated,
         client_id: formData.client_id,
         session_date: formData.session_date,
-        week_starting: formData.session_date, // Calculate week starting from session date
+        week_starting: logbookWeek || calculateWeekStarting(formData.session_date), // Use logbook week if provided, otherwise calculate from session date
         place_of_practice: formData.place_of_practice,
         presenting_issues: formData.presenting_issues,
         session_activity_types: formData.session_activity_types,

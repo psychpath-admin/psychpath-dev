@@ -21,7 +21,9 @@ import {
   Search,
   ChevronDown,
   ChevronUp,
-  Settings
+  Settings,
+  Plus,
+  RefreshCw
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
@@ -104,7 +106,7 @@ export default function LogbookDashboard() {
   })
   
   // Persistent filters - defaults to oldest first for provisional users
-  const [filters, setFilters, clearFilters] = useFilterPersistence<LogbookFilters>('logbook-dashboard', {
+  const [filters, setFilters] = useFilterPersistence<LogbookFilters>('logbook-dashboard', {
     status: '',
     isLocked: false,
     regenerated: false,
@@ -122,15 +124,49 @@ export default function LogbookDashboard() {
     fetchLogbooks()
   }, [])
 
+  // Refresh when component becomes visible (e.g., returning from navigation)
+  useEffect(() => {
+    const handlePageShow = () => {
+      fetchLogbooks()
+    }
+
+    window.addEventListener('pageshow', handlePageShow)
+    return () => window.removeEventListener('pageshow', handlePageShow)
+  }, [])
+
+  // Refresh when returning to the page (e.g., from Section A/B/C forms)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchLogbooks()
+    }
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchLogbooks()
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
   const fetchLogbooks = async () => {
     try {
+      console.log('Fetching logbooks...')
       const response = await apiFetch('/api/logbook/')
       if (response.ok) {
         const data = await response.json()
+        console.log('Logbooks fetched:', data.length, 'logbooks')
         setLogbooks(data)
         calculateMetrics(data)
         calculateStatusCounts(data)
       } else {
+        console.error('Failed to fetch logbooks:', response.status)
         toast.error('Failed to fetch logbooks')
       }
     } catch (error) {
@@ -221,13 +257,19 @@ export default function LogbookDashboard() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'submitted':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Waiting for Review</Badge>
+        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs">Waiting for Review</Badge>
       case 'approved':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Approved</Badge>
+        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">Approved</Badge>
       case 'rejected':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Rejected</Badge>
+        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">Rejected</Badge>
+      case 'returned_for_edits':
+        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">Returned for Edits</Badge>
+      case 'under_review':
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">Under Review</Badge>
+      case 'draft':
+        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 text-xs">Draft</Badge>
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary" className="text-xs">{status}</Badge>
     }
   }
 
@@ -246,6 +288,24 @@ export default function LogbookDashboard() {
     fetchLogbooks()
     setShowCreationModal(false)
   }
+
+  // Helper function to check if logbook can be edited
+  const canEditLogbook = (logbook: Logbook) => {
+    return logbook.status === 'returned_for_edits' || logbook.status === 'rejected' || logbook.status === 'draft'
+  }
+
+  // Helper function to handle adding new records
+  const handleAddNewRecord = (section: 'a' | 'b' | 'c', logbook: Logbook) => {
+    const returnTo = '/logbook'
+    navigate(`/section-${section}/create`, { 
+      state: { 
+        returnTo,
+        logbookWeek: logbook.week_start_date,
+        logbookId: logbook.id
+      } 
+    })
+  }
+
 
 
 
@@ -777,6 +837,16 @@ export default function LogbookDashboard() {
               Logbook Status Overview
             </CardTitle>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchLogbooks}
+                className="flex items-center gap-2"
+                title="Refresh logbooks"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </Button>
               <span className="text-sm text-gray-600">
                 Showing {paginatedLogbooks.length} of {filteredLogbooks.length} logbooks
               </span>
@@ -810,12 +880,12 @@ export default function LogbookDashboard() {
               {/* Table Header */}
               <div className="grid grid-cols-12 gap-4 p-4 bg-gray-50 rounded-lg font-medium text-sm text-gray-700">
                 <div className="col-span-2">Week</div>
-                <div className="col-span-1">Status</div>
+                <div className="col-span-2">Status</div>
                 <div className="col-span-2">Submitted</div>
                 <div className="col-span-2">Reviewed</div>
                 <div className="col-span-1">Locked</div>
                 <div className="col-span-1">Regenerated</div>
-                <div className="col-span-2">Comments</div>
+                <div className="col-span-1">Comments</div>
                 <div className="col-span-1">Actions</div>
               </div>
 
@@ -829,8 +899,44 @@ export default function LogbookDashboard() {
                   </div>
 
                   {/* Status */}
-                  <div className="col-span-1">
-                    {getStatusBadge(logbook.status)}
+                  <div className="col-span-2">
+                    <div className="flex flex-col gap-2">
+                      {getStatusBadge(logbook.status)}
+                      {canEditLogbook(logbook) && (
+                        <div className="flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddNewRecord('a', logbook)}
+                            className="text-xs px-2 py-1 h-6"
+                            title="Add Section A Record"
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            A
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddNewRecord('b', logbook)}
+                            className="text-xs px-2 py-1 h-6"
+                            title="Add Section B Record"
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            B
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddNewRecord('c', logbook)}
+                            className="text-xs px-2 py-1 h-6"
+                            title="Add Section C Record"
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            C
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Submitted */}
@@ -876,7 +982,7 @@ export default function LogbookDashboard() {
                   </div>
 
                   {/* Comments */}
-                  <div className="col-span-2">
+                  <div className="col-span-1">
                     <div className="text-sm text-gray-900">
                       {logbook.supervisor_comments ? (
                         <div className="max-w-xs truncate" title={logbook.supervisor_comments}>
