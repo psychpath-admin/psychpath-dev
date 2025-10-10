@@ -194,7 +194,7 @@ def logbook_dashboard_list(request):
                         'is_overdue': logbook.is_overdue(),
                         'has_supervisor_comments': logbook.has_supervisor_comments(),
                         'is_editable': logbook.is_editable_by_user(request.user),
-                        'supervisor_comments': logbook.supervisor_comments,
+                        'supervisor_comments': logbook.review_comments,
                         'submitted_at': logbook.submitted_at,
                         'reviewed_at': logbook.reviewed_at,
                         'reviewed_by_name': f"{logbook.reviewed_by.profile.first_name} {logbook.reviewed_by.profile.last_name}".strip() if logbook.reviewed_by and hasattr(logbook.reviewed_by, 'profile') and logbook.reviewed_by.profile else None,
@@ -1653,67 +1653,75 @@ def entry_comment_thread(request, entry_id, section):
 @support_error_handler
 def create_unlock_request(request, logbook_id):
     """Create an unlock request for an approved logbook"""
-    if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
-        return Response({'error': 'Only provisionals and registrars can request unlocks'}, status=status.HTTP_403_FORBIDDEN)
-    
     try:
-        logbook = WeeklyLogbook.objects.get(id=logbook_id)
-    except WeeklyLogbook.DoesNotExist:
-        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-    # Check if user owns this logbook
-    if logbook.trainee != request.user:
-        return Response({'error': 'Can only request unlock for your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
-    
-    # Check if logbook is approved
-    if logbook.status != 'approved':
-        return Response({'error': 'Can only request unlock for approved logbooks'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Check if there's already a pending request
-    if UnlockRequest.objects.filter(logbook=logbook, status='pending').exists():
-        return Response({'error': 'There is already a pending unlock request for this logbook'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    reason = request.data.get('reason', '').strip()
-    if not reason:
-        return Response({'error': 'Reason is required'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    target_section = request.data.get('target_section', '').strip()
-    
-    # Role mapping for audit logs
-    role_mapping = {
-        'SUPERVISOR': 'supervisor',
-        'PROVISIONAL': 'provisional', 
-        'REGISTRAR': 'registrar',
-        'ORG_ADMIN': 'org_admin'
-    }
-    
-    with transaction.atomic():
-        # Create unlock request
-        unlock_request = UnlockRequest.objects.create(
-            logbook=logbook,
-            requester=request.user,
-            requester_role=role_mapping.get(request.user.profile.role, 'provisional'),
-            reason=reason,
-            target_section=target_section
-        )
+        if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
+            return Response({'error': 'Only provisionals and registrars can request unlocks'}, status=status.HTTP_403_FORBIDDEN)
         
-        # Log in audit trail
-        LogbookAuditLog.objects.create(
-            logbook=logbook,
-            action='unlock_requested',
-            user=request.user,
-            user_role=role_mapping.get(request.user.profile.role, 'provisional'),
-            comments=f"Unlock requested: {reason[:100]}...",
-            target_id=str(unlock_request.id),
-            metadata={
-                'reason': reason,
-                'target_section': target_section,
-                'expected_reviewer': unlock_request.get_reviewer()
-            }
-        )
+        try:
+            logbook = WeeklyLogbook.objects.get(id=logbook_id)
+        except WeeklyLogbook.DoesNotExist:
+            return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if user owns this logbook
+        if logbook.trainee != request.user:
+            return Response({'error': 'Can only request unlock for your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if logbook is approved
+        if logbook.status != 'approved':
+            return Response({'error': 'Can only request unlock for approved logbooks'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if there's already a pending request
+        if UnlockRequest.objects.filter(logbook=logbook, status='pending').exists():
+            return Response({'error': 'There is already a pending unlock request for this logbook'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        reason = request.data.get('reason', '').strip()
+        if not reason:
+            return Response({'error': 'Reason is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        target_section = request.data.get('target_section', '').strip()
+        
+        # Role mapping for audit logs
+        role_mapping = {
+            'SUPERVISOR': 'supervisor',
+            'PROVISIONAL': 'provisional', 
+            'REGISTRAR': 'registrar',
+            'ORG_ADMIN': 'org_admin'
+        }
+        
+        with transaction.atomic():
+            # Create unlock request
+            unlock_request = UnlockRequest.objects.create(
+                logbook=logbook,
+                requester=request.user,
+                requester_role=role_mapping.get(request.user.profile.role, 'provisional'),
+                reason=reason,
+                target_section=target_section
+            )
+            
+            # Log in audit trail
+            LogbookAuditLog.objects.create(
+                logbook=logbook,
+                action='unlock_requested',
+                user=request.user,
+                user_role=role_mapping.get(request.user.profile.role, 'provisional'),
+                comments=f"Unlock requested: {reason[:100]}...",
+                target_id=str(unlock_request.id),
+                metadata={
+                    'reason': reason,
+                    'target_section': target_section,
+                    'expected_reviewer': unlock_request.get_reviewer()
+                }
+            )
+        
+        serializer = UnlockRequestSerializer(unlock_request, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
     
-    serializer = UnlockRequestSerializer(unlock_request, context={'request': request})
-    return Response(serializer.data, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating unlock request: {str(e)}", exc_info=True)
+        return Response({'error': 'Internal server error occurred while creating unlock request'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])

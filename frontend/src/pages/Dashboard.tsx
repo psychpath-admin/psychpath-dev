@@ -13,6 +13,7 @@ import SupervisorDashboard from '@/pages/SupervisorDashboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/status'
 import { Button } from '@/components/ui/button'
 import { 
   Users, 
@@ -1650,49 +1651,37 @@ export default function Dashboard({ userRole }: DashboardProps) {
                 {logbookStatus.status_counts.new > 0 && (
                   <div className="flex items-center justify-between p-2 bg-blue-50 rounded">
                     <span className="text-blue-700">New</span>
-                    <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">
-                      {logbookStatus.status_counts.new}
-                    </Badge>
+                    <StatusBadge status="pending" label={`${logbookStatus.status_counts.new}`} size="sm" />
                   </div>
                 )}
                 {logbookStatus.status_counts.draft > 0 && (
                   <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
                     <span className="text-gray-700">Draft</span>
-                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
-                      {logbookStatus.status_counts.draft}
-                    </Badge>
+                    <StatusBadge status="draft" label={`${logbookStatus.status_counts.draft}`} size="sm" />
                   </div>
                 )}
                 {logbookStatus.status_counts.submitted > 0 && (
                   <div className="flex items-center justify-between p-2 bg-yellow-50 rounded">
                     <span className="text-yellow-700">Submitted</span>
-                    <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-200">
-                      {logbookStatus.status_counts.submitted}
-                    </Badge>
+                    <StatusBadge status="submitted" label={`${logbookStatus.status_counts.submitted}`} size="sm" />
                   </div>
                 )}
                 {logbookStatus.status_counts.approved > 0 && (
                   <div className="flex items-center justify-between p-2 bg-green-50 rounded">
                     <span className="text-green-700">Approved</span>
-                    <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200">
-                      {logbookStatus.status_counts.approved}
-                    </Badge>
+                    <StatusBadge status="approved" label={`${logbookStatus.status_counts.approved}`} size="sm" />
                   </div>
                 )}
                 {logbookStatus.status_counts.rejected > 0 && (
                   <div className="flex items-center justify-between p-2 bg-red-50 rounded">
                     <span className="text-red-700">Rejected</span>
-                    <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200">
-                      {logbookStatus.status_counts.rejected}
-                    </Badge>
+                    <StatusBadge status="rejected" label={`${logbookStatus.status_counts.rejected}`} size="sm" />
                   </div>
                 )}
                 {logbookStatus.status_counts.overdue > 0 && (
                   <div className="flex items-center justify-between p-2 bg-red-100 rounded">
                     <span className="text-red-800 font-medium">Overdue</span>
-                    <Badge variant="outline" className="bg-red-200 text-red-800 border-red-300 font-medium">
-                      {logbookStatus.status_counts.overdue}
-                    </Badge>
+                    <StatusBadge status="error" label={`${logbookStatus.status_counts.overdue}`} size="sm" />
                   </div>
                 )}
               </div>

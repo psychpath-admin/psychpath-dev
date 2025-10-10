@@ -30,6 +30,8 @@ import { apiFetch } from '@/lib/api'
 import LogbookCreationModal from '@/components/LogbookCreationModal'
 import LogbookPreview from '@/components/LogbookPreview'
 import StructuredLogbookDisplay from '@/components/StructuredLogbookDisplay'
+import UnlockRequestModal from '@/components/UnlockRequestModal'
+import { StatusBadge } from '@/components/status'
 import { useFilterPersistence, useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
 interface Logbook {
@@ -41,6 +43,10 @@ interface Logbook {
   status: 'draft' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
   supervisor_name?: string
   reviewed_by_name?: string
+  active_unlock?: {
+    unlock_expires_at: string
+    duration_minutes: number
+  } | null
   submitted_at: string
   reviewed_at?: string
   supervisor_comments?: string
@@ -93,6 +99,10 @@ export default function LogbookDashboard() {
   const [structuredLogbook, setStructuredLogbook] = useState<Logbook | null>(null)
   const [showTooltips, setShowTooltips] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [unlockRequestModal, setUnlockRequestModal] = useState<{ isOpen: boolean; logbook: Logbook | null }>({ 
+    isOpen: false, 
+    logbook: null 
+  })
   
   // New state for dashboard functionality
   const [metrics, setMetrics] = useState<LogbookMetrics | null>(null)
@@ -272,23 +282,32 @@ export default function LogbookDashboard() {
     setStatusCounts(counts)
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'submitted':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs">Waiting for Review</Badge>
-      case 'approved':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">Approved</Badge>
-      case 'rejected':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">Rejected</Badge>
-      case 'returned_for_edits':
-        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">Returned for Edits</Badge>
-      case 'under_review':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">Under Review</Badge>
-      case 'draft':
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 text-xs">Draft</Badge>
-      default:
-        return <Badge variant="secondary" className="text-xs">{status}</Badge>
+  const getStatusBadge = (logbook: Logbook) => {
+    // Check if logbook has an active unlock request
+    if (logbook.active_unlock) {
+      return <StatusBadge status="warning" label="Unlocked for Editing" size="sm" />
     }
+    
+    // Map logbook statuses to StatusBadge component statuses
+    const statusMap: Record<string, 'submitted' | 'approved' | 'rejected' | 'draft' | 'pending'> = {
+      'submitted': 'submitted',
+      'approved': 'approved',
+      'rejected': 'rejected',
+      'returned_for_edits': 'pending',  // Use pending with custom label
+      'under_review': 'pending',
+      'draft': 'draft'
+    }
+    
+    const statusLabels: Record<string, string> = {
+      'submitted': 'Waiting for Review',
+      'returned_for_edits': 'Returned for Edits',
+      'under_review': 'Under Review'
+    }
+    
+    const mappedStatus = statusMap[logbook.status] || 'draft'
+    const label = statusLabels[logbook.status]
+    
+    return <StatusBadge status={mappedStatus} label={label} size="sm" />
   }
 
 
@@ -309,7 +328,30 @@ export default function LogbookDashboard() {
 
   // Helper function to check if logbook can be edited
   const canEditLogbook = (logbook: Logbook) => {
-    return logbook.status === 'returned_for_edits' || logbook.status === 'rejected' || logbook.status === 'draft'
+    return logbook.status === 'returned_for_edits' || 
+           logbook.status === 'rejected' || 
+           logbook.status === 'draft' ||
+           logbook.active_unlock !== null
+  }
+
+  // Helper function to check if unlock can be requested
+  const canRequestUnlock = (logbook: Logbook) => {
+    return logbook.is_locked || logbook.status === 'approved'
+  }
+
+  // Handle unlock request modal
+  const handleOpenUnlockRequest = (logbook: Logbook) => {
+    setUnlockRequestModal({ isOpen: true, logbook })
+  }
+
+  const handleCloseUnlockRequest = () => {
+    setUnlockRequestModal({ isOpen: false, logbook: null })
+  }
+
+  const handleUnlockRequestSuccess = () => {
+    toast.success('Unlock request submitted successfully')
+    fetchLogbooks(true, false)
+    handleCloseUnlockRequest()
   }
 
   // Helper function to handle adding new records
@@ -926,7 +968,7 @@ export default function LogbookDashboard() {
                   {/* Status */}
                   <div className="col-span-2">
                     <div className="flex flex-col gap-2">
-                      {getStatusBadge(logbook.status)}
+                      {getStatusBadge(logbook)}
                       {canEditLogbook(logbook) && (
                         <div className="flex gap-1">
                           <Button
@@ -1021,15 +1063,27 @@ export default function LogbookDashboard() {
 
                   {/* Actions */}
                   <div className="col-span-1">
-                    <div className="flex gap-1">
+                    <div className="flex flex-col gap-1 items-center">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setStructuredLogbook(logbook)}
                         title="View Logbook"
+                        className="h-7 w-7 p-0"
                       >
-                        <Eye className="h-4 w-4" />
+                        <Eye className="h-3 w-3" />
                       </Button>
+                      {canRequestUnlock(logbook) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenUnlockRequest(logbook)}
+                          title="Request Unlock"
+                          className="h-7 px-1 text-xs min-w-0 flex-shrink"
+                        >
+                          <Unlock className="h-2.5 w-2.5" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1158,6 +1212,17 @@ export default function LogbookDashboard() {
             console.log('Navigating to:', helpUrl)
             navigate(helpUrl)
           }}
+        />
+      )}
+
+      {/* Unlock Request Modal */}
+      {unlockRequestModal.logbook && (
+        <UnlockRequestModal
+          isOpen={unlockRequestModal.isOpen}
+          onClose={handleCloseUnlockRequest}
+          logbookId={unlockRequestModal.logbook.id}
+          logbookWeekDisplay={unlockRequestModal.logbook.week_display}
+          onSuccess={handleUnlockRequestSuccess}
         />
       )}
 

@@ -28,6 +28,7 @@ import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
 import LogbookAuditTrailModal from '@/components/LogbookAuditTrailModal'
 import SupervisorLogbookDisplay from '@/components/SupervisorLogbookDisplay'
+import ReviewerUnlockQueue from '@/components/ReviewerUnlockQueue'
 import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
 interface LogbookForReview {
@@ -53,6 +54,8 @@ interface LogbookForReview {
 export default function SupervisorLogbookReview() {
   const [logbooks, setLogbooks] = useState<LogbookForReview[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'reviews' | 'unlock-requests'>('reviews')
+  const [unlockRequestCount, setUnlockRequestCount] = useState(0)
   const [reviewing, setReviewing] = useState<number | null>(null)
   const [activeLogbookId, setActiveLogbookId] = useState<number | null>(null)
   const [generalComment, setGeneralComment] = useState('')
@@ -76,6 +79,7 @@ export default function SupervisorLogbookReview() {
 
   useEffect(() => {
     fetchLogbooksForReview()
+    fetchUnlockRequestCount()
     // Reset review state when filter changes
     setActiveLogbookId(null)
     setEntriesBySection(null)
@@ -92,6 +96,18 @@ export default function SupervisorLogbookReview() {
     setRejectingLogbookId(null)
     setRejectionReason('')
   }, [statusFilter])
+
+  const fetchUnlockRequestCount = async () => {
+    try {
+      const response = await apiFetch('/api/logbook/unlock-requests/queue/')
+      if (response.ok) {
+        const data = await response.json()
+        setUnlockRequestCount(data.length)
+      }
+    } catch (error) {
+      console.error('Error fetching unlock request count:', error)
+    }
+  }
 
   const fetchLogbooksForReview = async () => {
     try {
@@ -434,9 +450,9 @@ export default function SupervisorLogbookReview() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <BookOpen className="h-8 w-8" />
-            Logbook Reviews
+            Supervisor Dashboard
           </h1>
-          <p className="text-muted-foreground">Review logbooks submitted by your supervisees</p>
+          <p className="text-muted-foreground">Review logbooks and unlock requests from your supervisees</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -465,7 +481,60 @@ export default function SupervisorLogbookReview() {
         </div>
       </div>
 
-      {/* Logbooks List */}
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('reviews')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'reviews'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <BookOpen className="h-4 w-4 inline mr-2" />
+            Logbook Reviews
+          </button>
+          <button
+            onClick={() => setActiveTab('unlock-requests')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'unlock-requests'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Activity className="h-4 w-4 inline mr-2" />
+            Unlock Requests
+            {unlockRequestCount > 0 && (
+              <Badge variant="destructive" className="ml-2 text-xs">
+                {unlockRequestCount}
+              </Badge>
+            )}
+          </button>
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'reviews' ? (
+        <>
+          {/* Unlock Request Alert */}
+          {unlockRequestCount > 0 && (
+            <Alert className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                You have <strong>{unlockRequestCount}</strong> pending unlock request{unlockRequestCount > 1 ? 's' : ''} waiting for review. 
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto ml-1"
+                  onClick={() => setActiveTab('unlock-requests')}
+                >
+                  Click here to review them.
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {/* Logbooks List */}
       {logbooks.length === 0 ? (
         <Card>
           <CardContent className="p-6">
@@ -1225,6 +1294,11 @@ export default function SupervisorLogbookReview() {
             }
           }}
         />
+      )}
+        </>
+      ) : (
+        /* Unlock Requests Tab */
+        <ReviewerUnlockQueue userRole="SUPERVISOR" onRequestProcessed={fetchUnlockRequestCount} />
       )}
     </div>
   )

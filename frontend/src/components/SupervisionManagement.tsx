@@ -1,19 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { StatusBadge } from '@/components/status'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
   Users, 
   UserPlus, 
-  Mail, 
   Clock, 
   CheckCircle, 
-  XCircle, 
-  AlertCircle,
-  RefreshCw,
-  MoreHorizontal
+  RefreshCw
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
@@ -178,22 +175,21 @@ export const SupervisionManagement: React.FC<SupervisionManagementProps> = ({ on
   }
 
   const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      'PENDING': { variant: 'secondary' as const, label: 'Pending', icon: Clock },
-      'ACCEPTED': { variant: 'default' as const, label: 'Accepted', icon: CheckCircle },
-      'REJECTED': { variant: 'destructive' as const, label: 'Rejected', icon: XCircle },
-      'EXPIRED': { variant: 'outline' as const, label: 'Expired', icon: AlertCircle }
+    const statusMap: Record<string, 'pending' | 'accepted' | 'declined' | 'failed'> = {
+      'PENDING': 'pending',
+      'ACCEPTED': 'accepted',
+      'REJECTED': 'declined',
+      'EXPIRED': 'failed'
     }
-
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.PENDING
-    const Icon = config.icon
-
-    return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
-        <Icon className="h-3 w-3" />
-        {config.label}
-      </Badge>
-    )
+    const statusLabels: Record<string, string> = {
+      'PENDING': 'Pending',
+      'ACCEPTED': 'Accepted',
+      'REJECTED': 'Rejected',
+      'EXPIRED': 'Expired'
+    }
+    const mappedStatus = statusMap[status] || 'pending'
+    const label = statusLabels[status]
+    return <StatusBadge status={mappedStatus} label={label} size="sm" />
   }
 
   const getRoleBadge = (role: string) => {
@@ -297,7 +293,7 @@ export const SupervisionManagement: React.FC<SupervisionManagementProps> = ({ on
               <Button
                 variant="outline"
                 size="sm"
-                onClick={fetchData}
+                onClick={() => fetchData()}
                 disabled={refreshing}
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />

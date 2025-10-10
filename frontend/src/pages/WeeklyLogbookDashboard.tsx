@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/status'
 import { Progress } from '@/components/ui/progress'
 import { 
   BookOpen, 
@@ -194,20 +195,22 @@ export default function WeeklyLogbookDashboard() {
   }
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'draft':
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Draft</Badge>
-      case 'submitted':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Waiting for Review</Badge>
-      case 'returned_for_edits':
-        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Returned for Edits</Badge>
-      case 'approved':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Approved</Badge>
-      case 'rejected':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Rejected</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
+    const statusMap: Record<string, 'submitted' | 'approved' | 'rejected' | 'draft' | 'pending'> = {
+      'submitted': 'submitted',
+      'approved': 'approved',
+      'rejected': 'rejected',
+      'returned_for_edits': 'pending',
+      'under_review': 'pending',
+      'draft': 'draft'
     }
+    const statusLabels: Record<string, string> = {
+      'submitted': 'Waiting for Review',
+      'returned_for_edits': 'Returned for Edits',
+      'under_review': 'Under Review'
+    }
+    const mappedStatus = statusMap[status] || 'draft'
+    const label = statusLabels[status]
+    return <StatusBadge status={mappedStatus} label={label} size="sm" />
   }
 
   const formatDate = (dateString: string) => {

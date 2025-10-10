@@ -428,7 +428,7 @@ const SectionC: React.FC = () => {
       <div className="container mx-auto px-4 py-8">
         {/* Hero Section - PsychPathway Brand */}
         <div className="mb-8">
-          <div className="bg-gradient-to-r from-primary to-primary/90 rounded-card p-8 text-white shadow-md">
+          <div className="bg-gradient-to-r from-purple-600 to-purple-600/90 rounded-card p-8 text-white shadow-md">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <h1 className="text-4xl font-headings mb-2">Section C: Supervision</h1>

@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/status'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
@@ -59,7 +59,7 @@ export default function LogbookPreview({ logbook, onClose }: LogbookPreviewProps
   if (showStructuredView) {
     return (
       <StructuredLogbookDisplay 
-        logbook={logbook} 
+        logbook={logbook as any} 
         onClose={() => setShowStructuredView(false)}
         onRegenerate={() => {
           setShowStructuredView(false)
@@ -70,16 +70,22 @@ export default function LogbookPreview({ logbook, onClose }: LogbookPreviewProps
   }
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'submitted':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Waiting for Review</Badge>
-      case 'approved':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Approved</Badge>
-      case 'rejected':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Rejected</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
+    const statusMap: Record<string, 'submitted' | 'approved' | 'rejected' | 'draft' | 'pending'> = {
+      'submitted': 'submitted',
+      'approved': 'approved',
+      'rejected': 'rejected',
+      'returned_for_edits': 'pending',
+      'under_review': 'pending',
+      'draft': 'draft'
     }
+    const statusLabels: Record<string, string> = {
+      'submitted': 'Waiting for Review',
+      'returned_for_edits': 'Returned for Edits',
+      'under_review': 'Under Review'
+    }
+    const mappedStatus = statusMap[status] || 'draft'
+    const label = statusLabels[status]
+    return <StatusBadge status={mappedStatus} label={label} size="sm" />
   }
 
   const getStatusIcon = (status: string) => {

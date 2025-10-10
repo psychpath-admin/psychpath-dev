@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -11,8 +11,7 @@ import {
   CheckCircle, 
   XCircle, 
   AlertCircle,
-  User,
-  Calendar
+  User
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
@@ -39,9 +38,10 @@ interface UnlockRequest {
 
 interface ReviewerUnlockQueueProps {
   userRole: 'ORG_ADMIN' | 'SUPERVISOR'
+  onRequestProcessed?: () => void
 }
 
-export default function ReviewerUnlockQueue({ userRole }: ReviewerUnlockQueueProps) {
+export default function ReviewerUnlockQueue({ onRequestProcessed }: ReviewerUnlockQueueProps) {
   const [requests, setRequests] = useState<UnlockRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [reviewing, setReviewing] = useState<number | null>(null)
@@ -120,6 +120,7 @@ export default function ReviewerUnlockQueue({ userRole }: ReviewerUnlockQueuePro
         setCustomDuration('')
         setUseCustomDuration(false)
         fetchUnlockRequests()
+        onRequestProcessed?.()
       } else {
         const errorData = await response.json()
         toast.error(errorData.error || `Failed to ${decision} unlock request`)
@@ -168,7 +169,10 @@ export default function ReviewerUnlockQueue({ userRole }: ReviewerUnlockQueuePro
         <Button
           variant="outline"
           size="sm"
-          onClick={fetchUnlockRequests}
+          onClick={() => {
+            fetchUnlockRequests()
+            onRequestProcessed?.()
+          }}
         >
           Refresh
         </Button>

@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/status'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useNotifications } from '@/hooks/useNotifications'
 import NotificationBell from '@/components/NotificationBell'
+import { apiFetch } from '@/lib/api'
 import { 
   Users, 
   FileText, 
@@ -85,6 +87,7 @@ export default function SupervisorDashboard() {
   const [supervisionInvitations, setSupervisionInvitations] = useState<SupervisionInvitation[]>([])
   const [loading, setLoading] = useState(true)
   const [invitationFilter, setInvitationFilter] = useState('All')
+  const [unlockRequestCount, setUnlockRequestCount] = useState(0)
   const [tooltipsEnabled, setTooltipsEnabled] = useState(true)
   
   // Notification data
@@ -203,15 +206,29 @@ export default function SupervisorDashboard() {
     }
   }
 
+  const fetchUnlockRequestCount = async () => {
+    try {
+      const response = await apiFetch('/api/logbook/unlock-requests/queue/')
+      if (response.ok) {
+        const data = await response.json()
+        setUnlockRequestCount(data.length)
+      }
+    } catch (error) {
+      console.error('Error fetching unlock request count:', error)
+    }
+  }
+
   // Fetch data on component mount
   useEffect(() => {
     fetchDashboardData()
+    fetchUnlockRequestCount()
   }, [])
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       fetchDashboardData()
+      fetchUnlockRequestCount()
     }, 30000)
     return () => clearInterval(interval)
   }, [])
@@ -304,6 +321,38 @@ export default function SupervisorDashboard() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        
+        {/* Unlock Request Notification */}
+        {unlockRequestCount > 0 && (
+          <Card className="border-orange-200 bg-orange-50">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                      <AlertTriangle className="h-6 w-6 text-orange-600" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-orange-900">
+                      Unlock Request{unlockRequestCount > 1 ? 's' : ''} Pending Review
+                    </h3>
+                    <p className="text-orange-700 mt-1">
+                      You have <strong>{unlockRequestCount}</strong> unlock request{unlockRequestCount > 1 ? 's' : ''} waiting for your review.
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  onClick={() => window.location.href = '/logbook/'}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  <ClipboardCheck className="h-4 w-4 mr-2" />
+                  Review Requests
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         
         {/* Header with Tooltip Toggle and Notification Bell */}
         <div className="flex justify-between items-center">
@@ -492,9 +541,7 @@ export default function SupervisorDashboard() {
                         <p className="text-sm text-gray-600">{supervisee.email}</p>
                       </div>
                       <div className="flex gap-2">
-                        <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-                          {supervisee.supervision_type}
-                        </Badge>
+                        <StatusBadge status="pending" label={supervisee.supervision_type} size="sm" />
                         <Badge className={getRAGColor(supervisee.rag_status)}>
                           {supervisee.rag_status.toUpperCase()}
                         </Badge>

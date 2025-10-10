@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   Dialog,
@@ -29,6 +29,8 @@ import {
 import { toast } from 'sonner'
 import { apiFetch, submitLogbook } from '@/lib/api'
 import { ErrorOverlay, useErrorHandler } from '@/lib/errors'
+import PDForm from './PDForm'
+import SupervisionForm from './SupervisionForm'
 
 interface SectionAEntry {
   id: number
@@ -59,6 +61,11 @@ interface Logbook {
   submitted_at: string
   reviewed_at?: string
   review_comments?: string
+  is_editable?: boolean
+  active_unlock?: {
+    unlock_expires_at: string
+    duration_minutes: number
+  } | null
   section_totals: {
     section_a: { 
       weekly_hours: number
@@ -95,8 +102,35 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
   const [showBEditModal, setShowBEditModal] = useState(false)
   const [showCEditModal, setShowCEditModal] = useState(false)
   
+  // Form data for Section B and C
+  const [bFormData, setBFormData] = useState({
+    activity_type: 'WORKSHOP',
+    date_of_activity: new Date().toISOString().split('T')[0],
+    duration_minutes: 60,
+    is_active_activity: true,
+    activity_details: '',
+    topics_covered: '',
+    competencies_covered: [] as string[],
+    reflection: '',
+    reviewed_in_supervision: false
+  })
+  
+  const [cFormData, setCFormData] = useState({
+    date_of_supervision: new Date().toISOString().split('T')[0],
+    supervisor_name: '',
+    supervisor_type: 'PRINCIPAL',
+    supervision_type: 'INDIVIDUAL',
+    duration_minutes: 60,
+    summary: ''
+  })
+  
+  const [competencies, setCompetencies] = useState<any[]>([])
+  const [saving, setSaving] = useState(false)
+  
   // Helper: can the provisional click-through to edit from the report?
-  const canInlineEdit = logbook.status === 'rejected' || logbook.status === 'returned_for_edits'
+  const canInlineEdit = logbook.status === 'rejected' || 
+                       logbook.status === 'returned_for_edits' ||
+                       logbook.is_editable
   
   // Use the new error handler hook
   const { errorOverlay, showError } = useErrorHandler()
@@ -109,11 +143,24 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
 
   useEffect(() => {
     fetchAllSections()
+    fetchCompetencies()
     // Fetch comments for rejected logbooks
   if (logbook.status === 'rejected' || logbook.status === 'returned_for_edits') {
       fetchComments()
     }
   }, [logbook.id, logbook.status])
+
+  const fetchCompetencies = async () => {
+    try {
+      const response = await apiFetch('/api/competencies/')
+      if (response.ok) {
+        const data = await response.json()
+        setCompetencies(data)
+      }
+    } catch (error) {
+      console.error('Error fetching competencies:', error)
+    }
+  }
 
   const fetchAllSections = async () => {
     try {
@@ -133,8 +180,14 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  const getStatusBadge = () => {
+    // Check if logbook has an active unlock request first
+    if (logbook.active_unlock) {
+      return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Unlocked for Editing</Badge>
+    }
+    
+    // Otherwise show normal status
+    switch (logbook.status) {
       case 'submitted':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Submitted</Badge>
       case 'under_review':
@@ -148,7 +201,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
       case 'locked':
         return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Locked</Badge>
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{logbook.status}</Badge>
     }
   }
 
@@ -277,8 +330,22 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
       status: logbook.status,
       id: logbook.id,
       hasId: !!logbook.id,
-      weekStartDate: logbook.week_start_date
+      weekStartDate: logbook.week_start_date,
+      is_editable: logbook.is_editable,
+      active_unlock: logbook.active_unlock
     })
+    
+    // Can edit if explicitly marked as editable (from backend)
+    if (logbook.is_editable) {
+      console.log('isEditable result: true (from is_editable field)')
+      return true
+    }
+    
+    // Can edit if there's an active unlock request
+    if (logbook.active_unlock) {
+      console.log('isEditable result: true (from active_unlock)')
+      return true
+    }
     
     // For submission, we need logbooks that are ready to be submitted
     const hasValidStatus = ['draft', 'returned_for_edits', 'rejected', 'ready'].includes(logbook.status)
@@ -360,6 +427,17 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
   const handleSectionBEntryClick = (entry: any) => {
     if (canInlineEdit) {
       setEditingBEntry(entry)
+      setBFormData({
+        activity_type: entry.activity_type || 'WORKSHOP',
+        date_of_activity: entry.date_of_activity || entry.activity_date || new Date().toISOString().split('T')[0],
+        duration_minutes: entry.duration_minutes || 60,
+        is_active_activity: entry.is_active_activity !== false,
+        activity_details: entry.activity_details || entry.presenter || '',
+        topics_covered: entry.topics_covered || entry.specific_topics || '',
+        competencies_covered: entry.competencies_covered || [],
+        reflection: entry.reflection || '',
+        reviewed_in_supervision: entry.reviewed_in_supervision || false
+      })
       setShowBEditModal(true)
     }
   }
@@ -367,7 +445,82 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
   const handleSectionCEntryClick = (entry: any) => {
     if (canInlineEdit) {
       setEditingCEntry(entry)
+      setCFormData({
+        date_of_supervision: entry.date_of_supervision || entry.date || new Date().toISOString().split('T')[0],
+        supervisor_name: entry.supervisor_name || entry.supervisor || '',
+        supervisor_type: entry.supervisor_type || entry.principal_or_secondary || 'PRINCIPAL',
+        supervision_type: entry.supervision_type || entry.individual_group_other || 'INDIVIDUAL',
+        duration_minutes: entry.duration_minutes || 60,
+        summary: entry.summary || ''
+      })
       setShowCEditModal(true)
+    }
+  }
+
+  const toggleCompetency = (competencyName: string) => {
+    setBFormData(prev => ({
+      ...prev,
+      competencies_covered: prev.competencies_covered.includes(competencyName)
+        ? prev.competencies_covered.filter(c => c !== competencyName)
+        : [...prev.competencies_covered, competencyName]
+    }))
+  }
+
+  const handleBSave = async () => {
+    setSaving(true)
+    try {
+      if (editingBEntry) {
+        await apiFetch(`/api/section-b/${editingBEntry.id}/`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bFormData)
+        })
+        toast.success('Professional development entry updated successfully!')
+      } else {
+        await apiFetch('/api/section-b/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bFormData)
+        })
+        toast.success('Professional development entry created successfully!')
+      }
+      setShowBEditModal(false)
+      setEditingBEntry(null)
+      fetchAllSections()
+    } catch (error) {
+      console.error('Error saving PD entry:', error)
+      toast.error('Failed to save entry')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCSave = async () => {
+    setSaving(true)
+    try {
+      if (editingCEntry) {
+        await apiFetch(`/api/section-c/${editingCEntry.id}/`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cFormData)
+        })
+        toast.success('Supervision entry updated successfully!')
+      } else {
+        await apiFetch('/api/section-c/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cFormData)
+        })
+        toast.success('Supervision entry created successfully!')
+      }
+      setShowCEditModal(false)
+      setEditingCEntry(null)
+      fetchAllSections()
+    } catch (error) {
+      console.error('Error saving supervision entry:', error)
+      toast.error('Failed to save entry')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -451,7 +604,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                 </DialogDescription>
               </div>
               <div className="flex items-center gap-2">
-                {getStatusBadge(logbook.status)}
+                {getStatusBadge()}
                 {!isEditable() && (
                   <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
                     <Lock className="h-3 w-3 mr-1" />
@@ -565,9 +718,9 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
 
           {/* SECTION B: Professional development (hidden placeholder to preserve diff) */}
           {false && (
-          <Card className="border-2 border-amber-300 mt-6">
-            <CardHeader className="bg-amber-50 border-b border-amber-200">
-              <CardTitle className="text-lg font-bold text-amber-900">
+          <Card className="border-2 border-blue-300 mt-6">
+            <CardHeader className="bg-blue-50 border-b border-blue-200">
+              <CardTitle className="text-lg font-bold text-blue-900">
                 SECTION B: Professional development
               </CardTitle>
             </CardHeader>
@@ -582,11 +735,11 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-amber-100 border-b border-amber-200">
-                        <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Date</th>
-                        <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Activity</th>
-                        <th className="border border-amber-300 p-3 text-center font-semibold text-amber-900">Duration</th>
-                        <th className="border border-amber-300 p-3 text-left font-semibold text-amber-900">Notes</th>
+                      <tr className="bg-blue-100 border-b border-blue-200">
+                        <th className="border border-blue-300 p-3 text-left font-semibold text-blue-900">Date</th>
+                        <th className="border border-blue-300 p-3 text-left font-semibold text-blue-900">Activity</th>
+                        <th className="border border-blue-300 p-3 text-center font-semibold text-blue-900">Duration</th>
+                        <th className="border border-blue-300 p-3 text-left font-semibold text-blue-900">Notes</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -650,9 +803,9 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
 
           {/* SECTION C: Supervision (hidden placeholder to preserve diff) */}
           {false && (
-          <Card className="border-2 border-purple-300 mt-6">
-            <CardHeader className="bg-purple-50 border-b border-purple-200">
-              <CardTitle className="text-lg font-bold text-purple-900">
+          <Card className="border-2 border-blue-300 mt-6">
+            <CardHeader className="bg-blue-50 border-b border-blue-200">
+              <CardTitle className="text-lg font-bold text-blue-900">
                 SECTION C: Supervision
               </CardTitle>
             </CardHeader>
@@ -667,12 +820,12 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-purple-100 border-b border-purple-200">
-                        <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Date</th>
-                        <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Supervisor</th>
-                        <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Type</th>
-                        <th className="border border-purple-300 p-3 text-center font-semibold text-purple-900">Duration</th>
-                        <th className="border border-purple-300 p-3 text-left font-semibold text-purple-900">Summary</th>
+                      <tr className="bg-blue-100 border-b border-blue-200">
+                        <th className="border border-blue-300 p-3 text-left font-semibold text-blue-900">Date</th>
+                        <th className="border border-blue-300 p-3 text-left font-semibold text-blue-900">Supervisor</th>
+                        <th className="border border-blue-300 p-3 text-left font-semibold text-blue-900">Type</th>
+                        <th className="border border-blue-300 p-3 text-center font-semibold text-blue-900">Duration</th>
+                        <th className="border border-blue-300 p-3 text-left font-semibold text-blue-900">Summary</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1057,8 +1210,8 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                           
                           {/* Show standalone CRA entries */}
                           {craEntries.filter(cra => !cra.parent_dcc_entry).map((craEntry) => (
-                            <>
-                              <tr key={`standalone-cra-${craEntry.id}`} className="border-b border-gray-200 hover:bg-gray-50">
+                            <React.Fragment key={`standalone-cra-${craEntry.id}`}>
+                              <tr className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="border border-gray-300 p-3 align-top">
                                   <div className="space-y-1">
                                     <div className="font-medium text-sm">
@@ -1178,7 +1331,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                                   </td>
                                 </tr>
                               )}
-                            </>
+                            </React.Fragment>
                           ))}
                           
                           {/* Show empty state if no entries */}
@@ -1647,7 +1800,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           </div>
 
           {/* Section C Content Card */}
-          <Card className="border-2 border-purple-300 mt-6">
+          <Card className="border-2 border-blue-300 mt-6">
             <CardContent className="p-0">
               {loading ? (
                 <div className="p-8 text-center">
@@ -1974,184 +2127,29 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
       </Dialog>
 
       {/* Section B Edit Modal */}
-      {showBEditModal && editingBEntry && (
-        <Dialog open={showBEditModal} onOpenChange={setShowBEditModal}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Edit3 className="h-5 w-5" />
-                Edit Section B Entry
-              </DialogTitle>
-              <DialogDescription>
-                Edit this professional development activity entry
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date of Activity
-                  </label>
-                  <input
-                    type="date"
-                    value={editingBEntry.date_of_activity || editingBEntry.activity_date || ''}
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Activity Title
-                  </label>
-                  <input
-                    type="text"
-                    value={editingBEntry.activity_title || editingBEntry.activity_type || editingBEntry.title || ''}
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    readOnly
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Duration
-                </label>
-                <input
-                  type="text"
-                  value={formatDuration(Number(editingBEntry.duration_minutes || editingBEntry.duration || 0))}
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  readOnly
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes/Summary
-                </label>
-                <textarea
-                  value={editingBEntry.notes || editingBEntry.summary || ''}
-                  className="w-full p-2 border border-gray-300 rounded-md h-24"
-                  readOnly
-                />
-              </div>
-            </div>
-            
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setShowBEditModal(false)}>
-                Close
-              </Button>
-              <Button 
-                onClick={() => {
-                  // Navigate to Section B page with edit mode
-                  navigate('/section-b', { state: { returnTo: '/logbook' } })
-                  setShowBEditModal(false)
-                }}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                <Edit3 className="h-4 w-4 mr-2" />
-                Edit in Section B
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+      {showBEditModal && (
+        <PDForm
+          onSubmit={handleBSave}
+          onCancel={() => setShowBEditModal(false)}
+          saving={saving}
+          formData={bFormData}
+          setFormData={setBFormData}
+          competencies={competencies}
+          toggleCompetency={toggleCompetency}
+          isEditing={!!editingBEntry}
+        />
       )}
 
       {/* Section C Edit Modal */}
-      {showCEditModal && editingCEntry && (
-        <Dialog open={showCEditModal} onOpenChange={setShowCEditModal}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Edit3 className="h-5 w-5" />
-                Edit Section C Entry
-              </DialogTitle>
-              <DialogDescription>
-                Edit this supervision entry
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date of Supervision
-                  </label>
-                  <input
-                    type="date"
-                    value={editingCEntry.date_of_supervision || editingCEntry.date || ''}
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Supervisor Name
-                  </label>
-                  <input
-                    type="text"
-                    value={editingCEntry.supervisor_name || editingCEntry.supervisor || ''}
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    readOnly
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Supervision Type
-                  </label>
-                  <input
-                    type="text"
-                    value={editingCEntry.supervision_type || editingCEntry.individual_group_other || ''}
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Duration
-                  </label>
-                  <input
-                    type="text"
-                    value={formatDuration(Number(editingCEntry.duration_minutes || editingCEntry.duration || 0))}
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    readOnly
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Summary
-                </label>
-                <textarea
-                  value={editingCEntry.summary || ''}
-                  className="w-full p-2 border border-gray-300 rounded-md h-24"
-                  readOnly
-                />
-              </div>
-            </div>
-            
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setShowCEditModal(false)}>
-                Close
-              </Button>
-              <Button 
-                onClick={() => {
-                  // Navigate to Section C page with edit mode
-                  navigate('/section-c', { state: { returnTo: '/logbook' } })
-                  setShowCEditModal(false)
-                }}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                <Edit3 className="h-4 w-4 mr-2" />
-                Edit in Section C
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+      {showCEditModal && (
+        <SupervisionForm
+          onSubmit={handleCSave}
+          onCancel={() => setShowCEditModal(false)}
+          saving={saving}
+          formData={cFormData}
+          setFormData={setCFormData}
+          isEditing={!!editingCEntry}
+        />
       )}
 
       {/* Error Overlay with 3-part system */}

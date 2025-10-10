@@ -188,7 +188,7 @@ class WeeklyLogbook(models.Model):
         """Get the currently active unlock request if any"""
         try:
             return self.unlock_requests.filter(
-                status='approved',
+                status__in=['approved', 'approve'],  # Handle both status values
                 manually_relocked=False,
                 unlock_expires_at__gt=timezone.now()
             ).first()
@@ -219,8 +219,17 @@ class WeeklyLogbook(models.Model):
     
     @property
     def is_editable(self):
-        """Computed property: check if logbook is editable based on status"""
-        return self.status in ['draft', 'returned_for_edits', 'rejected']
+        """Computed property: check if logbook is editable based on status or active unlock"""
+        # Can edit if status allows it
+        if self.status in ['draft', 'returned_for_edits', 'rejected']:
+            return True
+        
+        # Can edit if there's an active unlock request
+        active_unlock = self.get_active_unlock()
+        if active_unlock:
+            return True
+            
+        return False
     
     def is_editable_by_user(self, user):
         """Check if logbook can be edited by the given user"""
@@ -778,7 +787,7 @@ class UnlockRequest(models.Model):
     
     class Meta:
         ordering = ['-created_at']
-        unique_together = ['logbook', 'status']  # Only one pending request per logbook
+        # Allow multiple requests per logbook, but check for pending in business logic
     
     def __str__(self):
         return f"Unlock request for {self.logbook} by {self.requester} - {self.status}"

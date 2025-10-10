@@ -1,11 +1,10 @@
-import React, { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
+import { useState } from 'react'
+import { BaseModal } from '@/components/modals'
+import { FormField } from '@/components/forms'
+import { AlertBanner } from '@/components/ui/AlertBanner'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
+import { Unlock } from 'lucide-react'
 
 interface UnlockRequestModalProps {
   isOpen: boolean
@@ -25,14 +24,17 @@ export default function UnlockRequestModal({
   const [reason, setReason] = useState('')
   const [targetSection, setTargetSection] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleSubmit = async () => {
     if (!reason.trim()) {
-      toast.error('Please provide a reason for the unlock request')
+      setError('Please provide a reason for the unlock request')
       return
     }
 
     setLoading(true)
+    setError('')
+    
     try {
       const response = await apiFetch(`/api/logbook/${logbookId}/unlock-request/`, {
         method: 'POST',
@@ -50,11 +52,11 @@ export default function UnlockRequestModal({
         onClose()
       } else {
         const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to submit unlock request')
+        setError(errorData.error || 'Failed to submit unlock request')
       }
     } catch (error) {
       console.error('Error submitting unlock request:', error)
-      toast.error('Error submitting unlock request')
+      setError('Error submitting unlock request')
     } finally {
       setLoading(false)
     }
@@ -63,74 +65,54 @@ export default function UnlockRequestModal({
   const handleCancel = () => {
     setReason('')
     setTargetSection('')
+    setError('')
     onClose()
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl bg-white text-gray-900">
-        <DialogHeader>
-          <DialogTitle className="text-gray-900">Request Logbook Unlock</DialogTitle>
-          <DialogDescription className="text-gray-600">
-            Request to unlock the approved logbook "{logbookWeekDisplay}" for editing.
-          </DialogDescription>
-        </DialogHeader>
+    <BaseModal
+      isOpen={isOpen}
+      onOpenChange={(open) => !open && handleCancel()}
+      title="Request Logbook Unlock"
+      description={`Request to unlock the approved logbook "${logbookWeekDisplay}" for editing.`}
+      icon={<Unlock className="h-5 w-5" />}
+      size="xl"
+      showFooter
+      submitLabel="Submit Request"
+      onSubmit={handleSubmit}
+      onCancel={handleCancel}
+      isSubmitting={loading}
+      error={error}
+    >
+      <div className="space-y-4">
+        <FormField
+          label="Reason for Unlock"
+          name="reason"
+          type="textarea"
+          value={reason}
+          onChange={(value) => setReason(String(value))}
+          placeholder="Please explain why you need to edit this approved logbook..."
+          required
+          rows={4}
+          helperText="Provide a clear and detailed explanation for your request"
+        />
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="reason" className="text-sm font-medium">
-              Reason for Unlock *
-            </Label>
-            <Textarea
-              id="reason"
-              placeholder="Please explain why you need to edit this approved logbook..."
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={4}
-              className="w-full"
-            />
-          </div>
+        <FormField
+          label="Target Section"
+          name="targetSection"
+          type="text"
+          value={targetSection}
+          onChange={(value) => setTargetSection(String(value))}
+          placeholder="e.g., Section A, Entry #123, or specific field"
+          helperText="Optional: Specify which section or entry needs to be edited"
+        />
 
-          <div className="space-y-2">
-            <Label htmlFor="targetSection" className="text-sm font-medium">
-              Target Section (Optional)
-            </Label>
-            <Input
-              id="targetSection"
-              placeholder="e.g., Section A, Entry #123, or specific field"
-              value={targetSection}
-              onChange={(e) => setTargetSection(e.target.value)}
-              className="w-full"
-            />
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-sm text-blue-800">
-              <strong>Note:</strong> Your unlock request will be reviewed by your organization admin 
-              (if you're part of an organization) or your supervisor (if you're independent). 
-              You'll be notified once a decision is made.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-6">
-          <Button
-            variant="outline"
-            onClick={handleCancel}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={loading || !reason.trim()}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {loading ? 'Submitting...' : 'Submit Request'}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        <AlertBanner
+          variant="info"
+          message="Your unlock request will be reviewed by your organization admin (if you're part of an organization) or your supervisor (if you're independent). You'll be notified once a decision is made."
+        />
+      </div>
+    </BaseModal>
   )
 }
 
