@@ -270,7 +270,7 @@ export default function DCCDetail({ entry, onEdit, onAddCRA, onDelete }: DCCDeta
                           </div>
                         </div>
                         {craEntry.reflections_on_experience && (
-                          <p className="text-xs text-green-700">
+                          <p className="text-xs text-green-700 whitespace-pre-wrap">
                             {craEntry.reflections_on_experience.substring(0, 100)}
                             {craEntry.reflections_on_experience.length > 100 ? '...' : ''}
                           </p>

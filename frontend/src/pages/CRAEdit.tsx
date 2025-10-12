@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { getSectionAEntry, updateSectionAEntry } from '@/lib/api'
+import { toast } from 'sonner'
 
 export default function CRAEdit() {
-  const [params] = useSearchParams()
-  const idParam = params.get('id')
-  const entryId = idParam ? parseInt(idParam, 10) : NaN
+  const location = useLocation()
+  const navigate = useNavigate()
+  const entryId = (location.state as any)?.entryId as number | undefined
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -68,24 +69,39 @@ export default function CRAEdit() {
     e.preventDefault()
     if (!entryId) return
     if (form.session_activity_types.length === 0) {
-      alert('Please select at least one activity type')
+      toast.error('Please select at least one activity type')
       return
     }
     if (!form.reflections_on_experience.trim()) {
-      alert('Reflections are required')
+      toast.error('Reflections are required')
       return
     }
     try {
       setSaving(true)
       await updateSectionAEntry(entryId, { ...form, entry_type: 'cra' })
-      if (window.opener) {
-        window.opener.postMessage({ type: 'CRA_SAVED', entryId }, '*')
+      toast.success('CRA entry updated successfully!')
+      
+      // Navigate back to returnTo location or default to section-a
+      const returnTo = (location.state as any)?.returnTo as string | undefined
+      if (returnTo) {
+        navigate(returnTo)
+      } else {
+        navigate('/section-a')
       }
-      window.close()
     } catch (e: any) {
       setError(e?.message || 'Failed to save')
+      toast.error(e?.message || 'Failed to save CRA entry')
     } finally {
       setSaving(false)
+    }
+  }
+  
+  const handleCancel = () => {
+    const returnTo = (location.state as any)?.returnTo as string | undefined
+    if (returnTo) {
+      navigate(returnTo)
+    } else {
+      navigate('/section-a')
     }
   }
 
@@ -155,7 +171,7 @@ export default function CRAEdit() {
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => window.close()}>Cancel</Button>
+                <Button type="button" variant="outline" onClick={handleCancel}>Cancel</Button>
                 <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
               </div>
             </form>

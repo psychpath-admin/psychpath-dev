@@ -1,13 +1,20 @@
-import React, { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Plus } from 'lucide-react'
 import { createSectionAEntry, updateSectionAEntry, getSectionAEntry } from '@/lib/api'
 import { toast } from 'sonner'
+import AutocompleteInput from '@/components/AutocompleteInput'
+import { 
+  getClientSuggestions, 
+  getPlaceSuggestions, 
+  getLastSessionData
+} from '@/lib/autocompleteApi'
+import { useErrorHandler, ErrorOverlay } from '@/lib/errors'
 
 interface SectionAFormProps {
   onCancel: () => void
@@ -34,6 +41,8 @@ const ACTIVITY_TYPES = [
 
 function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { errorOverlay, showError } = useErrorHandler()
   const [formData, setFormData] = useState<EntryForm>({
     client_id: '',
     session_date: new Date().toISOString().split('T')[0],
@@ -46,6 +55,8 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   })
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [clientSuggestions, setClientSuggestions] = useState<string[]>([])
+  const [placeSuggestions, setPlaceSuggestions] = useState<string[]>([])
   const isEditing = !!entryId
   
   // Get logbook week information from location state
@@ -58,6 +69,54 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
     const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1) // Adjust to Monday
     const weekStart = new Date(date.setDate(diff))
     return weekStart.toISOString().split('T')[0]
+  }
+
+  // Load initial suggestions on component mount (without query for all suggestions)
+  useEffect(() => {
+    const loadInitialSuggestions = async () => {
+      try {
+        const [clients, places] = await Promise.all([
+          getClientSuggestions(), // Load all client suggestions
+          getPlaceSuggestions()   // Load all place suggestions
+        ])
+        setClientSuggestions(clients)
+        setPlaceSuggestions(places)
+      } catch (error) {
+        console.error('Failed to load initial suggestions:', error)
+      }
+    }
+    
+    loadInitialSuggestions()
+  }, [])
+
+  // Dynamic client suggestions based on input
+  const handleClientInputChange = async (value: string) => {
+    setFormData(prev => ({ ...prev, client_id: value }))
+    
+    // If user has typed 2+ characters, fetch filtered suggestions
+    if (value.length >= 2) {
+      try {
+        const filteredClients = await getClientSuggestions(value)
+        setClientSuggestions(filteredClients)
+      } catch (error) {
+        console.error('Failed to load client suggestions:', error)
+      }
+    }
+  }
+
+  // Dynamic place suggestions based on input
+  const handlePlaceInputChange = async (value: string) => {
+    setFormData(prev => ({ ...prev, place_of_practice: value }))
+    
+    // If user has typed 2+ characters, fetch filtered suggestions
+    if (value.length >= 2) {
+      try {
+        const filteredPlaces = await getPlaceSuggestions(value)
+        setPlaceSuggestions(filteredPlaces)
+      } catch (error) {
+        console.error('Failed to load place suggestions:', error)
+      }
+    }
   }
 
   // If launched from +A on a specific logbook, default the session date to that week
@@ -94,9 +153,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
     }
   }, [entryId])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+  const handleSubmit = async (action: 'dcc_only' | 'dcc_and_cra') => {
     if (!formData.client_id.trim()) {
       toast.error('Client ID is required')
       return
@@ -128,17 +185,49 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
         reflections_on_experience: formData.reflections_on_experience,
       }
 
+      let createdEntryId: number | null = null
+
       if (isEditing && entryId) {
         await updateSectionAEntry(parseInt(entryId), entryData)
         toast.success('DCC entry updated successfully!')
+        createdEntryId = parseInt(entryId)
       } else {
-        await createSectionAEntry(entryData)
+        const response = await createSectionAEntry(entryData)
+        createdEntryId = response.id
         toast.success('DCC entry created successfully!')
       }
-      onCancel() // Navigate back to dashboard
-    } catch (error) {
+
+      if (action === 'dcc_only') {
+        onCancel() // Navigate back to dashboard
+      } else if (action === 'dcc_and_cra') {
+        // Navigate to CRA form with the created DCC entry ID
+        // Use the returnTo from the original navigation state
+        const originalReturnTo = (location.state as any)?.returnTo || '/section-a'
+        
+        navigate('/section-a/cra', { 
+          state: { 
+            parentDccId: createdEntryId,
+            returnTo: originalReturnTo
+          } 
+        })
+      }
+    } catch (error: any) {
       console.error('Error creating entry:', error)
-      toast.error('Failed to create DCC entry')
+      
+      // Check if it's a duplicate DCC error
+      const errorMessage = error?.message || 'Failed to create DCC entry'
+      
+      if (errorMessage.includes('already exists for client')) {
+        // Use the standard error handling system
+        await showError(error, {
+          title: 'Duplicate Session Entry',
+          category: 'Validation',
+          customExplanation: `The system prevents duplicate DCC entries for the same client on the same day to maintain accurate records.`,
+          customUserAction: `**Option 1**: Change the session date if this was a different session.\n\n**Option 2**: Check "Simulated" if this is a practice/role-play session.\n\n**Option 3**: Edit the existing entry instead of creating a new one.`
+        })
+      } else {
+        toast.error(errorMessage)
+      }
     } finally {
       setSaving(false)
     }
@@ -151,6 +240,39 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
         ? [...prev.session_activity_types, activityType]
         : prev.session_activity_types.filter(type => type !== activityType)
     }))
+  }
+
+  // Handle client selection and prefill previous session data
+  const handleClientSelection = async (clientId: string) => {
+    if (!clientId.trim()) return
+    
+    try {
+      const lastSessionData = await getLastSessionData(clientId)
+      
+      // Prefill form fields with previous session data if available
+      setFormData(prev => ({
+        ...prev,
+        client_id: clientId,
+        place_of_practice: lastSessionData.place_of_practice || prev.place_of_practice,
+        presenting_issues: lastSessionData.presenting_issues || prev.presenting_issues,
+        session_activity_types: lastSessionData.session_activity_types.length > 0 
+          ? lastSessionData.session_activity_types 
+          : prev.session_activity_types
+      }))
+      
+      if (lastSessionData.place_of_practice || lastSessionData.presenting_issues) {
+        const prefilledFields = []
+        if (lastSessionData.place_of_practice) prefilledFields.push('Place of Practice')
+        if (lastSessionData.presenting_issues) prefilledFields.push('Presenting Issues')
+        if (lastSessionData.session_activity_types?.length > 0) prefilledFields.push('Activity Types')
+        
+        toast.success(`Prefilled ${prefilledFields.join(', ')} from previous session with ${clientId}`)
+      }
+    } catch (error) {
+      console.error('Failed to load previous session data:', error)
+      // Still update the client ID even if prefill fails
+      setFormData(prev => ({ ...prev, client_id: clientId }))
+    }
   }
 
   const formatActivityType = (type: string) => {
@@ -188,18 +310,21 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
             <CardTitle>Direct Client Contact Entry</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-6">
               {/* Client Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Client Pseudonym *
                   </label>
-                  <Input
+                  <AutocompleteInput
                     value={formData.client_id}
-                    onChange={(e) => setFormData(prev => ({ ...prev, client_id: e.target.value }))}
+                    onChange={handleClientInputChange}
+                    onSuggestionSelect={handleClientSelection}
                     placeholder="e.g., Client-001"
+                    suggestions={clientSuggestions}
                     required
+                    minChars={2}
                   />
                 </div>
                 
@@ -221,10 +346,12 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                 <label className="block text-sm font-medium mb-2">
                   Place of Practice
                 </label>
-                <Input
+                <AutocompleteInput
                   value={formData.place_of_practice}
-                  onChange={(e) => setFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
+                  onChange={handlePlaceInputChange}
                   placeholder="e.g., Virtual Clinic, Office, Community Center"
+                  suggestions={placeSuggestions}
+                  minChars={2}
                 />
               </div>
 
@@ -277,6 +404,20 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                     min="1"
                     required
                   />
+                  
+                  {/* Quick duration links */}
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {[15, 30, 45, 60, 75, 90, 120].map((minutes) => (
+                      <button
+                        key={minutes}
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, duration_minutes: minutes.toString() }))}
+                        className="text-sm text-blue-600 hover:text-blue-800 underline"
+                      >
+                        {minutes === 120 ? '2 hours' : `${minutes} Minutes`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 
                 <div className="flex items-center space-x-2 pt-6">
@@ -307,28 +448,60 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
               </div>
 
               {/* Form Actions */}
-              <div className="flex justify-end gap-4 pt-6">
+              <div className="flex justify-end gap-3 pt-6">
                 <Button type="button" variant="outline" onClick={onCancel}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={saving}>
+                <Button 
+                  type="button" 
+                  variant="outline"
+                  onClick={() => handleSubmit('dcc_only')}
+                  disabled={saving}
+                  className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                >
                   {saving ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      {isEditing ? 'Updating...' : 'Creating...'}
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-2"></div>
+                      Creating...
                     </>
                   ) : (
                     <>
                       <Save className="h-4 w-4 mr-2" />
-                      {isEditing ? 'Update Entry' : 'Create Entry'}
+                      Create DCC Entry
+                    </>
+                  )}
+                </Button>
+                <Button 
+                  type="button" 
+                  onClick={() => handleSubmit('dcc_and_cra')}
+                  disabled={saving}
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  {saving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create DCC + CRA
                     </>
                   )}
                 </Button>
               </div>
-            </form>
+            </div>
           </CardContent>
         </Card>
       </div>
+      
+      {/* Error Overlay with standard help system */}
+      <ErrorOverlay
+        isOpen={errorOverlay.isOpen}
+        onClose={errorOverlay.onClose}
+        onGetHelp={errorOverlay.onGetHelp}
+        error={errorOverlay.error}
+      />
     </div>
   )
 }
