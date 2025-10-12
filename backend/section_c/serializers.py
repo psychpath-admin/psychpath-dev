@@ -13,6 +13,7 @@ class SupervisionEntrySerializer(serializers.ModelSerializer):
             'id', 'trainee', 'trainee_email', 'date_of_supervision', 'week_starting', 'supervisor_name',
             'supervisor_type', 'supervision_type', 'duration_minutes', 'summary',
             'duration_display', 'duration_hours_minutes',
+            'locked', 'supervisor_comment', 'trainee_response',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['trainee', 'duration_display', 'duration_hours_minutes', 'created_at', 'updated_at']

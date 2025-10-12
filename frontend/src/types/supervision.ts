@@ -9,6 +9,9 @@ export interface SupervisionEntry {
   week_starting: string
   duration_display: string
   duration_hours_minutes: string
+  locked?: boolean
+  supervisor_comment?: string
+  trainee_response?: string
   created_at: string
   updated_at: string
 }
