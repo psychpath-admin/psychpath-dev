@@ -18,7 +18,8 @@ class ProfessionalDevelopmentEntrySerializer(serializers.ModelSerializer):
             'id', 'activity_type', 'date_of_activity', 'duration_minutes',
             'is_active_activity', 'activity_details', 'topics_covered',
             'competencies_covered', 'reflection', 'week_starting', 'duration_display',
-            'duration_hours_minutes', 'created_at', 'updated_at'
+            'duration_hours_minutes', 'locked', 'supervisor_comment', 'trainee_response',
+            'created_at', 'updated_at'
         ]
         read_only_fields = ['trainee', 'week_starting', 'created_at', 'updated_at']
     
@@ -54,5 +55,6 @@ class PDEntryWithSummarySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'activity_type', 'date_of_activity', 'duration_minutes',
             'is_active_activity', 'activity_details', 'topics_covered',
-            'competencies_covered', 'reflection', 'week_starting', 'duration_display', 'duration_hours_minutes'
+            'competencies_covered', 'reflection', 'week_starting', 'duration_display', 'duration_hours_minutes',
+            'locked', 'supervisor_comment', 'trainee_response'
         ]

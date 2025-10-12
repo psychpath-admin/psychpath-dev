@@ -112,8 +112,8 @@ class SectionAEntry(models.Model):
     def calculate_week_starting(session_date):
         """
         Calculate week starting date based on session date.
-        Week starting = Monday immediately before the session date.
-        If session date is Monday, then week starting = session date.
+        Week starting = Monday of the week containing the session date.
+        Sunday belongs to the following week (not the previous week).
         """
         if isinstance(session_date, str):
             session_date = datetime.strptime(session_date, '%Y-%m-%d').date()
@@ -121,8 +121,12 @@ class SectionAEntry(models.Model):
         # Get the day of the week (0=Monday, 6=Sunday)
         days_since_monday = session_date.weekday()
         
-        # Calculate the Monday of that week
-        week_starting = session_date - timedelta(days=days_since_monday)
+        # For Sunday (weekday=6), we want the NEXT Monday
+        if days_since_monday == 6:  # Sunday
+            week_starting = session_date + timedelta(days=1)  # Next Monday
+        else:
+            # Calculate the Monday of the current week
+            week_starting = session_date - timedelta(days=days_since_monday)
         
         return week_starting
     
@@ -156,9 +160,33 @@ class SectionAEntry(models.Model):
         }
     
     def save(self, *args, **kwargs):
-        """Auto-calculate week_starting if not provided"""
+        """Auto-calculate week_starting if not provided and handle CRA/ICRA logic"""
         if self.session_date and not self.week_starting:
             self.week_starting = self.calculate_week_starting(self.session_date)
+        
+        # Smart CRA/ICRA logic: Convert CRA to ICRA if it's in a different week than parent DCC
+        if (self.entry_type == 'cra' and self.parent_dcc_entry and 
+            self.session_date):
+            
+            # Get the parent entry instance (handle both ID and instance)
+            try:
+                if isinstance(self.parent_dcc_entry, int):
+                    parent_entry = SectionAEntry.objects.get(id=self.parent_dcc_entry)
+                else:
+                    parent_entry = self.parent_dcc_entry
+                
+                if parent_entry.session_date:
+                    parent_week = self.calculate_week_starting(parent_entry.session_date)
+                    cra_week = self.calculate_week_starting(self.session_date)
+                    
+                    # If CRA is in a different week than parent DCC, convert to ICRA
+                    if parent_week != cra_week:
+                        self.entry_type = 'independent_activity'
+                        self.parent_dcc_entry = None  # Remove parent link for ICRA
+            except (SectionAEntry.DoesNotExist, AttributeError):
+                # If parent entry doesn't exist or has issues, skip conversion
+                pass
+        
         super().save(*args, **kwargs)
     
     @classmethod

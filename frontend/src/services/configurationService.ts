@@ -202,6 +202,20 @@ class ConfigurationService {
    * Get default configuration when API fails
    */
   private getDefaultConfiguration(configName: string): SystemConfiguration | null {
+    if (configName === 'ui_button_text') {
+      return {
+        id: 0,
+        name: 'ui_button_text',
+        description: 'Button text configuration',
+        items: {
+          'dcc_form_button_create_only': { key: 'dcc_form_button_create_only', value: 'Create DCC Entry', display_name: 'DCC Form - Create Button', description: 'Text for the create-only button when creating a new DCC entry', value_type: 'STRING', user_roles: [], contexts: [] },
+          'dcc_form_button_create_and_cra': { key: 'dcc_form_button_create_and_cra', value: 'Create DCC + CRA', display_name: 'DCC Form - Create + CRA Button', description: 'Text for the create DCC + CRA button when creating a new DCC entry', value_type: 'STRING', user_roles: [], contexts: [] },
+          'dcc_form_button_update_only': { key: 'dcc_form_button_update_only', value: 'Update DCC Entry', display_name: 'DCC Form - Update Button', description: 'Text for the update button when editing an existing DCC entry', value_type: 'STRING', user_roles: [], contexts: [] },
+          'dcc_form_button_update_and_cra': { key: 'dcc_form_button_update_and_cra', value: 'Update DCC Entry + Create a CRA', display_name: 'DCC Form - Update + CRA Button', description: 'Text for the update DCC + create CRA button when editing an existing DCC entry', value_type: 'STRING', user_roles: [], contexts: [] }
+        }
+      }
+    }
+    
     if (configName === 'main_system_config') {
       return {
         id: 0,

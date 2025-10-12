@@ -33,6 +33,8 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
             'client_pseudonym', 'activity_description', 'duration_hours', 'reflection',
             # CRA-specific fields
             'activity_type', 'custom_activity_type',
+            # Logbook integration
+            'locked', 'supervisor_comment', 'trainee_response',
             'created_at', 'updated_at',
             # Calculated fields
             'total_sessions', 'total_duration_minutes', 'total_duration_display',
@@ -80,7 +82,67 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
                     'session_date': f'A non-simulated DCC entry already exists for client {client_id} on {session_date}. Multiple sessions on the same day are only allowed for simulated contacts.'
                 })
         
+        # CRA/ICRA cross-week validation and warning
+        if entry_type == 'cra' and data.get('parent_dcc_entry') and session_date:
+            try:
+                # parent_dcc_entry could be an ID (int) or a model instance
+                parent_dcc_entry = data['parent_dcc_entry']
+                if isinstance(parent_dcc_entry, int):
+                    parent_entry = SectionAEntry.objects.get(id=parent_dcc_entry)
+                else:
+                    parent_entry = parent_dcc_entry
+                    
+                if parent_entry.session_date:
+                    from .models import SectionAEntry as Model
+                    parent_week = Model.calculate_week_starting(parent_entry.session_date)
+                    cra_week = Model.calculate_week_starting(session_date)
+                    
+                    if parent_week != cra_week:
+                        # This will be automatically converted to ICRA in the model save()
+                        # Add a warning to the response
+                        pass  # The model will handle the conversion
+            except (SectionAEntry.DoesNotExist, AttributeError):
+                pass
+        
         return data
+    
+    def create(self, validated_data):
+        """Create entry with cross-week CRA to ICRA conversion feedback"""
+        entry_type = validated_data.get('entry_type')
+        parent_dcc_entry = validated_data.get('parent_dcc_entry')
+        session_date = validated_data.get('session_date')
+        
+        # Check if this will be converted from CRA to ICRA
+        converted_to_icra = False
+        if (entry_type == 'cra' and parent_dcc_entry and session_date):
+            try:
+                # parent_dcc_entry could be an ID (int) or a model instance
+                if isinstance(parent_dcc_entry, int):
+                    parent_entry = SectionAEntry.objects.get(id=parent_dcc_entry)
+                else:
+                    parent_entry = parent_dcc_entry
+                    
+                if parent_entry.session_date:
+                    parent_week = SectionAEntry.calculate_week_starting(parent_entry.session_date)
+                    cra_week = SectionAEntry.calculate_week_starting(session_date)
+                    converted_to_icra = parent_week != cra_week
+            except (SectionAEntry.DoesNotExist, AttributeError):
+                pass
+        
+        # Create the entry (model will handle conversion)
+        entry = super().create(validated_data)
+        
+        # Add conversion info to the response if applicable
+        if converted_to_icra:
+            # Store conversion info in a custom field for frontend feedback
+            entry._conversion_info = {
+                'converted': True,
+                'original_type': 'cra',
+                'new_type': 'independent_activity',
+                'reason': 'Activity date is in a different week than the parent DCC session'
+            }
+        
+        return entry
     
     def get_total_sessions(self, obj):
         """Calculate total sessions for this client"""

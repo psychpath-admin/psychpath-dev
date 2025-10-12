@@ -30,10 +30,12 @@ import {
 } from '@/lib/api'
 import type { SupervisionEntry, SupervisionWeeklyGroup } from '@/types/supervision'
 import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
+import { useErrorHandler } from '@/lib/errors'
 
 const SectionC: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { showError } = useErrorHandler()
   const [weeklyGroups, setWeeklyGroups] = useState<SupervisionWeeklyGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -62,7 +64,8 @@ const SectionC: React.FC = () => {
   const [durationMin, setDurationMin] = useState('')
   const [durationMax, setDurationMax] = useState('')
   const [sortBy, setSortBy] = useState('newest')
-  const [groupByWeek, setGroupByWeek] = useState(false)
+  // Weekly organization is now the standard view - no need for toggle
+  const groupByWeek = true
   const [entriesPerPage, setEntriesPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   
@@ -144,7 +147,7 @@ const SectionC: React.FC = () => {
     setSupervisionType('all')
     setDurationMin('')
     setDurationMax('')
-    setGroupByWeek(false)
+    // groupByWeek is now always true, no need to reset
     setSearchTerm('')
     setCurrentPage(1)
   }
@@ -176,7 +179,7 @@ const SectionC: React.FC = () => {
   }
 
   // Check if any filters are active
-  const hasActiveFilters = dateFrom || dateTo || supervisorType !== 'all' || supervisionType !== 'all' || durationMin || durationMax || groupByWeek
+  const hasActiveFilters = dateFrom || dateTo || supervisorType !== 'all' || supervisionType !== 'all' || durationMin || durationMax
 
   // Get all entries from weekly groups
   const allEntries = weeklyGroups.flatMap(group => group.entries)
@@ -378,6 +381,17 @@ const SectionC: React.FC = () => {
   }
 
   const handleEditEntry = (entry: SupervisionEntry) => {
+    // Check if entry is locked
+    if (entry.locked) {
+      showError(new Error('Entry is locked'), {
+        title: 'Entry Cannot Be Edited',
+        category: 'Validation',
+        customExplanation: 'This entry is locked and cannot be edited because it is part of an approved logbook. Once a logbook is approved by your supervisor, all entries become read-only to maintain data integrity.',
+        customUserAction: 'If you need to make changes to this entry, please contact your supervisor to unlock the logbook first.'
+      })
+      return
+    }
+    
     setEditingEntry(entry)
     setFormData({
       date_of_supervision: entry.date_of_supervision,
@@ -407,10 +421,21 @@ const SectionC: React.FC = () => {
     }
   }
 
-  const handleDeleteEntry = async (id: number) => {
+  const handleDeleteEntry = async (entry: SupervisionEntry) => {
+    // Check if entry is locked
+    if (entry.locked) {
+      showError(new Error('Entry is locked'), {
+        title: 'Entry Cannot Be Deleted',
+        category: 'Validation',
+        customExplanation: 'This entry is locked and cannot be deleted because it is part of an approved logbook. Once a logbook is approved by your supervisor, all entries become read-only to maintain data integrity.',
+        customUserAction: 'If you need to delete this entry, please contact your supervisor to unlock the logbook first.'
+      })
+      return
+    }
+    
     if (window.confirm('Are you sure you want to delete this supervision entry?')) {
       try {
-        await deleteSupervisionEntry(id)
+        await deleteSupervisionEntry(entry.id)
         loadData()
       } catch (error) {
         console.error('Error deleting supervision entry:', error)
@@ -1080,14 +1105,6 @@ const SectionC: React.FC = () => {
                       </button>
                     </Badge>
                   )}
-                  {groupByWeek && (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary">
-                      Grouped by Week
-                      <button onClick={() => setGroupByWeek(false)} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  )}
                 </>
               )}
             </div>
@@ -1165,18 +1182,6 @@ const SectionC: React.FC = () => {
                   </Select>
                 </div>
                 
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="groupByWeek"
-                    checked={groupByWeek}
-                    onChange={(e) => setGroupByWeek(e.target.checked)}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <label htmlFor="groupByWeek" className="text-sm font-medium">
-                    Group by Week
-                  </label>
-                </div>
               </div>
               
               <div className="flex items-center gap-2">
@@ -1342,23 +1347,41 @@ const SectionC: React.FC = () => {
                               size="sm"
                               variant="outline"
                               onClick={() => handleEditEntry(entry)}
-                              title="Edit"
-                              className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
+                              title={entry.locked ? "Locked - Cannot Edit" : "Edit"}
+                              disabled={entry.locked}
+                              className={`h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg ${
+                                entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                              }`}
                             >
                               <Edit className="h-4 w-4 text-textDark" />
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleDeleteEntry(entry.id)}
-                              title="Delete"
-                              className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
+                              onClick={() => handleDeleteEntry(entry)}
+                              title={entry.locked ? "Locked - Cannot Delete" : "Delete"}
+                              disabled={entry.locked}
+                              className={`h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg ${
+                                entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                              }`}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
 
                           <CardContent className="p-4 pr-32">
+                            {/* Entry Type and Status Identification */}
+                            <div className="mb-3 flex gap-2 flex-wrap">
+                              <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 font-semibold text-xs">
+                                SUP - Supervision
+                              </Badge>
+                              {entry.locked && (
+                                <Badge className="bg-red-100 text-red-800 border-red-200 font-semibold text-xs">
+                                  🔒 Locked
+                                </Badge>
+                              )}
+                            </div>
+                            
                             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                               {/* Row 1: Basic Info */}
                               <div className="flex items-center gap-2">
@@ -1473,23 +1496,41 @@ const SectionC: React.FC = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => handleEditEntry(entry)}
-                      title="Edit"
-                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
+                      title={entry.locked ? "Locked - Cannot Edit" : "Edit"}
+                      disabled={entry.locked}
+                      className={`h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg ${
+                        entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                     >
                       <Edit className="h-4 w-4 text-textDark" />
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleDeleteEntry(entry.id)}
-                      title="Delete"
-                      className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
+                      onClick={() => handleDeleteEntry(entry)}
+                      title={entry.locked ? "Locked - Cannot Delete" : "Delete"}
+                      disabled={entry.locked}
+                      className={`h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg ${
+                        entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
 
                   <CardContent className="p-4 pr-32">
+                    {/* Entry Type and Status Identification */}
+                    <div className="mb-3 flex gap-2 flex-wrap">
+                      <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 font-semibold text-xs">
+                        SUP - Supervision
+                      </Badge>
+                      {entry.locked && (
+                        <Badge className="bg-red-100 text-red-800 border-red-200 font-semibold text-xs">
+                          🔒 Locked
+                        </Badge>
+                      )}
+                    </div>
+                    
                     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                       {/* Row 1: Basic Info */}
                       <div className="flex items-center gap-2">
@@ -1747,7 +1788,7 @@ const SectionC: React.FC = () => {
                     Cancel
                   </Button>
                   {editingEntry && (
-                    <Button type="button" variant="destructive" onClick={() => handleDeleteEntry(editingEntry.id)}>
+                    <Button type="button" variant="destructive" onClick={() => handleDeleteEntry(editingEntry)}>
                       Delete
                     </Button>
                   )}

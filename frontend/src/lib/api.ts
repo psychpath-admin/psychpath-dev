@@ -274,7 +274,7 @@ export async function getSectionAEntries(params?: { week_starting?: string; incl
 
 export async function getSectionAEntry(id: number) {
   console.log('Fetching Section A entry with ID:', id)
-  const res = await apiFetch(`/api/section-a/entries/${id}/`)
+  const res = await apiFetch(`/api/section-a/entries/${id}/?include_locked=true`)
   console.log('Response status:', res.status, res.ok)
   if (!res.ok) {
     const errorText = await res.text()
@@ -367,13 +367,13 @@ import type { SupervisionEntry, SupervisionWeeklyGroup, SupervisionMetrics } fro
 import type { ProgramSummary } from '@/types/program'
 
 export async function getPDEntries(): Promise<PDEntry[]> {
-  const res = await apiFetch('/api/section-b/entries/')
+  const res = await apiFetch('/api/section-b/entries/?include_locked=true')
   if (!res.ok) throw new Error('Failed to fetch PD entries')
   return res.json()
 }
 
 export async function getPDEntriesGroupedByWeek(): Promise<PDWeeklyGroup[]> {
-  const res = await apiFetch('/api/section-b/entries/grouped-by-week/')
+  const res = await apiFetch('/api/section-b/entries/grouped-by-week/?include_locked=true')
   if (!res.ok) throw new Error('Failed to fetch PD entries grouped by week')
   return res.json()
 }
@@ -417,13 +417,13 @@ export async function deletePDEntry(id: number): Promise<void> {
 
 // Section C - Supervision API functions
 export async function getSupervisionEntries(): Promise<SupervisionEntry[]> {
-  const res = await apiFetch('/api/section-c/entries/')
+  const res = await apiFetch('/api/section-c/entries/?include_locked=true')
   if (!res.ok) throw new Error('Failed to fetch supervision entries')
   return res.json()
 }
 
 export async function getSupervisionEntriesGroupedByWeek(): Promise<SupervisionWeeklyGroup[]> {
-  const res = await apiFetch('/api/section-c/entries/grouped-by-week/')
+  const res = await apiFetch('/api/section-c/entries/grouped-by-week/?include_locked=true')
   if (!res.ok) throw new Error('Failed to fetch supervision entries grouped by week')
   return res.json()
 }

@@ -17,8 +17,24 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.is_authenticated and hasattr(user, 'profile'):
-            # Temporary: allow all entries for logbook editing
-            queryset = SupervisionEntry.objects.all()
+            # Filter by current user's entries
+            if user.profile.role in ['PROVISIONAL', 'REGISTRAR']:
+                queryset = SupervisionEntry.objects.filter(trainee=user.profile)
+            elif user.profile.role == 'SUPERVISOR':
+                trainee_ids = user.profile.supervising.values_list('id', flat=True)
+                queryset = SupervisionEntry.objects.filter(trainee__id__in=trainee_ids)
+            elif user.profile.role == 'ORG_ADMIN':
+                from api.models import UserProfile
+                org_trainee_ids = UserProfile.objects.filter(
+                    organization=user.profile.organization, 
+                    role__in=['PROVISIONAL', 'REGISTRAR']
+                ).values_list('id', flat=True)
+                queryset = SupervisionEntry.objects.filter(trainee__id__in=org_trainee_ids)
+            elif user.profile.role == 'SUPPORT_ADMIN':
+                # Support admin can see all entries
+                queryset = SupervisionEntry.objects.all()
+            else:
+                queryset = SupervisionEntry.objects.none()
             
             # Filter by locked status if provided
             include_locked = self.request.query_params.get('include_locked', 'false').lower() == 'true'
@@ -34,8 +50,8 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
         return SupervisionEntry.objects.none()
 
     def perform_create(self, serializer):
-        if not hasattr(self.request.user, 'profile') or self.request.user.profile.role not in ['PROVISIONAL', 'INTERN', 'REGISTRAR']:
-            raise serializers.ValidationError("Only provisional psychologists, interns and registrars can create supervision entries.")
+        if not hasattr(self.request.user, 'profile') or self.request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
+            raise serializers.ValidationError("Only provisional psychologists and registrars can create supervision entries.")
         
         # Calculate week_starting from date_of_supervision
         date_of_supervision = serializer.validated_data['date_of_supervision']
@@ -68,7 +84,7 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
             # Use the same filtering logic as get_queryset()
             user = request.user
             if user.is_authenticated and hasattr(user, 'profile'):
-                if user.profile.role in ['PROVISIONAL', 'INTERN', 'REGISTRAR']:
+                if user.profile.role in ['PROVISIONAL', 'REGISTRAR']:
                     all_entries_up_to_week = SupervisionEntry.objects.filter(
                         trainee=user.profile,
                         date_of_supervision__lt=week_start + timedelta(days=7)
@@ -80,9 +96,13 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
                         date_of_supervision__lt=week_start + timedelta(days=7)
                     )
                 elif user.profile.role == 'ORG_ADMIN':
-                    org_trainee_ids = UserProfile.objects.filter(organization=user.profile.organization, role__in=['PROVISIONAL', 'INTERN', 'REGISTRAR']).values_list('id', flat=True)
+                    org_trainee_ids = UserProfile.objects.filter(organization=user.profile.organization, role__in=['PROVISIONAL', 'REGISTRAR']).values_list('id', flat=True)
                     all_entries_up_to_week = SupervisionEntry.objects.filter(
                         trainee__id__in=org_trainee_ids,
+                        date_of_supervision__lt=week_start + timedelta(days=7)
+                    )
+                elif user.profile.role == 'SUPPORT_ADMIN':
+                    all_entries_up_to_week = SupervisionEntry.objects.filter(
                         date_of_supervision__lt=week_start + timedelta(days=7)
                     )
                 else:

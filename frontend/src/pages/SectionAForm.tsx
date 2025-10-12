@@ -15,6 +15,7 @@ import {
   getLastSessionData
 } from '@/lib/autocompleteApi'
 import { useErrorHandler, ErrorOverlay } from '@/lib/errors'
+import { useButtonConfig } from '@/hooks/useButtonConfig'
 
 interface SectionAFormProps {
   onCancel: () => void
@@ -43,6 +44,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { errorOverlay, showError } = useErrorHandler()
+  const { getButtonText, loading: configLoading } = useButtonConfig(!!entryId)
   const [formData, setFormData] = useState<EntryForm>({
     client_id: '',
     session_date: new Date().toISOString().split('T')[0],
@@ -132,6 +134,18 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
       setLoading(true)
       getSectionAEntry(parseInt(entryId))
         .then(entry => {
+          // Check if entry is locked (part of approved logbook)
+          if (entry.locked) {
+            showError(new Error('Entry is locked'), {
+              title: 'Entry Cannot Be Edited',
+              category: 'Validation',
+              customExplanation: 'This entry is locked and cannot be edited because it is part of an approved logbook. Once a logbook is approved by your supervisor, all entries become read-only to maintain data integrity. Approved logbooks represent final, verified records that cannot be modified.',
+              customUserAction: 'If you need to make changes to this entry, please contact your supervisor to unlock the logbook first.'
+            })
+            onCancel()
+            return
+          }
+          
           setFormData({
             client_id: entry.client_id || '',
             session_date: entry.session_date || new Date().toISOString().split('T')[0],
@@ -151,7 +165,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
           setLoading(false)
         })
     }
-  }, [entryId])
+  }, [entryId, onCancel])
 
   const handleSubmit = async (action: 'dcc_only' | 'dcc_and_cra') => {
     if (!formData.client_id.trim()) {
@@ -462,12 +476,12 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   {saving ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-2"></div>
-                      Creating...
+                      {!!entryId ? 'Updating...' : 'Creating...'}
                     </>
                   ) : (
                     <>
                       <Save className="h-4 w-4 mr-2" />
-                      Create DCC Entry
+                      {configLoading ? 'Loading...' : getButtonText(false)}
                     </>
                   )}
                 </Button>
@@ -480,12 +494,12 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   {saving ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Creating...
+                      {!!entryId ? 'Updating...' : 'Creating...'}
                     </>
                   ) : (
                     <>
                       <Plus className="h-4 w-4 mr-2" />
-                      Create DCC + CRA
+                      {configLoading ? 'Loading...' : getButtonText(true)}
                     </>
                   )}
                 </Button>

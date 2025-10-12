@@ -156,6 +156,11 @@ def pd_entries_grouped_by_week(request):
         trainee=request.user
     ).order_by('-week_starting', '-date_of_activity')
     
+    # Filter by locked status if provided
+    include_locked = request.GET.get('include_locked', 'false').lower() == 'true'
+    if not include_locked:
+        entries = entries.filter(locked=False)
+    
     # Group entries by week
     grouped_entries = defaultdict(list)
     week_summaries = {}

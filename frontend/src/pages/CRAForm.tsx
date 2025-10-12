@@ -220,10 +220,24 @@ function CRAForm({ onCancel, entryId, parentDccId, returnTo }: CRAFormProps) {
       setLoading(true)
       getSectionAEntry(parseInt(entryId))
         .then(entry => {
+          // If the entry has session_activity_types, use the first one as the activity type
+          let activityType = entry.activity_type || ''
+          let customActivityType = entry.custom_activity_type || ''
+          
+          if (entry.session_activity_types && entry.session_activity_types.length > 0) {
+            const firstActivityType = entry.session_activity_types[0]
+            // Check if it's a custom activity type (not in the default list)
+            if (DEFAULT_ACTIVITY_TYPES.includes(firstActivityType)) {
+              activityType = firstActivityType
+            } else {
+              customActivityType = firstActivityType
+            }
+          }
+          
           setFormData({
             activity_date: entry.session_date || entry.activity_date || '',
-            activity_type: entry.activity_type || '',
-            custom_activity_type: entry.custom_activity_type || '',
+            activity_type: activityType,
+            custom_activity_type: customActivityType,
             duration_hours: entry.duration_hours?.toString() || (entry.duration_minutes ? (entry.duration_minutes / 60).toString() : '1.0'),
             reflection: entry.reflection || entry.reflections_on_experience || '',
             entry_type: entry.entry_type || 'cra',
@@ -301,13 +315,17 @@ function CRAForm({ onCancel, entryId, parentDccId, returnTo }: CRAFormProps) {
     try {
       const weekStarting = calculateWeekStarting(formData.activity_date)
       
+      // Determine the activity type for session_activity_types array
+      const activityTypeForDisplay = formData.custom_activity_type || formData.activity_type
+      
       const entryData = {
         session_date: formData.activity_date, // Map activity_date to session_date for backend
         activity_type: formData.activity_type,
         custom_activity_type: formData.custom_activity_type,
+        session_activity_types: activityTypeForDisplay ? [activityTypeForDisplay] : [], // Populate the display field
         duration_hours: parseFloat(formData.duration_hours),
         duration_minutes: Math.round(parseFloat(formData.duration_hours) * 60), // Convert to minutes for backend
-        reflection: formData.reflection,
+        reflections_on_experience: formData.reflection, // Map reflection to reflections_on_experience
         entry_type: formData.entry_type,
         week_starting: weekStarting,
         // Include client_id from parent DCC entry if available

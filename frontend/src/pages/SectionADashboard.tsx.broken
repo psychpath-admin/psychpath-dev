@@ -23,6 +23,7 @@ import {
 import CRAForm from '@/components/CRAForm'
 import { minutesToHoursMinutes, formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 import { useFilterPersistence, useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
+import { useErrorHandler } from '@/lib/errors'
 
 // Helper function to format dates in dd/mm/yyyy format
 const formatDateDDMMYYYY = (dateString: string) => {
@@ -31,6 +32,36 @@ const formatDateDDMMYYYY = (dateString: string) => {
   const month = (date.getMonth() + 1).toString().padStart(2, '0')
   const year = date.getFullYear()
   return `${day}/${month}/${year}`
+}
+
+// Helper function to get entry type label and styling
+const getEntryTypeInfo = (entryType: string) => {
+  switch (entryType) {
+    case 'client_contact':
+      return {
+        label: 'DCC',
+        color: 'bg-blue-100 text-blue-800 border-blue-200',
+        description: 'Direct Client Contact'
+      }
+    case 'cra':
+      return {
+        label: 'CRA',
+        color: 'bg-green-100 text-green-800 border-green-200',
+        description: 'Client Related Activity'
+      }
+    case 'independent_activity':
+      return {
+        label: 'ICRA',
+        color: 'bg-purple-100 text-purple-800 border-purple-200',
+        description: 'Independent Client Related Activity'
+      }
+    default:
+      return {
+        label: entryType.toUpperCase(),
+        color: 'bg-gray-100 text-gray-800 border-gray-200',
+        description: entryType
+      }
+  }
 }
 
 interface DCCEntry {
@@ -49,6 +80,9 @@ interface DCCEntry {
   cra_entries: DCCEntry[]
   simulated: boolean
   supervisor_reviewed?: boolean
+  locked?: boolean
+  supervisor_comment?: string
+  trainee_response?: string
   simulated_hours_info?: {
     total_hours: number
     remaining_hours: number
@@ -71,6 +105,7 @@ interface PaginationInfo {
 export default function SectionADashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { showError } = useErrorHandler()
   const [dccEntries, setDccEntries] = useState<DCCEntry[]>([])
   const [allEntries, setAllEntries] = useState<DCCEntry[]>([]) // Store unfiltered entries for cumulative totals
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -292,9 +327,23 @@ export default function SectionADashboard() {
 
   const calculateWeekStarting = (dateString: string) => {
     const date = new Date(dateString)
-    const dayOfWeek = date.getDay() // 0 for Sunday, 1 for Monday, etc.
-    const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1) // Adjust to Monday
-    const weekStart = new Date(date.setDate(diff))
+    
+    // Get the day of the week (0=Sunday, 1=Monday, ..., 6=Saturday)
+    const dayOfWeek = date.getDay()
+    
+    let weekStart: Date
+    
+    if (dayOfWeek === 0) {
+      // Sunday belongs to the NEXT week (next Monday)
+      weekStart = new Date(date)
+      weekStart.setDate(date.getDate() + 1)
+    } else {
+      // Calculate the Monday of the current week
+      const daysToMonday = dayOfWeek - 1 // 1=Monday is 0 days, 2=Tuesday is 1 day, etc.
+      weekStart = new Date(date)
+      weekStart.setDate(date.getDate() - daysToMonday)
+    }
+    
     return weekStart.toISOString().split('T')[0]
   }
 
@@ -322,6 +371,17 @@ export default function SectionADashboard() {
   const handleEdit = (entry: DCCEntry) => {
     console.log('Edit button clicked for entry:', entry.id, 'type:', entry.entry_type)
     
+    // Check if entry is locked
+    if (entry.locked) {
+      showError(new Error('Entry is locked'), {
+        title: 'Entry Cannot Be Edited',
+        category: 'Validation',
+        customExplanation: 'This entry is locked and cannot be edited because it is part of an approved logbook. Once a logbook is approved by your supervisor, all entries become read-only to maintain data integrity.',
+        customUserAction: 'If you need to make changes to this entry, please contact your supervisor to unlock the logbook first.'
+      })
+      return
+    }
+    
     if (entry.entry_type === 'independent_activity') {
       // Edit ICRA entry in CRA form modal
       setSelectedEntry(entry)
@@ -346,6 +406,17 @@ export default function SectionADashboard() {
   }
 
   const handleAddCRA = (entry: DCCEntry) => {
+    // Check if entry is locked
+    if (entry.locked) {
+      showError(new Error('Cannot add CRA to locked entry'), {
+        title: 'Cannot Add CRA',
+        category: 'Validation',
+        customExplanation: 'You cannot add a Client Related Activity (CRA) to this entry because it is part of an approved logbook. Once a logbook is approved by your supervisor, all entries become read-only to maintain data integrity.',
+        customUserAction: 'If you need to add a CRA to this entry, please contact your supervisor to unlock the logbook first.'
+      })
+      return
+    }
+    
     setSelectedEntry(entry)
     setCraFormData({
       client_id: entry.client_id,
@@ -387,7 +458,18 @@ export default function SectionADashboard() {
     }
   }
 
-  const handleEditCRA = (craEntry: DCCEntry) => {
+  const handleEditCRA = (craEntry: DCCEntry, parentEntry?: DCCEntry) => {
+    // Check if parent DCC entry is locked
+    if (parentEntry?.locked) {
+      showError(new Error('CRA entry is locked'), {
+        title: 'CRA Cannot Be Edited',
+        category: 'Validation',
+        customExplanation: 'This CRA entry cannot be edited because its parent DCC entry is locked as part of an approved logbook. Once a logbook is approved by your supervisor, all entries become read-only to maintain data integrity.',
+        customUserAction: 'If you need to make changes to this CRA entry, please contact your supervisor to unlock the logbook first.'
+      })
+      return
+    }
+    
     setSelectedEntry(craEntry)
     setCraFormData({
       client_id: craEntry.client_id,
@@ -403,7 +485,18 @@ export default function SectionADashboard() {
     setShowCRAForm(true)
   }
 
-  const handleDeleteCRA = async (craEntry: DCCEntry) => {
+  const handleDeleteCRA = async (craEntry: DCCEntry, parentEntry?: DCCEntry) => {
+    // Check if parent DCC entry is locked
+    if (parentEntry?.locked) {
+      showError(new Error('CRA entry is locked'), {
+        title: 'CRA Cannot Be Deleted',
+        category: 'Validation',
+        customExplanation: 'This CRA entry cannot be deleted because its parent DCC entry is locked as part of an approved logbook. Once a logbook is approved by your supervisor, all entries become read-only to maintain data integrity.',
+        customUserAction: 'If you need to delete this CRA entry, please contact your supervisor to unlock the logbook first.'
+      })
+      return
+    }
+    
     if (window.confirm(`Are you sure you want to delete this CRA record?`)) {
       try {
         await deleteSectionAEntry(craEntry.id)
@@ -429,8 +522,17 @@ export default function SectionADashboard() {
         await updateSectionAEntry(editingCRAId, entryData)
         toast.success('CRA entry updated successfully!')
       } else {
+        // Check if this will be converted to ICRA (cross-week scenario)
+        const parentWeek = selectedEntry ? calculateWeekStarting(selectedEntry.session_date) : null
+        const craWeek = calculateWeekStarting(formData.session_date)
+        const willConvertToICRA = parentWeek && parentWeek !== craWeek
+        
+        if (willConvertToICRA) {
+          toast.info('Note: This activity is in a different week than the DCC session, so it will be saved as an Independent Client Related Activity (ICRA) instead of a CRA.')
+        }
+        
         await createSectionAEntry(entryData)
-        toast.success('CRA entry created successfully!')
+        toast.success(willConvertToICRA ? 'ICRA entry created successfully!' : 'CRA entry created successfully!')
       }
 
       setShowCRAForm(false)
@@ -646,7 +748,7 @@ export default function SectionADashboard() {
     setSessionType('all')
     setDurationMin('')
     setDurationMax('')
-    // groupByWeek is now always true, no need to reset
+    setGroupByWeek(false)
     setClientPseudonym('')
     setActivityType('all')
     setReviewedFilter('all')
@@ -667,12 +769,8 @@ export default function SectionADashboard() {
     })
   }
 
-  // Group entries by week if groupByWeek is enabled
+  // Group entries by week (standard view)
   const getGroupedEntries = () => {
-    if (!groupByWeek) {
-      return dccEntries.map(entry => ({ entry, weekStart: null }))
-    }
-    
     const grouped = dccEntries.reduce((groups, entry) => {
       const weekStart = entry.week_starting
       if (!groups[weekStart]) {
@@ -1457,6 +1555,7 @@ export default function SectionADashboard() {
                     </SelectContent>
                   </Select>
                 </div>
+                
               </div>
               
               <div className="flex items-center gap-2">
@@ -1534,392 +1633,80 @@ export default function SectionADashboard() {
         ) : (
           <div className="space-y-4">
             {getGroupedEntries().map((group, groupIndex) => {
-              // If not grouped, render individual entries
-              if (!groupByWeek) {
-                const entry = group.entry!
-                const index = groupIndex
-                
-                // Create vibrant color variations using PsychPathway brand colors
-              const colorVariations = [
-                'bg-blue-50 border-blue-200 hover:border-blue-300',
-                'bg-amber-50 border-amber-200 hover:border-amber-300', 
-                'bg-orange-50 border-orange-200 hover:border-orange-300',
-                'bg-green-50 border-green-200 hover:border-green-300',
-                'bg-purple-50 border-purple-200 hover:border-purple-300',
-                'bg-pink-50 border-pink-200 hover:border-pink-300',
-                'bg-indigo-50 border-indigo-200 hover:border-indigo-300',
-                'bg-teal-50 border-teal-200 hover:border-teal-300',
-                'bg-rose-50 border-rose-200 hover:border-rose-300',
-                'bg-cyan-50 border-cyan-200 hover:border-cyan-300'
-              ]
-              const cardColorClass = colorVariations[index % colorVariations.length]
-              
               return (
-                <Card key={entry.id} className={`hover:shadow-md transition-all duration-300 relative shadow-sm group rounded-card ${cardColorClass}`}>
-                  {/* Enhanced Action buttons */}
-                  <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleViewDetails(entry)}
-                      title={expandedEntries.has(entry.id.toString()) ? "Collapse Details" : "Expand Details"}
-                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                    >
-                      {expandedEntries.has(entry.id.toString()) ? (
-                        <ChevronUp className="h-4 w-4 text-textDark" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-textDark" />
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleEdit(entry)}
-                      title="Edit"
-                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                    >
-                      <Edit className="h-4 w-4 text-textDark" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAddCRA(entry)}
-                      title="Add CRA"
-                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                    >
-                      <Plus className="h-4 w-4 text-textDark" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDelete(entry)}
-                      title="Delete"
-                      className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <CardContent className="p-4 pr-32">
-                    {/* ICRA Identification */}
-                    {entry.entry_type === 'independent_activity' && (
-                      <div className="mb-3">
-                        <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold">
-                          📋 Independent Client Related Activity (ICRA)
-                        </Badge>
-                      </div>
-                    )}
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {/* Row 1: Basic Info */}
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-sm font-medium text-gray-700 break-words">
-                          {formatDateDDMMYYYY(entry.session_date)}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <span className="font-semibold text-gray-900 break-words">{entry.client_id}</span>
-                        {entry.simulated && (
-                          <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
-                            Simulated
-                          </Badge>
-                        )}
-                        {entry.supervisor_reviewed && (
-                          <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-green-600 border-green-600">
-                            ✓ Reviewed
-                          </Badge>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-sm text-gray-600">
-                          {formatDuration(entry.duration_minutes)}
-                        </span>
-                      </div>
-
-                      {/* Row 2: Session Types - Full Width */}
-                      <div className="lg:col-span-2 xl:col-span-3">
-                        <div className="flex flex-wrap gap-1">
-                          {entry.session_activity_types.map((type, typeIndex) => (
-                            <Badge key={typeIndex} variant="outline" className="text-xs">
-                              {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {/* Row 3: Location and Reflections */}
-                      <div className="lg:col-span-1">
-                        <span className="text-sm text-gray-600 break-words">{entry.place_of_practice}</span>
-                      </div>
-                      
-                      {entry.reflections_on_experience && (
-                        <div className="lg:col-span-2">
-                          <p className="text-sm text-gray-700 break-words line-clamp-2">
-                            {truncateText(entry.reflections_on_experience, 120)}
+                <div key={group.weekStart} className="space-y-4">
+                  {/* Week Header */}
+                  <div 
+                    className="bg-primary/5 border border-primary/20 rounded-lg p-4 cursor-pointer hover:bg-primary/10 transition-colors duration-200"
+                    onClick={() => toggleWeekExpansion(group.weekStart)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Calendar className="h-5 w-5 text-primary" />
+                        <div>
+                          <h3 className="text-lg font-semibold text-primary">
+                            Week Starting {formatDateDDMMYYYY(group.weekStart)}
+                          </h3>
+                          <p className="text-sm text-primary/70">
+                            {group.entries.length} {group.entries.length === 1 ? 'entry' : 'entries'}
                           </p>
                         </div>
-                      )}
-                      
-                    </div>
-                  </CardContent>
-
-                  {/* Expanded Details Section */}
-                  {expandedEntries.has(entry.id.toString()) && (
-                    <div className="border-t border-gray-200 bg-gray-50/50">
-                      <CardContent className="p-4">
-                        <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                          <Eye className="h-4 w-4" />
-                          Detailed Information
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                          {/* Client Information */}
-                          <div className="space-y-2">
-                            <h5 className="font-medium text-gray-700">Client Details</h5>
-                            <div className="space-y-1 text-gray-600">
-                              <div><span className="font-medium">Client ID:</span> {entry.client_id}</div>
-                              {entry.client_pseudonym && (
-                                <div><span className="font-medium">Pseudonym:</span> {entry.client_pseudonym}</div>
-                              )}
-                              {entry.presenting_issues && (
-                                <div><span className="font-medium">Presenting Issues:</span> {entry.presenting_issues}</div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Session Information */}
-                          <div className="space-y-2">
-                            <h5 className="font-medium text-gray-700">Session Details</h5>
-                            <div className="space-y-1 text-gray-600">
-                              <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.session_date)}</div>
-                              <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
-                              <div><span className="font-medium">Location:</span> {entry.place_of_practice}</div>
-                              {entry.simulated && (
-                                <div><span className="font-medium">Type:</span> <Badge variant="secondary" className="text-xs ml-1">Simulated</Badge></div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Activity Types */}
-                          <div className="md:col-span-2 space-y-2">
-                            <h5 className="font-medium text-gray-700">Activity Types</h5>
-                            <div className="flex flex-wrap gap-1">
-                              {entry.session_activity_types.map((type, typeIndex) => (
-                                <Badge key={typeIndex} variant="outline" className="text-xs">
-                                  {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Reflections */}
-                          {entry.reflections_on_experience && (
-                            <div className="md:col-span-2 space-y-2">
-                              <h5 className="font-medium text-gray-700">Reflections</h5>
-                              <p className="text-gray-600 text-sm leading-relaxed bg-white p-3 rounded border">
-                                {entry.reflections_on_experience}
-                              </p>
-                            </div>
-                          )}
+                      </div>
+                      <div className="flex items-center gap-4">
+                        {/* Weekly Totals */}
+                        <div className="flex gap-4 text-sm font-medium">
+                          <span className="text-blue-600">
+                            DCC {group.entries
+                              .filter(entry => entry.entry_type === 'client_contact')
+                              .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60 < 1 
+                              ? `${Math.round(group.entries
+                                  .filter(entry => entry.entry_type === 'client_contact')
+                                  .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0))}m`
+                              : `${(group.entries
+                                  .filter(entry => entry.entry_type === 'client_contact')
+                                  .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60).toFixed(1)}h`}
+                          </span>
+                          <span className="text-green-600">
+                            CRA {group.entries
+                              .filter(entry => entry.entry_type === 'cra')
+                              .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60 < 1 
+                              ? `${Math.round(group.entries
+                                  .filter(entry => entry.entry_type === 'cra')
+                                  .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0))}m`
+                              : `${(group.entries
+                                  .filter(entry => entry.entry_type === 'cra')
+                                  .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60).toFixed(1)}h`}
+                          </span>
+                          <span className="text-purple-600">
+                            ICRA {group.entries
+                              .filter(entry => entry.entry_type === 'independent_activity')
+                              .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60 < 1 
+                              ? `${Math.round(group.entries
+                                  .filter(entry => entry.entry_type === 'independent_activity')
+                                  .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0))}m`
+                              : `${(group.entries
+                                  .filter(entry => entry.entry_type === 'independent_activity')
+                                  .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60).toFixed(1)}h`}
+                          </span>
+                          <span className="text-gray-600 font-semibold">
+                            Total {(group.entries.reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0) / 60).toFixed(1)}h
+                          </span>
                         </div>
-                      </CardContent>
-                    </div>
-                  )}
-
-                  {/* Nested CRA Entries */}
-                  {entry.cra_entries && entry.cra_entries.length > 0 && (
-                    <div className="px-4 pb-4">
-                      <div className="border-t border-gray-200 pt-3">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">
-                          Client Related Activities ({entry.cra_entries.length})
-                        </h4>
-                        <div className="space-y-2">
-                          {entry.cra_entries.map((craEntry, craIndex) => {
-                            // Create vibrant color variations for each CRA entry
-                            const craColorVariations = [
-                              'bg-blue-100 border-blue-300 hover:border-blue-400',
-                              'bg-green-100 border-green-300 hover:border-green-400',
-                              'bg-purple-100 border-purple-300 hover:border-purple-400',
-                              'bg-orange-100 border-orange-300 hover:border-orange-400',
-                              'bg-pink-100 border-pink-300 hover:border-pink-400',
-                              'bg-indigo-100 border-indigo-300 hover:border-indigo-400',
-                              'bg-teal-100 border-teal-300 hover:border-teal-400',
-                              'bg-rose-100 border-rose-300 hover:border-rose-400',
-                              'bg-cyan-100 border-cyan-300 hover:border-cyan-400',
-                              'bg-emerald-100 border-emerald-300 hover:border-emerald-400'
-                            ]
-                            const craCardColorClass = craColorVariations[craIndex % craColorVariations.length]
-                            
-                            return (
-                            <Card key={craEntry.id} className={`${craCardColorClass} ml-4 relative`}>
-                              {/* CRA Action buttons */}
-                              <div className="absolute top-2 right-2 flex gap-1 z-10">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleEditCRA(craEntry)}
-                                  title="Edit CRA"
-                                  className="h-6 w-6 p-0 bg-white/90 backdrop-blur-sm"
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleDeleteCRA(craEntry)}
-                                  title="Delete CRA"
-                                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 bg-white/90 backdrop-blur-sm"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-
-                              <CardContent className="p-3 pr-16">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <Clock className="h-3 w-3 text-textLight" />
-                                    <span className="text-xs font-semibold text-textDark">
-                                      {formatDuration(parseInt(craEntry.duration_minutes))}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="flex items-center gap-2">
-                                    <User className="h-3 w-3 text-textLight" />
-                                    <span className="text-xs font-semibold text-textDark">
-                                      {craEntry.client_pseudonym || craEntry.client_id}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="flex flex-wrap gap-1 md:col-span-2">
-                                    {craEntry.session_activity_types.map((type, typeIndex) => (
-                                      <Badge key={typeIndex} variant="outline" className="text-xs">
-                                        {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                  
-                                  <div className="md:col-span-2">
-                                    <span className="text-xs text-textLight font-medium">
-                                      {craEntry.place_of_practice}
-                                    </span>
-                                  </div>
-                                  
-                                  {craEntry.presenting_issues && (
-                                    <div className="md:col-span-2">
-                                      <p className="text-xs text-textDark break-words font-medium">
-                                        {truncateText(craEntry.presenting_issues, 80)}
-                                      </p>
-                                    </div>
-                                  )}
-                                  
-                                  {craEntry.reflections_on_experience && (
-                                    <div className="md:col-span-2">
-                                      <p className="text-xs text-textLight italic break-words">
-                                        "{truncateText(craEntry.reflections_on_experience, 100)}"
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                            )
-                          })}
-                        </div>
+                        
+                        <ChevronUp 
+                          className={`h-4 w-4 text-primary transition-transform duration-200 ${
+                            expandedWeeks.has(group.weekStart) ? 'rotate-180' : ''
+                          }`} 
+                        />
                       </div>
                     </div>
-                  )}
-                </Card>
-              )
-              } else {
-                // Grouped by week - render week header and entries
-                return (
-                  <div key={group.weekStart} className="space-y-4">
-                    {/* Week Header */}
-                    <div 
-                      className="bg-primary/5 border border-primary/20 rounded-lg p-4 cursor-pointer hover:bg-primary/10 transition-colors duration-200"
-                      onClick={() => toggleWeekExpansion(group.weekStart)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Calendar className="h-5 w-5 text-primary" />
-                          <div>
-                            <h3 className="text-lg font-semibold text-primary">
-                              Week Starting {formatDateDDMMYYYY(group.weekStart)}
-                            </h3>
-                            <p className="text-sm text-primary/70">
-                              {group.entries.length} {group.entries.length === 1 ? 'entry' : 'entries'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <div className="flex gap-4 text-sm">
-                              {/* DCC Total */}
-                              <div className="text-center">
-                                <p className="font-medium text-primary">DCC</p>
-                                <p className="text-primary/70">
-                                  {formatDurationWithUnit(
-                                    group.entries
-                                      .filter(entry => entry.entry_type === 'client_contact')
-                                      .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
-                                  )}
-                                </p>
-                              </div>
-                              
-                              {/* CRA Total */}
-                              <div className="text-center">
-                                <p className="font-medium text-secondary">CRA</p>
-                                <p className="text-secondary/70">
-                                  {formatDurationWithUnit(
-                                    group.entries
-                                      .filter(entry => entry.entry_type === 'cra')
-                                      .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
-                                  )}
-                                </p>
-                              </div>
-                              
-                              {/* ICRA Total */}
-                              <div className="text-center">
-                                <p className="font-medium text-accent">ICRA</p>
-                                <p className="text-accent/70">
-                                  {formatDurationWithUnit(
-                                    group.entries
-                                      .filter(entry => entry.entry_type === 'independent_activity')
-                                      .reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
-                                  )}
-                                </p>
-                              </div>
-                              
-                              {/* Total */}
-                              <div className="text-center border-l border-primary/20 pl-4">
-                                <p className="font-medium text-primary">Total</p>
-                                <p className="text-primary/70">
-                                  {formatDurationWithUnit(
-                                    group.entries.reduce((sum, entry) => sum + (parseInt(entry.duration_minutes) || 0), 0)
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center">
-                            {expandedWeeks.has(group.weekStart) ? (
-                              <ChevronUp className="h-5 w-5 text-primary" />
-                            ) : (
-                              <ChevronDown className="h-5 w-5 text-primary" />
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Week Entries */}
-                    {expandedWeeks.has(group.weekStart) && (
-                      <div className="space-y-3">
-                        {group.entries.map((entry, entryIndex) => {
+                  </div>
+                  
+                  {/* Weekly Entries */}
+                  {expandedWeeks.has(group.weekStart) && (
+                    <div className="space-y-3">
+                      {group.entries.map((entry, entryIndex) => {
+                        // Create vibrant color variations using PsychPathway brand colors
                         const colorVariations = [
                           'bg-blue-50 border-blue-200 hover:border-blue-300',
                           'bg-amber-50 border-amber-200 hover:border-amber-300', 
@@ -1955,8 +1742,11 @@ export default function SectionADashboard() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleEdit(entry)}
-                                title="Edit"
-                                className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
+                                title={entry.locked ? "Locked - Cannot Edit" : "Edit"}
+                                disabled={entry.locked}
+                                className={`h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg ${
+                                  entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
                               >
                                 <Edit className="h-4 w-4 text-textDark" />
                               </Button>
@@ -1964,8 +1754,11 @@ export default function SectionADashboard() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleAddCRA(entry)}
-                                title="Add CRA"
-                                className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
+                                title={entry.locked ? "Locked - Cannot Add CRA" : "Add CRA"}
+                                disabled={entry.locked}
+                                className={`h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg ${
+                                  entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
                               >
                                 <Plus className="h-4 w-4 text-textDark" />
                               </Button>
@@ -1973,22 +1766,33 @@ export default function SectionADashboard() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleDelete(entry)}
-                                title="Delete"
-                                className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
+                                title={entry.locked ? "Locked - Cannot Delete" : "Delete"}
+                                disabled={entry.locked}
+                                className={`h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg ${
+                                  entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
 
                             <CardContent className="p-4 pr-32">
-                              {/* ICRA Identification */}
-                              {entry.entry_type === 'independent_activity' && (
-                                <div className="mb-3">
-                                  <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold">
-                                    📋 Independent Client Related Activity (ICRA)
+                              {/* Entry Type and Status Identification */}
+                              <div className="mb-3 flex gap-2 flex-wrap">
+                                {(() => {
+                                  const typeInfo = getEntryTypeInfo(entry.entry_type)
+                                  return (
+                                    <Badge className={`${typeInfo.color} font-semibold`}>
+                                      {typeInfo.label} - {typeInfo.description}
+                                    </Badge>
+                                  )
+                                })()}
+                                {entry.locked && (
+                                  <Badge className="bg-red-100 text-red-800 border-red-200 font-semibold">
+                                    🔒 Locked
                                   </Badge>
-                                </div>
-                              )}
+                                )}
+                              </div>
                               
                               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                                 {/* Row 1: Basic Info */}
@@ -2001,618 +1805,175 @@ export default function SectionADashboard() {
                                 
                                 <div className="flex items-center gap-2">
                                   <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                                  <span className="font-semibold text-gray-900 break-words">{entry.client_id}</span>
-                                  {entry.simulated && (
-                                    <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
-                                      Simulated
-                                    </Badge>
-                                  )}
-                                  {entry.supervisor_reviewed && (
-                                    <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-green-600 border-green-600">
-                                      ✓ Reviewed
-                                    </Badge>
-                                  )}
+                                  <span className="font-semibold text-gray-900 break-words">{entry.client_pseudonym || entry.client_id}</span>
                                 </div>
                                 
                                 <div className="flex items-center gap-2">
                                   <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
                                   <span className="text-sm font-medium text-gray-700">
-                                    {formatDurationDisplay(entry.duration_minutes)}
+                                    {formatDuration(parseInt(entry.duration_minutes) || 0)}
                                   </span>
                                 </div>
                                 
-                                {/* Row 2: Activity Types */}
-                                <div className="flex items-center gap-2 lg:col-span-2 xl:col-span-3">
-                                  <FileText className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                                  <div className="flex flex-wrap gap-1">
-                                    {entry.session_activity_types.map((activity, idx) => (
-                                      <Badge key={idx} variant="outline" className="text-xs">
-                                        {activity}
-                                      </Badge>
-                                    ))}
+                                {/* Row 2: Location and Activity */}
+                                <div className="flex items-center gap-2">
+                                  <Target className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                                  <span className="text-sm text-gray-700 break-words">
+                                    {entry.place_of_practice}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex flex-wrap gap-1 md:col-span-2">
+                                  {entry.session_activity_types.map((type, typeIndex) => (
+                                    <Badge key={typeIndex} variant="outline" className="text-xs">
+                                      {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                
+                                {/* Row 3: Issues and Reflection */}
+                                {entry.presenting_issues && (
+                                  <div className="md:col-span-2">
+                                    <p className="text-xs text-textDark break-words font-medium">
+                                      <strong>Issues:</strong> {truncateText(entry.presenting_issues, 80)}
+                                    </p>
                                   </div>
+                                )}
+                                
+                                {entry.reflections_on_experience && (
+                                  <div className="md:col-span-2">
+                                    <p className="text-xs text-textLight italic break-words">
+                                      "{truncateText(entry.reflections_on_experience, 100)}"
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* CRA Entries */}
+                              {entry.cra_entries && entry.cra_entries.length > 0 && (
+                                <div className="mt-4 border-t pt-4">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <Plus className="h-4 w-4 text-green-600" />
+                                    <span className="text-sm font-semibold text-green-700">Client Related Activities ({entry.cra_entries.length})</span>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {entry.cra_entries.map((craEntry, craIndex) => (
+                                      <Card key={craEntry.id} className="bg-green-50 border-green-200 hover:border-green-300 transition-all duration-300">
+                                        {/* CRA Action buttons */}
+                                        <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => handleEditCRA(craEntry, entry)}
+                                            title={entry.locked ? "Locked - Cannot Edit CRA" : "Edit CRA"}
+                                            disabled={entry.locked}
+                                            className={`h-6 w-6 p-0 bg-white/90 backdrop-blur-sm ${
+                                              entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                                            }`}
+                                          >
+                                            <Edit className="h-3 w-3" />
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => handleDeleteCRA(craEntry, entry)}
+                                            title={entry.locked ? "Locked - Cannot Delete CRA" : "Delete CRA"}
+                                            disabled={entry.locked}
+                                            className={`h-6 w-6 p-0 text-red-600 hover:text-red-700 bg-white/90 backdrop-blur-sm ${
+                                              entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                                            }`}
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                        
+                                        <CardContent className="p-3 pr-16">
+                                          {/* CRA Entry Type and Status Identification */}
+                                          <div className="mb-2 flex gap-2 flex-wrap">
+                                            <Badge className="bg-green-100 text-green-800 border-green-200 font-semibold text-xs">
+                                              CRA - Client Related Activity
+                                            </Badge>
+                                            {entry.locked && (
+                                              <Badge className="bg-red-100 text-red-800 border-red-200 font-semibold text-xs">
+                                                🔒 Locked
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                            <div className="flex items-center gap-1">
+                                              <Calendar className="h-3 w-3 text-gray-500" />
+                                              <span className="font-medium text-gray-700">
+                                                {formatDateDDMMYYYY(craEntry.session_date)}
+                                              </span>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-1">
+                                              <Clock className="h-3 w-3 text-gray-500" />
+                                              <span className="font-medium text-gray-700">
+                                                {formatDuration(parseInt(craEntry.duration_minutes) || 0)}
+                                              </span>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-1">
+                                              <User className="h-3 w-3 text-gray-500" />
+                                              <span className="font-medium text-gray-700 break-words">
+                                                {craEntry.client_pseudonym || craEntry.client_id}
+                                              </span>
+                                            </div>
+                                            
+                                            <div className="flex flex-wrap gap-1 md:col-span-2">
+                                              {craEntry.session_activity_types.map((type, typeIndex) => (
+                                                <Badge key={typeIndex} variant="outline" className="text-xs">
+                                                  {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                                </Badge>
+                                              ))}
+                                            </div>
+                                            
+                                            <div className="md:col-span-2">
+                                              <span className="text-xs text-textLight font-medium">
+                                                {craEntry.place_of_practice}
+                                              </span>
+                                            </div>
+                                            
+                                            {craEntry.presenting_issues && (
+                                              <div className="md:col-span-2">
+                                                <p className="text-xs text-textDark break-words font-medium">
+                                                  {truncateText(craEntry.presenting_issues, 80)}
+                                                </p>
+                                              </div>
+                                            )}
+                                            
+                                            {craEntry.reflections_on_experience && (
+                                              <div className="md:col-span-2">
+                                                <p className="text-xs text-textLight italic break-words">
+                                                  "{truncateText(craEntry.reflections_on_experience, 100)}"
+                                                </p>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </CardContent>
+                                      </Card>
+                                    )
+                                  })}
                                 </div>
                               </div>
-
-                              {/* Expanded Details */}
-                              {expandedEntries.has(entry.id.toString()) && (
-                                <div className="mt-4 pt-4 border-t border-gray-200">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                      <h4 className="font-semibold text-gray-900 mb-2">Session Details</h4>
-                                      <div className="space-y-2 text-sm">
-                                        <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.session_date)}</div>
-                                        <div><span className="font-medium">Duration:</span> {formatDurationDisplay(entry.duration_minutes)}</div>
-                                        <div><span className="font-medium">Location:</span> {entry.place_of_practice}</div>
-                                        {entry.simulated && (
-                                          <div><span className="font-medium">Type:</span> <Badge variant="secondary" className="text-xs ml-1">Simulated</Badge></div>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <h4 className="font-semibold text-gray-900 mb-2">Presenting Issues</h4>
-                                      <p className="text-sm text-gray-700">{entry.presenting_issues || 'No issues recorded'}</p>
-                                    </div>
-                                  </div>
-                                  
-                                  {entry.reflections_on_experience && (
-                                    <div className="mt-4">
-                                      <h4 className="font-semibold text-gray-900 mb-2">Reflections</h4>
-                                      <p className="text-sm text-gray-700">{entry.reflections_on_experience}</p>
-                                    </div>
-                                  )}
-
-                                  {/* CRA Entries */}
-                                  {entry.cra_entries && entry.cra_entries.length > 0 && (
-                                    <div className="mt-4">
-                                      <h4 className="font-semibold text-gray-900 mb-2">Client Related Activities</h4>
-                                      <div className="space-y-2">
-                                        {entry.cra_entries.map((craEntry, craIndex) => (
-                                          <Card key={craEntry.id} className="bg-gray-50 border-gray-200">
-                                            <CardContent className="p-3">
-                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                                                <div><span className="font-medium">Activity:</span> {craEntry.session_activity_types.join(', ')}</div>
-                                                <div><span className="font-medium">Duration:</span> {formatDurationDisplay(craEntry.duration_minutes)}</div>
-                                                <div className="md:col-span-2"><span className="font-medium">Description:</span> {craEntry.presenting_issues}</div>
-                                              </div>
-                                            </CardContent>
-                                          </Card>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                            )}
                             </CardContent>
                           </Card>
                         )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              }
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
             })}
           </div>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No entries found for the selected criteria.</p>
+          </div>
         )}
-
-        {/* Pagination */}
-        {pagination.total_pages > 1 && (
-          <Card className="mt-6">
-            <CardContent className="flex items-center justify-between py-4">
-              <div className="text-sm text-gray-600">
-                Showing {((pagination.current_page - 1) * pagination.records_per_page) + 1} to{' '}
-                {Math.min(pagination.current_page * pagination.records_per_page, pagination.total_records)} of{' '}
-                {pagination.total_records} records
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.current_page - 1)}
-                  disabled={pagination.current_page === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </Button>
-                
-                <div className="flex gap-1">
-                  {Array.from({ length: Math.min(5, pagination.total_pages) }, (_, i) => {
-                    let pageNum;
-                    if (pagination.total_pages <= 5) {
-                      pageNum = i + 1;
-                    } else if (pagination.current_page <= 3) {
-                      pageNum = i + 1;
-                    } else if (pagination.current_page >= pagination.total_pages - 2) {
-                      pageNum = pagination.total_pages - 4 + i;
-                    } else {
-                      pageNum = pagination.current_page - 2 + i;
-                    }
-                    
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={pagination.current_page === pageNum ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handlePageChange(pageNum)}
-                        className="w-8 h-8 p-0"
-                      >
-                        {pageNum}
-                      </Button>
-                    );
-                  })}
-                </div>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.current_page + 1)}
-                  disabled={pagination.current_page === pagination.total_pages}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* ICRA Entries Section */}
-      {(() => {
-        const icraEntries = dccEntries.filter(entry => entry.entry_type === 'independent_activity')
-        if (icraEntries.length === 0) return null
-
-        return (
-          <div className="mt-8">
-            <Card className="brand-card">
-              <CardHeader>
-                <CardTitle className="text-2xl font-headings text-textDark flex items-center gap-3">
-                  <div className="h-8 w-8 bg-accent rounded-full flex items-center justify-center">
-                    <FileText className="h-4 w-4 text-white" />
-                  </div>
-                  Independent Client Related Activities (ICRA)
-                  <Badge variant="outline" className="ml-2">
-                    {icraEntries.length} entries
-                  </Badge>
-                </CardTitle>
-                <p className="text-textLight font-body">
-                  Independent client-related activities not linked to specific DCC sessions
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {icraEntries.map((entry, index) => {
-                    const icraColorVariations = [
-                      'bg-blue-100 border-blue-300 hover:border-blue-400',
-                      'bg-green-100 border-green-300 hover:border-green-400',
-                      'bg-purple-100 border-purple-300 hover:border-purple-400',
-                      'bg-orange-100 border-orange-300 hover:border-orange-400',
-                      'bg-pink-100 border-pink-300 hover:border-pink-400',
-                      'bg-indigo-100 border-indigo-300 hover:border-indigo-400',
-                      'bg-teal-100 border-teal-300 hover:border-teal-400',
-                      'bg-rose-100 border-rose-300 hover:border-rose-400',
-                      'bg-cyan-100 border-cyan-300 hover:border-cyan-400',
-                      'bg-emerald-100 border-emerald-300 hover:border-emerald-400'
-                    ]
-                    const cardColorClass = icraColorVariations[index % icraColorVariations.length]
-
-                    return (
-                      <Card key={entry.id} className={`${cardColorClass} hover:shadow-md transition-all duration-300 relative group rounded-card`}>
-                        {/* ICRA Action buttons */}
-                        <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEdit(entry)}
-                            title="Edit ICRA"
-                            className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                          >
-                            <Edit className="h-4 w-4 text-textDark" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDelete(entry)}
-                            title="Delete ICRA"
-                            className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        <CardContent className="p-4 pr-32">
-                          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                            {/* Client Information */}
-                            <div className="flex items-center gap-2">
-                              <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                              <span className="font-semibold text-gray-900 break-words">
-                                {entry.client_pseudonym || entry.client_id}
-                              </span>
-                            </div>
-                            
-                            {/* Date */}
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-sm font-medium text-gray-700 break-words">
-                                {formatDateDDMMYYYY(entry.session_date)}
-                              </span>
-                            </div>
-                            
-                            {/* Duration */}
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-sm text-gray-600">
-                                {formatDuration(entry.duration_minutes)}
-                              </span>
-                            </div>
-
-                            {/* Activity Types */}
-                            <div className="lg:col-span-2 xl:col-span-3">
-                              <div className="flex flex-wrap gap-1">
-                                {entry.session_activity_types.map((type, typeIndex) => (
-                                  <Badge key={typeIndex} variant="outline" className="text-xs">
-                                    {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                            
-                            {/* Location */}
-                            <div className="lg:col-span-1">
-                              <span className="text-sm text-gray-600 break-words">{entry.place_of_practice}</span>
-                            </div>
-                            
-                            {/* Reflections */}
-                            {entry.reflections_on_experience && (
-                              <div className="lg:col-span-2">
-                                <p className="text-sm text-gray-700 break-words line-clamp-2">
-                                  {truncateText(entry.reflections_on_experience, 120)}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )
-      })()}
-
-      {/* CRA Form Modal */}
-      {showCRAForm && selectedEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <CRAForm
-              onSubmit={async (data) => {
-                try {
-                  if (selectedEntry?.parent_dcc_entry) {
-                    // Editing existing CRA entry
-                    await updateSectionAEntry(selectedEntry.id, data)
-                  } else {
-                    // Creating new CRA entry
-                    const craData = {
-                      ...data,
-                      entry_type: 'cra',
-                      parent_dcc_entry: selectedEntry.id,
-                      client_id: selectedEntry.client_id,
-                      session_date: selectedEntry.session_date,
-                      week_starting: selectedEntry.week_starting
-                    }
-                    await createSectionAEntry(craData)
-                  }
-                  setShowCRAForm(false)
-                  setSelectedEntry(null)
-                  loadDCCEntries()
-                } catch (error) {
-                  console.error('Error saving CRA entry:', error)
-                }
-              }}
-              onCancel={() => {
-                setShowCRAForm(false)
-                setSelectedEntry(null)
-              }}
-              saving={false}
-              entryForm={craFormData}
-              setEntryForm={setCraFormData}
-              handleActivityTypeToggle={(type: string) => {
-                const currentTypes = craFormData.session_activity_types
-                const updatedTypes = currentTypes.includes(type)
-                  ? currentTypes.filter(t => t !== type)
-                  : [...currentTypes, type]
-                setCraFormData({ ...craFormData, session_activity_types: updatedTypes })
-              }}
-              handleAddCustomActivityType={handleAddCustomActivityType}
-              newCustomActivityType={newCustomActivityType}
-              setNewCustomActivityType={setNewCustomActivityType}
-              customActivityTypes={customActivityTypes}
-              handleDeleteCustomActivityType={handleDeleteCustomActivityType}
-              calculateWeekStarting={(date: string) => date}
-              title={selectedEntry?.parent_dcc_entry ? "Edit Client Related Activity (CRA)" : "Add Client Related Activity (CRA)"}
-              showClientIdInput={true}
-              isEditing={!!selectedEntry?.parent_dcc_entry}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ICRA Form Modal */}
-      {showICRAForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 pt-8">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
-            <CRAForm
-              onSubmit={handleICRAFormSubmit}
-              onCancel={() => {
-                setShowICRAForm(false)
-                setSelectedEntry(null)
-                setEditingCRAId(null)
-                setIcraFormData({
-                  client_id: '',
-                  client_pseudonym: '',
-                  session_date: new Date().toISOString().split('T')[0],
-                  place_of_practice: '',
-                  presenting_issues: '',
-                  session_activity_types: [],
-                  duration_minutes: '50',
-                  reflections_on_experience: '',
-                  simulated: false
-                })
-              }}
-              saving={loading}
-              entryForm={icraFormData}
-              setEntryForm={setIcraFormData}
-              handleActivityTypeToggle={(type: string) => {
-                const currentTypes = icraFormData.session_activity_types
-                const updatedTypes = currentTypes.includes(type)
-                  ? currentTypes.filter(t => t !== type)
-                  : [...currentTypes, type]
-                setIcraFormData({ ...icraFormData, session_activity_types: updatedTypes })
-              }}
-              handleAddCustomActivityType={handleAddCustomActivityType}
-              newCustomActivityType={newCustomActivityType}
-              setNewCustomActivityType={setNewCustomActivityType}
-              customActivityTypes={customActivityTypes}
-              handleDeleteCustomActivityType={handleDeleteCustomActivityType}
-              calculateWeekStarting={calculateWeekStarting}
-              title={editingCRAId ? "Edit Independent Client Related Activity (ICRA)" : "Add Independent Client Related Activity (ICRA)"}
-              showClientIdInput={true}
-              isEditing={!!editingCRAId}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Smart Form Modal */}
-      {showSmartForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Log Direct Client Contact (DCC)</h2>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setShowSmartForm(false)
-                  setFormErrors({})
-                  setShowSuggestions(false)
-                }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <form onSubmit={(e) => { e.preventDefault(); handleSmartFormSubmit(); }} className="space-y-6">
-              {/* Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date of Activity <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="date"
-                  value={smartFormData.date}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, date: e.target.value }))}
-                  className={formErrors.date ? 'border-red-500' : ''}
-                />
-                {formErrors.date && <p className="text-red-500 text-xs mt-1">{formErrors.date}</p>}
-              </div>
-
-              {/* Client Pseudonym with Autosuggest */}
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Client Pseudonym <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="text"
-                  value={smartFormData.client_pseudonym}
-                  onChange={(e) => {
-                    setSmartFormData(prev => ({ ...prev, client_pseudonym: e.target.value }))
-                    getClientSuggestions(e.target.value)
-                    setShowSuggestions(true)
-                  }}
-                  onFocus={() => setShowSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  placeholder="Type to search previous clients..."
-                  className={formErrors.client_pseudonym ? 'border-red-500' : ''}
-                />
-                {showSuggestions && clientSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
-                    {clientSuggestions.map((client, index) => (
-                      <div
-                        key={index}
-                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                        onClick={() => handleClientSelect(client)}
-                      >
-                        {client}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {formErrors.client_pseudonym && <p className="text-red-500 text-xs mt-1">{formErrors.client_pseudonym}</p>}
-              </div>
-
-              {/* Place of Practice */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Place of Practice <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="text"
-                  value={smartFormData.place_of_practice}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
-                  className={formErrors.place_of_practice ? 'border-red-500' : ''}
-                />
-                {formErrors.place_of_practice && <p className="text-red-500 text-xs mt-1">{formErrors.place_of_practice}</p>}
-              </div>
-
-              {/* Presenting Issues */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Presenting Issues <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical min-h-[80px]"
-                  value={smartFormData.presenting_issues}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, presenting_issues: e.target.value }))}
-                  placeholder="Describe the client's presenting issues..."
-                />
-                {formErrors.presenting_issues && <p className="text-red-500 text-xs mt-1">{formErrors.presenting_issues}</p>}
-              </div>
-
-              {/* DCC Activity Types */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  DCC Activity Type(s) <span className="text-red-500">*</span>
-                </label>
-                <div className="space-y-2">
-                  {[
-                    'Psychological Assessment',
-                    'Intervention',
-                    'Prevention',
-                    'Evaluation'
-                  ].map((type) => (
-                    <label key={type} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={smartFormData.dcc_activity_types.includes(type)}
-                        onChange={(e) => {
-                          const updatedTypes = e.target.checked
-                            ? [...smartFormData.dcc_activity_types, type]
-                            : smartFormData.dcc_activity_types.filter(t => t !== type)
-                          setSmartFormData(prev => ({ ...prev, dcc_activity_types: updatedTypes }))
-                        }}
-                        className="rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm text-gray-700">{type}</span>
-                    </label>
-                  ))}
-                </div>
-                {formErrors.dcc_activity_types && <p className="text-red-500 text-xs mt-1">{formErrors.dcc_activity_types}</p>}
-              </div>
-
-              {/* Activity Description */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Activity Description <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical min-h-[100px]"
-                  value={smartFormData.description}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
-                />
-                {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
-              </div>
-
-              {/* Duration */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Duration (minutes) <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="number"
-                  min="5"
-                  step="5"
-                  value={smartFormData.duration}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                  className={formErrors.duration ? 'border-red-500' : ''}
-                />
-                
-                {/* Quick Duration Options */}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className="text-xs text-gray-500 mr-2">Quick options:</span>
-                  {[30, 50, 60, 75, 90].map((minutes) => (
-                    <button
-                      key={minutes}
-                      type="button"
-                      onClick={() => setSmartFormData(prev => ({ ...prev, duration: minutes }))}
-                      className={`px-2 py-1 text-xs rounded border ${
-                        smartFormData.duration === minutes
-                          ? 'bg-primary text-white border-primary'
-                          : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
-                      }`}
-                    >
-                      {minutes}min
-                    </button>
-                  ))}
-                </div>
-                
-                {formErrors.duration && <p className="text-red-500 text-xs mt-1">{formErrors.duration}</p>}
-              </div>
-
-              {/* Simulated Client */}
-              <div>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={smartFormData.simulated_client}
-                    onChange={(e) => setSmartFormData(prev => ({ ...prev, simulated_client: e.target.checked }))}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm text-gray-700">Simulated Client</span>
-                </label>
-                {formErrors.simulated_client && <p className="text-red-500 text-xs mt-1">{formErrors.simulated_client}</p>}
-              </div>
-
-              {/* Supervisor Reviewed */}
-              <div>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={smartFormData.supervisor_reviewed}
-                    onChange={(e) => setSmartFormData(prev => ({ ...prev, supervisor_reviewed: e.target.checked }))}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm text-gray-700">Reviewed by Supervisor?</span>
-                </label>
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="flex justify-end space-x-3 pt-4 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setShowSmartForm(false)
-                    setFormErrors({})
-                    setShowSuggestions(false)
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="bg-primary hover:bg-primary/90"
-                >
-                  Save Entry
-                </Button>
-              </div>
-            </form>
-          </div>
         </div>
       )}
     </div>

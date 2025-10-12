@@ -32,10 +32,12 @@ import {
 import type { PDEntry, PDCompetency, PDWeeklyGroup } from '@/types/pd'
 import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationUtils'
 import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
+import { useErrorHandler } from '@/lib/errors'
 
 const SectionB: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { showError } = useErrorHandler()
   const [weeklyGroups, setWeeklyGroups] = useState<PDWeeklyGroup[]>([])
   const [competencies, setCompetencies] = useState<PDCompetency[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,7 +68,8 @@ const SectionB: React.FC = () => {
   const [durationMin, setDurationMin] = useSimpleFilterPersistence<string>('section-b-duration-min', '')
   const [durationMax, setDurationMax] = useSimpleFilterPersistence<string>('section-b-duration-max', '')
   const [sortBy, setSortBy] = useSimpleFilterPersistence<string>('section-b-sort-by', 'oldest') // Default to oldest first
-  const [groupByWeek, setGroupByWeek] = useSimpleFilterPersistence<boolean>('section-b-group-by-week', false)
+  // Weekly organization is now the standard view - no need for toggle
+  const groupByWeek = true
   const [entriesPerPage, setEntriesPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
@@ -133,7 +136,7 @@ const SectionB: React.FC = () => {
     setActivityType('all')
     setDurationMin('')
     setDurationMax('')
-    setGroupByWeek(false)
+    // groupByWeek is now always true, no need to reset
     setSearchTerm('')
     setCompetencyFilter([])
     setReviewedFilter('all')
@@ -167,7 +170,7 @@ const SectionB: React.FC = () => {
   }
 
   // Check if any filters are active
-  const hasActiveFilters = dateFrom || dateTo || activityType !== 'all' || durationMin || durationMax || groupByWeek || competencyFilter.length > 0 || reviewedFilter !== 'all'
+  const hasActiveFilters = dateFrom || dateTo || activityType !== 'all' || durationMin || durationMax || competencyFilter.length > 0 || reviewedFilter !== 'all'
 
   // Get all entries from weekly groups
   const allEntries = weeklyGroups.flatMap(group => group.entries)
@@ -527,6 +530,17 @@ const SectionB: React.FC = () => {
   }
 
   const handleEdit = (entry: PDEntry) => {
+    // Check if entry is locked
+    if (entry.locked) {
+      showError(new Error('Entry is locked'), {
+        title: 'Entry Cannot Be Edited',
+        category: 'Validation',
+        customExplanation: 'This entry is locked and cannot be edited because it is part of an approved logbook. Once a logbook is approved by your supervisor, all entries become read-only to maintain data integrity.',
+        customUserAction: 'If you need to make changes to this entry, please contact your supervisor to unlock the logbook first.'
+      })
+      return
+    }
+    
     setFormData({
       activity_type: entry.activity_type,
       date_of_activity: entry.date_of_activity,
@@ -559,10 +573,21 @@ const SectionB: React.FC = () => {
     }
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (entry: PDEntry) => {
+    // Check if entry is locked
+    if (entry.locked) {
+      showError(new Error('Entry is locked'), {
+        title: 'Entry Cannot Be Deleted',
+        category: 'Validation',
+        customExplanation: 'This entry is locked and cannot be deleted because it is part of an approved logbook. Once a logbook is approved by your supervisor, all entries become read-only to maintain data integrity.',
+        customUserAction: 'If you need to delete this entry, please contact your supervisor to unlock the logbook first.'
+      })
+      return
+    }
+    
     if (window.confirm('Are you sure you want to delete this entry?')) {
       try {
-        await deletePDEntry(id)
+        await deletePDEntry(entry.id)
         loadData()
       } catch (error) {
         console.error('Error deleting entry:', error)
@@ -1052,14 +1077,6 @@ const SectionB: React.FC = () => {
                       </button>
                     </Badge>
                   )}
-                  {groupByWeek && (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary">
-                      Grouped by Week
-                      <button onClick={() => setGroupByWeek(false)} className="ml-2 hover:bg-primary/20 rounded-full p-0.5">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  )}
                   {competencyFilter.map((comp, idx) => (
                     <Badge key={idx} variant="secondary" className="bg-secondary/10 text-secondary">
                       Competency: {comp}
@@ -1221,18 +1238,6 @@ const SectionB: React.FC = () => {
                   </Select>
                 </div>
                 
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="groupByWeek"
-                    checked={groupByWeek}
-                    onChange={(e) => setGroupByWeek(e.target.checked)}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <label htmlFor="groupByWeek" className="text-sm font-medium">
-                    Group by Week
-                  </label>
-                </div>
               </div>
               
               <div className="flex items-center gap-2">
@@ -1314,159 +1319,140 @@ const SectionB: React.FC = () => {
                 {expandedWeeks.has(group.weekStart) && (
                   <div className="space-y-3">
                     {group.entries.map((entry) => (
-                      <Card key={entry.id} className="brand-card hover:shadow-md transition-all duration-300">
-                        <CardContent className="p-4">
-                          <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
-                            <div className="lg:col-span-2">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Clock className="h-4 w-4 text-textLight" />
-                                <span className="text-sm font-semibold text-textDark">
-                                  {formatDuration(entry.duration_minutes)}
-                                </span>
-                                <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
-                                  {entry.is_active_activity ? 'Active' : 'Passive'}
+                      <Card key={entry.id} className="group relative brand-card hover:shadow-md transition-all duration-300">
+                        <CardContent className="p-4 pr-32">
+                            {/* Entry Type and Status Identification */}
+                            <div className="mb-3 flex gap-2 flex-wrap">
+                              <Badge className="bg-orange-100 text-orange-800 border-orange-200 font-semibold">
+                                PD - Professional Development
+                              </Badge>
+                              {entry.locked && (
+                                <Badge className="bg-red-100 text-red-800 border-red-200 font-semibold">
+                                  🔒 Locked
                                 </Badge>
-                                {entry.reviewed_in_supervision && (
-                                  <Badge variant="outline" className="text-xs text-green-600 border-green-600">
-                                    ✓ Reviewed
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-textLight" />
-                                <span className="text-sm font-semibold text-textDark">
-                                  {formatDateDDMMYYYY(entry.date_of_activity)}
-                                </span>
-                              </div>
+                              )}
                             </div>
-                            
-                            <div className="lg:col-span-2">
-                              <div className="flex items-center gap-2 mb-2">
-                                <BookOpen className="h-4 w-4 text-textLight" />
-                                <span className="text-sm font-semibold text-textDark">
-                                  {entry.activity_type}
-                                </span>
-                  </div>
-                              <div className="text-sm text-textDark break-words">
-                                {truncateText(entry.activity_details, 80)}
-                </div>
-                </div>
-                            
-                            <div className="lg:col-span-2">
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                {entry.competencies_covered.slice(0, 3).map((comp, idx) => (
-                                  <Badge key={idx} variant="outline" className="text-xs">
-                                    {comp}
-                </Badge>
-                                ))}
-                                {entry.competencies_covered.length > 3 && (
-                                  <Badge variant="outline" className="text-xs">
-                                    +{entry.competencies_covered.length - 3} more
-                                  </Badge>
-                                )}
-          </div>
-                              {entry.topics_covered && (
-                                <p className="text-sm text-gray-700 break-words line-clamp-2">
-                                  {truncateText(entry.topics_covered, 100)}
-                                </p>
-                              )}
-            </div>
-              </div>
 
-                          <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => toggleEntryExpansion(entry.id.toString())}
-                              className="text-primary border-primary/20 hover:bg-primary/5"
-                            >
-                              {expandedEntries.has(entry.id.toString()) ? (
-                                <>
-                                  <ChevronUp className="h-4 w-4 mr-2" />
-                                  Hide Details
-                                </>
-                              ) : (
-                                <>
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View Details
-                                </>
-                              )}
-                            </Button>
-                            
-                            <div className="flex gap-2">
+                            {/* Action Buttons - Top Right */}
+                            <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => toggleEntryExpansion(entry.id.toString())}
+                                title={expandedEntries.has(entry.id.toString()) ? "Collapse Details" : "Expand Details"}
+                                className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
+                              >
+                                {expandedEntries.has(entry.id.toString()) ? (
+                                  <ChevronUp className="h-4 w-4 text-textDark" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-textDark" />
+                                )}
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleEdit(entry)}
-                                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                title={entry.locked ? "Locked - Cannot Edit" : "Edit"}
+                                disabled={entry.locked}
+                                className={`h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg ${
+                                  entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
                               >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit
+                                <Edit className="h-4 w-4 text-textDark" />
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleDelete(entry.id)}
-                                className="text-red-600 border-red-200 hover:bg-red-50"
+                                onClick={() => handleDelete(entry)}
+                                title={entry.locked ? "Locked - Cannot Delete" : "Delete"}
+                                disabled={entry.locked}
+                                className={`h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg ${
+                                  entry.locked ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
                               >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
+                                <Trash2 className="h-4 w-4" />
                               </Button>
-              </div>
-            </div>
+                            </div>
+                          
+                          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {/* Row 1: Basic Info */}
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                              <span className="text-sm font-medium text-gray-700 break-words">
+                                {formatDateDDMMYYYY(entry.date_of_activity)}
+                              </span>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                              <span className="text-sm font-medium text-gray-700">
+                                {formatDurationDisplay(entry.duration_minutes)}
+                              </span>
+                              <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
+                                {entry.is_active_activity ? 'Active' : 'Passive'}
+                              </Badge>
+                              {entry.reviewed_in_supervision && (
+                                <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                                  ✓ Reviewed
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            {/* Row 2: Activity Type */}
+                            <div className="flex items-center gap-2 lg:col-span-2 xl:col-span-3">
+                              <BookOpen className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                              <Badge variant="outline" className="text-xs">
+                                {entry.activity_type}
+                              </Badge>
+                            </div>
+                          </div>
 
-                          {/* Expanded Details Section */}
+
+                          {/* Expanded Details */}
                           {expandedEntries.has(entry.id.toString()) && (
-                            <div className="border-t border-gray-200 bg-gray-50/50 mt-4 pt-4">
-                              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                                <Eye className="h-4 w-4" />
-                                Detailed Information
-                              </h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                                {/* Activity Information */}
-                                <div className="space-y-2">
-                                  <h5 className="font-medium text-gray-700">Activity Details</h5>
-                                  <div className="space-y-1 text-gray-600">
-                                    <div><span className="font-medium">Type:</span> {entry.activity_type}</div>
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <h4 className="font-semibold text-gray-900 mb-2">Session Details</h4>
+                                  <div className="space-y-2 text-sm">
                                     <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.date_of_activity)}</div>
-                                    <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
+                                    <div><span className="font-medium">Duration:</span> {formatDurationDisplay(entry.duration_minutes)}</div>
+                                    <div><span className="font-medium">Type:</span> {entry.activity_type}</div>
                                     <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
                                     <div><span className="font-medium">Reviewed:</span> {entry.reviewed_in_supervision ? 'Yes' : 'No'}</div>
-          </div>
-        </div>
-
-                                {/* Learning Information */}
-                                <div className="space-y-2">
-                                  <h5 className="font-medium text-gray-700">Learning Details</h5>
-                                  <div className="space-y-1 text-gray-600">
-                                    <div><span className="font-medium">Details:</span> {entry.activity_details}</div>
+                                    {entry.activity_details && (
+                                      <div><span className="font-medium">Details:</span> {entry.activity_details}</div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold text-gray-900 mb-2">Learning Content</h4>
+                                  <div className="space-y-2 text-sm">
                                     {entry.topics_covered && (
                                       <div><span className="font-medium">Topics:</span> {entry.topics_covered}</div>
                                     )}
-        </div>
-      </div>
-
-                                {/* Competencies */}
-                                <div className="md:col-span-2 space-y-2">
-                                  <h5 className="font-medium text-gray-700">Competencies Covered</h5>
-                          <div className="flex flex-wrap gap-1">
-                            {entry.competencies_covered.map((comp, idx) => (
-                                      <Badge key={idx} variant="outline" className="text-xs">
-                                {comp}
-                              </Badge>
-                            ))}
-                          </div>
-                                </div>
-
-                                {/* Reflection */}
-                                {entry.reflection && (
-                                  <div className="md:col-span-2 space-y-2">
-                                    <h5 className="font-medium text-gray-700">Reflection</h5>
-                                    <p className="text-gray-600 text-sm leading-relaxed bg-white p-3 rounded border">
-                                      {entry.reflection}
-                                    </p>
+                                    {entry.competencies_covered.length > 0 && (
+                                      <div>
+                                        <span className="font-medium">Competencies:</span>
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {entry.competencies_covered.map((comp, idx) => (
+                                            <Badge key={idx} variant="outline" className="text-xs">
+                                              {comp}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {entry.reflection && (
+                                      <div className="mt-3">
+                                        <span className="font-medium">Reflection:</span>
+                                        <p className="text-gray-600 text-sm leading-relaxed bg-gray-50 p-2 rounded mt-1">
+                                          {entry.reflection}
+                                        </p>
+                                      </div>
+                                    )}
                                   </div>
-                                )}
+                                </div>
                               </div>
                             </div>
                           )}
@@ -1481,158 +1467,98 @@ const SectionB: React.FC = () => {
             // Individual entries display
             getPaginatedEntries(sortEntries(filteredEntries)).map((entry) => (
               <Card key={entry.id} className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
-                    <div className="lg:col-span-2">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Clock className="h-4 w-4 text-textLight" />
-                        <span className="text-sm font-semibold text-textDark">
-                          {formatDuration(entry.duration_minutes)}
-                        </span>
-                        <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
-                          {entry.is_active_activity ? 'Active' : 'Passive'}
+                <CardContent className="p-4 pr-32">
+                  {/* Entry Type and Status Identification */}
+                  <div className="mb-3 flex gap-2 flex-wrap">
+                    <Badge className="bg-orange-100 text-orange-800 border-orange-200 font-semibold">
+                      PD - Professional Development
+                    </Badge>
+                    {entry.locked && (
+                      <Badge className="bg-red-100 text-red-800 border-red-200 font-semibold">
+                        🔒 Locked
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {/* Row 1: Basic Info */}
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-gray-700 break-words">
+                        {formatDateDDMMYYYY(entry.date_of_activity)}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-gray-700">
+                        {formatDurationDisplay(entry.duration_minutes)}
+                      </span>
+                      <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
+                        {entry.is_active_activity ? 'Active' : 'Passive'}
+                      </Badge>
+                      {entry.reviewed_in_supervision && (
+                        <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                          ✓ Reviewed
                         </Badge>
-                        {entry.reviewed_in_supervision && (
-                          <Badge variant="outline" className="text-xs text-green-600 border-green-600">
-                            ✓ Reviewed
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-textLight" />
-                        <span className="text-sm font-semibold text-textDark">
-                          {formatDateDDMMYYYY(entry.date_of_activity)}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="lg:col-span-2">
-                      <div className="flex items-center gap-2 mb-2">
-                        <BookOpen className="h-4 w-4 text-textLight" />
-                        <span className="text-sm font-semibold text-textDark">
-                          {entry.activity_type}
-                        </span>
-                      </div>
-                      <div className="text-sm text-textDark break-words">
-                        {truncateText(entry.activity_details, 80)}
-                      </div>
-                    </div>
-                    
-                    <div className="lg:col-span-2">
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {entry.competencies_covered.slice(0, 3).map((comp, idx) => (
-                          <Badge key={idx} variant="outline" className="text-xs">
-                            {comp}
-                          </Badge>
-                        ))}
-                        {entry.competencies_covered.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{entry.competencies_covered.length - 3} more
-                          </Badge>
-                        )}
-                      </div>
-                      {entry.topics_covered && (
-                        <p className="text-sm text-gray-700 break-words line-clamp-2">
-                          {truncateText(entry.topics_covered, 100)}
-                        </p>
                       )}
+                    </div>
+                    
+                    {/* Row 2: Activity Type */}
+                    <div className="flex items-center gap-2 lg:col-span-2 xl:col-span-3">
+                      <BookOpen className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                      <Badge variant="outline" className="text-xs">
+                        {entry.activity_type}
+                      </Badge>
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleEntryExpansion(entry.id.toString())}
-                      className="text-primary border-primary/20 hover:bg-primary/5"
-                    >
-                      {expandedEntries.has(entry.id.toString()) ? (
-                        <>
-                          <ChevronUp className="h-4 w-4 mr-2" />
-                          Hide Details
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </>
-                      )}
-                    </Button>
-                    
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEdit(entry)}
-                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                            >
-                        <Edit className="h-4 w-4 mr-2" />
-                              Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                        variant="outline"
-                              onClick={() => handleDelete(entry.id)}
-                        className="text-red-600 border-red-200 hover:bg-red-50"
-                            >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </Button>
-                          </div>
-                  </div>
 
-                  {/* Expanded Details Section */}
+                  {/* Expanded Details */}
                   {expandedEntries.has(entry.id.toString()) && (
-                    <div className="border-t border-gray-200 bg-gray-50/50 mt-4 pt-4">
-                      <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                        <Eye className="h-4 w-4" />
-                        Detailed Information
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        {/* Activity Information */}
-                        <div className="space-y-2">
-                          <h5 className="font-medium text-gray-700">Activity Details</h5>
-                          <div className="space-y-1 text-gray-600">
-                            <div><span className="font-medium">Type:</span> {entry.activity_type}</div>
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-2">Session Details</h4>
+                          <div className="space-y-2 text-sm">
                             <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.date_of_activity)}</div>
-                            <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
+                            <div><span className="font-medium">Duration:</span> {formatDurationDisplay(entry.duration_minutes)}</div>
+                            <div><span className="font-medium">Type:</span> {entry.activity_type}</div>
                             <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
                             <div><span className="font-medium">Reviewed:</span> {entry.reviewed_in_supervision ? 'Yes' : 'No'}</div>
-                          </div>
-                        </div>
-
-                        {/* Learning Information */}
-                        <div className="space-y-2">
-                          <h5 className="font-medium text-gray-700">Learning Details</h5>
-                          <div className="space-y-1 text-gray-600">
-                            <div><span className="font-medium">Details:</span> {entry.activity_details}</div>
-                            {entry.topics_covered && (
-                              <div><span className="font-medium">Topics:</span> {entry.topics_covered}</div>
+                            {entry.activity_details && (
+                              <div><span className="font-medium">Details:</span> {entry.activity_details}</div>
                             )}
                           </div>
                         </div>
-
-                        {/* Competencies */}
-                        <div className="md:col-span-2 space-y-2">
-                          <h5 className="font-medium text-gray-700">Competencies Covered</h5>
-                          <div className="flex flex-wrap gap-1">
-                            {entry.competencies_covered.map((comp, idx) => (
-                              <Badge key={idx} variant="outline" className="text-xs">
-                                {comp}
-                              </Badge>
-                            ))}
-              </div>
-                        </div>
-
-                        {/* Reflection */}
-                        {entry.reflection && (
-                          <div className="md:col-span-2 space-y-2">
-                            <h5 className="font-medium text-gray-700">Reflection</h5>
-                            <p className="text-gray-600 text-sm leading-relaxed bg-white p-3 rounded border">
-                              {entry.reflection}
-                            </p>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-2">Learning Content</h4>
+                          <div className="space-y-2 text-sm">
+                            {entry.topics_covered && (
+                              <div><span className="font-medium">Topics:</span> {entry.topics_covered}</div>
+                            )}
+                            {entry.competencies_covered.length > 0 && (
+                              <div>
+                                <span className="font-medium">Competencies:</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {entry.competencies_covered.map((comp, idx) => (
+                                    <Badge key={idx} variant="outline" className="text-xs">
+                                      {comp}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {entry.reflection && (
+                              <div className="mt-3">
+                                <span className="font-medium">Reflection:</span>
+                                <p className="text-gray-600 text-sm leading-relaxed bg-gray-50 p-2 rounded mt-1">
+                                  {entry.reflection}
+                                </p>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </div>
                     </div>
                   )}
