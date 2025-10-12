@@ -551,7 +551,7 @@ export default function SupervisorLogbookDisplay({
                                 {/* Reflections column - only show on first row */}
                                 <td className="border border-gray-300 p-2 align-top text-xs">
                                   {rowIndex === 0 && (
-                                    <div>
+                                    <div className="whitespace-pre-wrap">
                                       {dccEntry.reflections_on_experience || 'No reflections provided'}
                                     </div>
                                   )}
@@ -711,7 +711,7 @@ export default function SupervisorLogbookDisplay({
                             </td>
                             
                             <td className="border border-gray-300 p-2 align-top text-xs">
-                              <div>
+                              <div className="whitespace-pre-wrap">
                                 {craEntry.reflections_on_experience || 'No reflections provided'}
                               </div>
                             </td>

@@ -5,7 +5,7 @@ import RegistrarNavigation from '@/components/registrar/RegistrarNavigation'
 import PathwaySwitcher from '@/components/PathwaySwitcher'
 import { AuthProvider } from '@/context/AuthContext'
 import LoginPage from '@/pages/LoginPage'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import EPADetail from '@/pages/EPADetail'
 import SupervisorQueue from '@/pages/SupervisorQueue'
 import OrgDashboard from '@/pages/OrgDashboard'
@@ -20,6 +20,28 @@ import EditRejectedLogbook from '@/pages/EditRejectedLogbook'
 import SectionA from '@/pages/SectionA'
 import SectionB from '@/pages/SectionB'
 import SectionC from '@/pages/SectionC'
+import CRAForm from '@/pages/CRAForm'
+
+// Wrapper component for CRA form to handle routing
+function CRAFormWrapper() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  
+  const handleCancel = () => {
+    const returnTo = (location.state as any)?.returnTo
+    if (returnTo) {
+      navigate(returnTo)
+    } else {
+      // Default fallback to Section A dashboard
+      navigate('/section-a')
+    }
+  }
+  
+  const parentDccId = (location.state as any)?.parentDccId
+  const returnTo = (location.state as any)?.returnTo
+  
+  return <CRAForm onCancel={handleCancel} parentDccId={parentDccId} returnTo={returnTo} />
+}
 import Dashboard from '@/pages/Dashboard'
 import CRAEdit from '@/pages/CRAEdit'
 import UserProfile from '@/pages/UserProfile'
@@ -48,6 +70,8 @@ import RegistrarPracticeLog from '@/pages/registrar/RegistrarPracticeLog'
 import RegistrarPracticeEntryForm from '@/pages/registrar/RegistrarPracticeEntryForm'
 import RegistrarSupervisionLog from '@/pages/registrar/RegistrarSupervisionLog'
 import RegistrarReports from '@/pages/registrar/RegistrarReports'
+import ConfigurationManagement from '@/pages/ConfigurationManagement'
+import ConfigurationExample from '@/components/ConfigurationExample'
 import CompetenciesHelp from '@/pages/CompetenciesHelp'
 
 // Component to redirect users to appropriate dashboard based on role
@@ -158,6 +182,7 @@ function App() {
           <Route path="/logbook/old" element={<RequireAuth><LogbookPage /></RequireAuth>} />
           <Route path="/logbook/:id" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
           <Route path="/logbook/:id/edit" element={<RequireAuth><EditRejectedLogbook /></RequireAuth>} />
+          <Route path="/section-a/cra" element={<RequireAuth><CRAFormWrapper /></RequireAuth>} />
           <Route path="/section-a/cra-edit" element={<RequireAuth><CRAEdit /></RequireAuth>} />
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
@@ -167,6 +192,9 @@ function App() {
           {me?.role === 'ORG_ADMIN' && <Route path="/admin/epa-coverage" element={<RequireAuth><EPACoverageAudit /></RequireAuth>} />}
           <Route path="/help/errors" element={<ErrorHelp />} />
           <Route path="/competencies-help" element={<CompetenciesHelp />} />
+          {/* Configuration Management Routes - Admin Only */}
+          {me?.role === 'ORG_ADMIN' && <Route path="/admin/configuration" element={<RequireAuth><ConfigurationManagement /></RequireAuth>} />}
+          <Route path="/config-demo" element={<RequireAuth><ConfigurationExample /></RequireAuth>} />
           {/* Registrar Routes */}
                     {me?.role === 'REGISTRAR' && <Route path="/registrar" element={<RequireAuth><RegistrarDashboard /></RequireAuth>} />}
                     {me?.role === 'REGISTRAR' && <Route path="/registrar/setup" element={<RequireAuth><RegistrarProgramSetup /></RequireAuth>} />}

@@ -27,7 +27,7 @@ interface Logbook {
   week_start_date: string
   week_end_date: string
   week_display: string
-  status: 'draft' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
+  status: 'draft' | 'ready' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
   supervisor_name?: string
   reviewed_by_name?: string
   submitted_at: string

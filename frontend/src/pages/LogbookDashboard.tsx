@@ -23,7 +23,8 @@ import {
   ChevronUp,
   Settings,
   Plus,
-  RefreshCw
+  RefreshCw,
+  Activity
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
@@ -31,6 +32,7 @@ import LogbookCreationModal from '@/components/LogbookCreationModal'
 import LogbookPreview from '@/components/LogbookPreview'
 import StructuredLogbookDisplay from '@/components/StructuredLogbookDisplay'
 import UnlockRequestModal from '@/components/UnlockRequestModal'
+import LogbookAuditTree from '@/components/LogbookAuditTree'
 import { StatusBadge } from '@/components/status'
 import { useFilterPersistence, useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
@@ -40,7 +42,7 @@ interface Logbook {
   week_start_date: string
   week_end_date: string
   week_display: string
-  status: 'draft' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
+  status: 'draft' | 'ready' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
   supervisor_name?: string
   reviewed_by_name?: string
   active_unlock?: {
@@ -48,6 +50,7 @@ interface Logbook {
     duration_minutes: number
   } | null
   submitted_at: string
+  audit_log_count: number
   reviewed_at?: string
   supervisor_comments?: string
   is_locked?: boolean
@@ -102,6 +105,10 @@ export default function LogbookDashboard() {
   const [unlockRequestModal, setUnlockRequestModal] = useState<{ isOpen: boolean; logbook: Logbook | null }>({ 
     isOpen: false, 
     logbook: null 
+  })
+  const [auditTrailModal, setAuditTrailModal] = useState<{ isOpen: boolean; logbookId: number | null }>({ 
+    isOpen: false, 
+    logbookId: null 
   })
   
   // New state for dashboard functionality
@@ -283,11 +290,6 @@ export default function LogbookDashboard() {
   }
 
   const getStatusBadge = (logbook: Logbook) => {
-    // Check if logbook has an active unlock request
-    if (logbook.active_unlock) {
-      return <StatusBadge status="warning" label="Unlocked for Editing" size="sm" />
-    }
-    
     // Map logbook statuses to StatusBadge component statuses
     const statusMap: Record<string, 'submitted' | 'approved' | 'rejected' | 'draft' | 'pending'> = {
       'submitted': 'submitted',
@@ -295,17 +297,21 @@ export default function LogbookDashboard() {
       'rejected': 'rejected',
       'returned_for_edits': 'pending',  // Use pending with custom label
       'under_review': 'pending',
-      'draft': 'draft'
+      'draft': 'draft',
+      'ready': 'draft',  // Ready status maps to draft style
+      'unlocked_for_edits': 'pending'  // Only show "Unlocked for Editing" if status is actually unlocked_for_edits
     }
     
     const statusLabels: Record<string, string> = {
       'submitted': 'Waiting for Review',
       'returned_for_edits': 'Returned for Edits',
-      'under_review': 'Under Review'
+      'under_review': 'Under Review',
+      'ready': 'Ready for Submission',
+      'unlocked_for_edits': 'Unlocked for Editing'
     }
     
     const mappedStatus = statusMap[logbook.status] || 'draft'
-    const label = statusLabels[logbook.status]
+    const label = statusLabels[logbook.status] || logbook.status
     
     return <StatusBadge status={mappedStatus} label={label} size="sm" />
   }
@@ -331,6 +337,7 @@ export default function LogbookDashboard() {
     return logbook.status === 'returned_for_edits' || 
            logbook.status === 'rejected' || 
            logbook.status === 'draft' ||
+           logbook.status === 'ready' ||
            logbook.active_unlock !== null
   }
 
@@ -348,6 +355,14 @@ export default function LogbookDashboard() {
     setUnlockRequestModal({ isOpen: false, logbook: null })
   }
 
+  const handleOpenAuditTrail = (logbookId: number) => {
+    setAuditTrailModal({ isOpen: true, logbookId })
+  }
+
+  const handleCloseAuditTrail = () => {
+    setAuditTrailModal({ isOpen: false, logbookId: null })
+  }
+
   const handleUnlockRequestSuccess = () => {
     toast.success('Unlock request submitted successfully')
     fetchLogbooks(true, false)
@@ -356,7 +371,7 @@ export default function LogbookDashboard() {
 
   // Helper function to handle adding new records
   const handleAddNewRecord = (section: 'a' | 'b' | 'c', logbook: Logbook) => {
-    const returnTo = '/logbook'
+    const returnTo = '/logbook' // Return to the dashboard to see all logbooks
     const state = {
       returnTo,
       logbookWeek: logbook.week_start_date,
@@ -788,6 +803,7 @@ export default function LogbookDashboard() {
               >
                 <option value="">All Statuses</option>
                 <option value="draft">Draft</option>
+                <option value="ready">Ready for Submission</option>
                 <option value="submitted">Submitted</option>
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
@@ -1073,6 +1089,22 @@ export default function LogbookDashboard() {
                       >
                         <Eye className="h-3 w-3" />
                       </Button>
+                      {logbook.audit_log_count > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenAuditTrail(logbook.id)}
+                          title="View Status History"
+                          className="h-7 px-1 text-xs min-w-0 flex-shrink relative"
+                        >
+                          <Activity className="h-2.5 w-2.5" />
+                          {logbook.audit_log_count > 0 && (
+                            <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 text-xs p-0 flex items-center justify-center">
+                              {logbook.audit_log_count}
+                            </Badge>
+                          )}
+                        </Button>
+                      )}
                       {canRequestUnlock(logbook) && (
                         <Button
                           variant="outline"
@@ -1225,6 +1257,12 @@ export default function LogbookDashboard() {
           onSuccess={handleUnlockRequestSuccess}
         />
       )}
+
+      <LogbookAuditTree
+        logbookId={auditTrailModal.logbookId}
+        isOpen={auditTrailModal.isOpen}
+        onClose={handleCloseAuditTrail}
+      />
 
     </div>
   )

@@ -167,7 +167,7 @@ export async function getLogbooks() {
 }
 
 export async function getLogbook(id: number) {
-  const res = await apiFetch(`/api/logbook/logbooks/${id}/`)
+  const res = await apiFetch(`/api/logbook/${id}/`)
   if (!res.ok) throw new Error('Failed to fetch logbook')
   return res.json()
 }
@@ -182,7 +182,7 @@ export async function createLogbook(data: any) {
 }
 
 export async function updateLogbook(id: number, data: any) {
-  const res = await apiFetch(`/api/logbook/logbooks/${id}/`, {
+  const res = await apiFetch(`/api/logbook/${id}/`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   })
@@ -203,7 +203,7 @@ export async function submitLogbook(weekStart: string) {
 }
 
 export async function approveLogbook(id: number, action: 'approve' | 'reject', comments?: string) {
-  const res = await apiFetch(`/api/logbook/logbooks/${id}/approve/`, {
+  const res = await apiFetch(`/api/logbook/${id}/approve/`, {
     method: 'POST',
     body: JSON.stringify({ action, comments }),
   })
@@ -211,21 +211,26 @@ export async function approveLogbook(id: number, action: 'approve' | 'reject', c
   return res.json()
 }
 
-export async function downloadLogbookPDF(id: number) {
-  const res = await apiFetch(`/api/logbook/logbooks/${id}/pdf/`)
-  if (!res.ok) throw new Error('Failed to download PDF')
-  return res.blob()
+export async function downloadLogbookPDF(_id: number) {
+  // TODO: Implement PDF download endpoint in backend
+  throw new Error('PDF download not yet implemented')
 }
 
 // Logbook entry functions
 export async function getLogbookEntries(logbookId: number, type: 'dcc' | 'cra' | 'pd' | 'sup') {
-  const res = await apiFetch(`/api/logbook/logbooks/${logbookId}/${type}-entries/`)
+  // Map frontend types to backend section names
+  const sectionMap = { 'dcc': 'section-a', 'cra': 'section-a', 'pd': 'section-b', 'sup': 'section-c' }
+  const section = sectionMap[type]
+  const res = await apiFetch(`/api/logbook/${logbookId}/${section}-entries/`)
   if (!res.ok) throw new Error('Failed to fetch entries')
   return res.json()
 }
 
 export async function createLogbookEntry(logbookId: number, type: 'dcc' | 'cra' | 'pd' | 'sup', data: any) {
-  const res = await apiFetch(`/api/logbook/logbooks/${logbookId}/${type}-entries/`, {
+  // Map frontend types to backend section names
+  const sectionMap = { 'dcc': 'section-a', 'cra': 'section-a', 'pd': 'section-b', 'sup': 'section-c' }
+  const section = sectionMap[type]
+  const res = await apiFetch(`/api/logbook/${logbookId}/${section}-entries/`, {
     method: 'POST',
     body: JSON.stringify(data),
   })
@@ -234,7 +239,10 @@ export async function createLogbookEntry(logbookId: number, type: 'dcc' | 'cra' 
 }
 
 export async function updateLogbookEntry(logbookId: number, type: 'dcc' | 'cra' | 'pd' | 'sup', entryId: number, data: any) {
-  const res = await apiFetch(`/api/logbook/logbooks/${logbookId}/${type}-entries/${entryId}/`, {
+  // Map frontend types to backend section names
+  const sectionMap = { 'dcc': 'section-a', 'cra': 'section-a', 'pd': 'section-b', 'sup': 'section-c' }
+  const section = sectionMap[type]
+  const res = await apiFetch(`/api/logbook/${logbookId}/${section}-entries/${entryId}/`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   })
@@ -243,7 +251,10 @@ export async function updateLogbookEntry(logbookId: number, type: 'dcc' | 'cra' 
 }
 
 export async function deleteLogbookEntry(logbookId: number, type: 'dcc' | 'cra' | 'pd' | 'sup', entryId: number) {
-  const res = await apiFetch(`/api/logbook/logbooks/${logbookId}/${type}-entries/${entryId}/`, {
+  // Map frontend types to backend section names
+  const sectionMap = { 'dcc': 'section-a', 'cra': 'section-a', 'pd': 'section-b', 'sup': 'section-c' }
+  const section = sectionMap[type]
+  const res = await apiFetch(`/api/logbook/${logbookId}/${section}-entries/${entryId}/`, {
     method: 'DELETE',
   })
   if (!res.ok) throw new Error('Failed to delete entry')
@@ -278,7 +289,10 @@ export async function createSectionAEntry(data: any) {
     method: 'POST',
     body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error('Failed to create Section A entry')
+  if (!res.ok) {
+    const errorText = await res.text()
+    throw new Error(`Failed to create Section A entry: ${res.status} ${errorText}`)
+  }
   return res.json()
 }
 

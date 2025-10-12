@@ -172,12 +172,12 @@ export default function SupervisorDashboard() {
     const superviseesData = await fetchSupervisees()
     const logbooksData = await fetchLogbooksForReview()
     
-    // Only count logbooks that need review (submitted and either never reviewed or resubmitted after review)
+    // Only count logbooks that need review (submitted and either never reviewed or submitted after review)
     const logbooksNeedingReview = logbooksData.filter((logbook: LogbookForReview) => {
       if (logbook.status !== 'submitted') return false
       if (!logbook.reviewed_at) return true // Never reviewed
-      // If resubmitted after review, it needs review again
-      return logbook.resubmitted_at && new Date(logbook.resubmitted_at) > new Date(logbook.reviewed_at)
+      // If submitted after review, it needs review again
+      return logbook.submitted_at && new Date(logbook.submitted_at) > new Date(logbook.reviewed_at)
     })
     
     const stats = {
@@ -466,8 +466,8 @@ export default function SupervisorDashboard() {
             {logbooksForReview.filter(logbook => {
               if (logbook.status !== 'submitted') return false
               if (!logbook.reviewed_at) return true // Never reviewed
-              // If resubmitted after review, it needs review again
-              return logbook.resubmitted_at && new Date(logbook.resubmitted_at) > new Date(logbook.reviewed_at)
+              // If submitted after review, it needs review again
+              return logbook.submitted_at && new Date(logbook.submitted_at) > new Date(logbook.reviewed_at)
             }).length > 0 ? (
               <Table>
                 <TableHeader>
@@ -483,8 +483,8 @@ export default function SupervisorDashboard() {
                   {logbooksForReview.filter(logbook => {
                     if (logbook.status !== 'submitted') return false
                     if (!logbook.reviewed_at) return true // Never reviewed
-                    // If resubmitted after review, it needs review again
-                    return logbook.resubmitted_at && new Date(logbook.resubmitted_at) > new Date(logbook.reviewed_at)
+                    // If submitted after review, it needs review again
+                    return logbook.submitted_at && new Date(logbook.submitted_at) > new Date(logbook.reviewed_at)
                   }).map((logbook) => (
                     <TableRow key={logbook.id}>
                       <TableCell className="font-medium">{logbook.trainee_name}</TableCell>

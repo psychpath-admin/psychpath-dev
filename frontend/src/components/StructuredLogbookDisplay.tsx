@@ -22,15 +22,29 @@ import {
   Lock,
   Edit,
   Edit3,
-  RefreshCw,
   Send,
-  Plus
+  Plus,
+  Activity,
+  ArrowLeft
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch, submitLogbook } from '@/lib/api'
 import { ErrorOverlay, useErrorHandler } from '@/lib/errors'
 import PDForm from './PDForm'
 import SupervisionForm from './SupervisionForm'
+import LogbookAuditTree from './LogbookAuditTree'
+
+// Temporary local interface to avoid import issues
+interface LogbookValidActions {
+  can_submit: boolean
+  can_approve: boolean
+  can_reject: boolean
+  can_return_for_edits: boolean
+  can_unlock: boolean
+  valid_transitions: string[]
+  current_status: string
+  user_role: string
+}
 
 interface SectionAEntry {
   id: number
@@ -47,6 +61,9 @@ interface SectionAEntry {
   locked: boolean
   supervisor_comment?: string
   trainee_response?: string
+  // CRA-specific fields
+  activity_type?: string
+  custom_activity_type?: string
 }
 
 interface Logbook {
@@ -55,7 +72,7 @@ interface Logbook {
   week_start_date: string
   week_end_date: string
   week_display: string
-  status: 'draft' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
+  status: 'draft' | 'ready' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked' | 'unlocked_for_edits'
   supervisor_name?: string
   reviewed_by_name?: string
   submitted_at: string
@@ -66,6 +83,7 @@ interface Logbook {
     unlock_expires_at: string
     duration_minutes: number
   } | null
+  audit_log_count: number
   section_totals: {
     section_a: { 
       weekly_hours: number
@@ -94,7 +112,19 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
   const [sectionBEntries, setSectionBEntries] = useState<any[]>([])
   const [sectionCEntries, setSectionCEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  const [showAuditTrail, setShowAuditTrail] = useState(false)
+  const [validActions, setValidActions] = useState<LogbookValidActions | null>(null)
+
+  // Helper function to get activity type display for any entry type
+  const getActivityTypeDisplay = (entry: SectionAEntry): string => {
+    if (entry.entry_type === 'cra') {
+      // For CRA entries, use activity_type or custom_activity_type
+      return entry.custom_activity_type || entry.activity_type || 'Not specified'
+    } else {
+      // For DCC entries, use session_activity_types
+      return entry.session_activity_types?.join(', ') || 'Not specified'
+    }
+  }
   
   // State for Section B and C editing modals
   const [editingBEntry, setEditingBEntry] = useState<any>(null)
@@ -128,13 +158,14 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
   const [saving, setSaving] = useState(false)
   
   // Helper: can the provisional click-through to edit from the report?
-  const canInlineEdit = logbook.status === 'rejected' || 
+  const canInlineEdit = logbook.status === 'draft' ||
+                       logbook.status === 'ready' ||
+                       logbook.status === 'rejected' || 
                        logbook.status === 'returned_for_edits' ||
                        logbook.is_editable
   
   // Use the new error handler hook
   const { errorOverlay, showError } = useErrorHandler()
-  const [regenerating, setRegenerating] = useState(false)
   
   // Comment state for rejected logbooks
   const [newComments, setNewComments] = useState<Record<string, string>>({})
@@ -144,6 +175,8 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
   useEffect(() => {
     fetchAllSections()
     fetchCompetencies()
+    // Fetch valid actions asynchronously without blocking render
+    fetchValidActions().catch(console.error)
     // Fetch comments for rejected logbooks
   if (logbook.status === 'rejected' || logbook.status === 'returned_for_edits') {
       fetchComments()
@@ -159,6 +192,34 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
       }
     } catch (error) {
       console.error('Error fetching competencies:', error)
+    }
+  }
+
+  const fetchValidActions = async () => {
+    if (!logbook.id) return
+    
+    try {
+      const response = await apiFetch(`/api/logbook/${logbook.id}/valid-actions/`)
+      if (response.ok) {
+        const actions = await response.json()
+        setValidActions(actions)
+      } else {
+        throw new Error('Failed to fetch valid actions')
+      }
+    } catch (error) {
+      console.error('Error fetching valid actions:', error)
+      // Set default actions based on current status if fetch fails
+      const defaultActions = {
+        can_submit: ['draft', 'returned_for_edits', 'rejected', 'ready'].includes(logbook.status),
+        can_approve: false,
+        can_reject: false,
+        can_return_for_edits: false,
+        can_unlock: false,
+        valid_transitions: [],
+        current_status: logbook.status,
+        user_role: 'unknown'
+      }
+      setValidActions(defaultActions)
     }
   }
 
@@ -181,13 +242,12 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
   }
 
   const getStatusBadge = () => {
-    // Check if logbook has an active unlock request first
-    if (logbook.active_unlock) {
-      return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Unlocked for Editing</Badge>
-    }
-    
-    // Otherwise show normal status
+    // Show normal status based on logbook.status
     switch (logbook.status) {
+      case 'draft':
+        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Draft</Badge>
+      case 'ready':
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Ready for Submission</Badge>
       case 'submitted':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Submitted</Badge>
       case 'under_review':
@@ -200,6 +260,8 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
         return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Rejected</Badge>
       case 'locked':
         return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Locked</Badge>
+      case 'unlocked_for_edits':
+        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Unlocked for Editing</Badge>
       default:
         return <Badge variant="secondary">{logbook.status}</Badge>
     }
@@ -295,7 +357,16 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
       let userAction = 'Please try again. If the problem persists, contact your supervisor for assistance.'
       
       if (error instanceof Error) {
-        if (error.message.includes('draft, ready, or returned_for_edits')) {
+        // Handle state machine validation errors with better messages
+        if (error.message.includes('already been approved')) {
+          title = 'Logbook Already Approved'
+          explanation = error.message
+          userAction = 'No action is needed - your logbook is approved. If you believe there is an error, contact your supervisor to discuss.'
+        } else if (error.message.includes('Cannot change logbook status')) {
+          title = 'Invalid Action'
+          explanation = error.message
+          userAction = 'Please check the current status of your logbook and try an appropriate action.'
+        } else if (error.message.includes('draft, ready, or returned_for_edits')) {
           
           if (logbook.status === 'submitted') {
             explanation = 'This logbook has already been submitted and is awaiting review by your supervisor. Duplicate submissions are not allowed to prevent confusion.'
@@ -316,6 +387,59 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
       }
       
       // Use the new error handler with automatic logging
+      await showError(error, {
+        title,
+        category: 'Validation',
+        customExplanation: explanation,
+        customUserAction: userAction
+      })
+    }
+  }
+
+  const handleRequestReturnForEdits = async () => {
+    try {
+      const response = await apiFetch(`/api/logbook/${logbook.id}/request-return-for-edits/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: 'Trainee requested return for edits'
+        })
+      })
+
+      if (response.ok) {
+        toast.success('Logbook has been returned for edits. You can now make changes and resubmit.')
+        
+        // Call the resubmit callback to refresh the dashboard
+        if (onResubmit) {
+          onResubmit()
+        }
+        
+        onClose() // Close the dialog after successful request
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to request return for edits')
+      }
+    } catch (error) {
+      console.error('Failed to request return for edits:', error)
+      
+      // Parse error message for better UX
+      let title = 'Unable to Request Return for Edits'
+      let explanation = 'The system encountered an issue when trying to request that your logbook be returned for edits.'
+      let userAction = 'Please try again. If the problem persists, contact your supervisor for assistance.'
+      
+      if (error instanceof Error) {
+        // Handle specific error messages
+        if (error.message.includes('cannot access local variable')) {
+          explanation = 'There was a technical issue processing your request. The system encountered an internal error.'
+          userAction = 'Please try again in a moment. If the problem continues, contact your supervisor or support team.'
+        } else if (error.message.includes('Cannot change logbook status')) {
+          title = 'Invalid Request'
+          explanation = error.message
+          userAction = 'Please check the current status of your logbook and try an appropriate action.'
+        }
+      }
+      
+      // Use the error handler with automatic logging
       await showError(error, {
         title,
         category: 'Validation',
@@ -355,9 +479,6 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
     return canSubmit
   }
 
-  const canRegenerate = () => {
-    return ['draft', 'rejected', 'ready'].includes(logbook.status)
-  }
 
   // Comment functions for rejected logbooks
   const addEntryComment = async (entryId: number, section: string, comment: string) => {
@@ -420,7 +541,9 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
   // Click handlers for editing entries
   const handleSectionAEntryClick = (entryId: number) => {
     if (canInlineEdit) {
-      navigate(`/section-a/edit/${entryId}`, { state: { returnTo: location.pathname + location.search } })
+      // Use the logbook ID to construct the correct return URL
+      const returnTo = `/logbook/${logbook.id}`
+      navigate(`/section-a/edit/${entryId}`, { state: { returnTo } })
     }
   }
 
@@ -557,28 +680,6 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
     }
   }
 
-  const handleRegenerate = async () => {
-    setRegenerating(true)
-    try {
-      const response = await apiFetch(`/api/logbook/${logbook.id}/regenerate/`, {
-        method: 'POST'
-      })
-      
-      if (response.ok) {
-        toast.success('Logbook regenerated successfully!')
-        onRegenerate?.()
-        setShowRegenerateModal(false)
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to regenerate logbook')
-      }
-    } catch (error) {
-      console.error('Error regenerating logbook:', error)
-      toast.error('Error regenerating logbook')
-    } finally {
-      setRegenerating(false)
-    }
-  }
 
   // Separate entries into DCC and CRA
   const dccEntries = sectionAEntries.filter(entry => 
@@ -605,6 +706,18 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
               </div>
               <div className="flex items-center gap-2">
                 {getStatusBadge()}
+                {logbook.audit_log_count > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAuditTrail(true)}
+                    title="View Status History"
+                    className="h-7 px-2 text-xs"
+                  >
+                    <Activity className="h-3 w-3 mr-1" />
+                    History ({logbook.audit_log_count})
+                  </Button>
+                )}
                 {!isEditable() && (
                   <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
                     <Lock className="h-3 w-3 mr-1" />
@@ -891,8 +1004,26 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           {/* SECTION A: Weekly record of professional practice */}
           <div className="mt-6">
             {/* AHPRA Section A Header */}
-            <div className="bg-blue-600 text-white p-4 font-bold text-lg text-center">
-              SECTION A: Weekly record of professional practice
+            <div className="bg-blue-600 text-white p-4 font-bold text-lg flex items-center justify-between">
+              <div className="flex-1 text-center">SECTION A: Weekly record of professional practice</div>
+              {(logbook.status === 'ready' || logbook.status === 'draft' || isEditable()) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate(`/dcc-form`, { 
+                    state: { 
+                      weekStart: logbook.week_start_date,
+                      logbookId: logbook.id,
+                      returnTo: `/logbook/${logbook.id}`
+                    } 
+                  })}
+                  className="text-white hover:bg-blue-700 border border-white/50"
+                  title="Add Section A Entry"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  A
+                </Button>
+              )}
             </div>
             
             {/* Section A Comments for rejected logbooks */}
@@ -1039,9 +1170,8 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                             const maxRows = Math.max(1, relatedCraEntries.length)
                             
                             return Array.from({ length: maxRows }).map((_, rowIndex) => (
-                              <>
+                              <React.Fragment key={`${dccEntry.id}-${rowIndex}`}>
                                 <tr 
-                                  key={`${dccEntry.id}-${rowIndex}`} 
                                   className={`border-b border-gray-200 hover:bg-gray-50 ${canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
                                   onClick={() => canInlineEdit && handleSectionAEntryClick(dccEntry.id)}
                                   title={canInlineEdit ? 'Click to edit this entry' : ''}
@@ -1076,7 +1206,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                                           <strong>Date:</strong> {formatDate(dccEntry.session_date)}
                                         </div>
                                         <div className="text-sm">
-                                          <strong>Activity:</strong> {dccEntry.session_activity_types?.join(', ') || 'Not specified'}
+                                          <strong>Activity:</strong> {getActivityTypeDisplay(dccEntry)}
                                         </div>
                                         {dccEntry.simulated && (
                                           <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
@@ -1097,14 +1227,23 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                                   </td>
                                   
                                   {/* Client-related activity column */}
-                                  <td className="border border-gray-300 p-3 align-top">
+                                  <td 
+                                    className={`border border-gray-300 p-3 align-top ${relatedCraEntries[rowIndex] && canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                                    onClick={() => relatedCraEntries[rowIndex] && canInlineEdit && navigate(`/section-a/cra-edit`, { state: { entryId: relatedCraEntries[rowIndex].id, returnTo: `/logbook/${logbook.id}` } })}
+                                    title={relatedCraEntries[rowIndex] && canInlineEdit ? 'Click to edit CRA entry' : ''}
+                                  >
                                     {relatedCraEntries[rowIndex] ? (
                                       <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
                                         <div className="font-medium text-sm">
                                           <strong>Date:</strong> {formatDate(relatedCraEntries[rowIndex].session_date)}
+                                          </div>
+                                          {canInlineEdit && (
+                                            <Edit3 className="h-4 w-4 text-blue-600 hover:text-blue-800" />
+                                          )}
                                         </div>
                                         <div className="text-sm">
-                                          <strong>Activity:</strong> {relatedCraEntries[rowIndex].session_activity_types?.join(', ') || 'Not specified'}
+                                          <strong>Activity:</strong> {getActivityTypeDisplay(relatedCraEntries[rowIndex])}
                                         </div>
                                       </div>
                                     ) : (
@@ -1124,7 +1263,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                                   {/* Reflections column - only show on first row */}
                                   <td className="border border-gray-300 p-3 align-top">
                                     {rowIndex === 0 && (
-                                      <div className="text-sm">
+                                      <div className="text-sm whitespace-pre-wrap">
                                         {dccEntry.reflections_on_experience || 'No reflections provided'}
                                       </div>
                                     )}
@@ -1204,18 +1343,27 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                                     </td>
                                   </tr>
                                 )}
-                              </>
+                              </React.Fragment>
                             ))
                           })}
                           
                           {/* Show standalone CRA entries */}
                           {craEntries.filter(cra => !cra.parent_dcc_entry).map((craEntry) => (
                             <React.Fragment key={`standalone-cra-${craEntry.id}`}>
-                              <tr className="border-b border-gray-200 hover:bg-gray-50">
+                              <tr 
+                                className={`border-b border-gray-200 hover:bg-gray-50 ${canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                                onClick={() => canInlineEdit && navigate(`/section-a/cra-edit`, { state: { entryId: craEntry.id, returnTo: `/logbook/${logbook.id}` } })}
+                                title={canInlineEdit ? 'Click to edit CRA entry' : ''}
+                              >
                                 <td className="border border-gray-300 p-3 align-top">
                                   <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
                                     <div className="font-medium text-sm">
                                       <strong>Place:</strong> {craEntry.place_of_practice || 'Not specified'}
+                                      </div>
+                                      {canInlineEdit && (
+                                        <Edit3 className="h-4 w-4 text-blue-600 hover:text-blue-800" />
+                                      )}
                                     </div>
                                     <div className="text-sm">
                                       <strong>Client ID:</strong> {craEntry.client_id || 'Not specified'}
@@ -1240,7 +1388,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                                       <strong>Date:</strong> {formatDate(craEntry.session_date)}
                                     </div>
                                     <div className="text-sm">
-                                      <strong>Activity:</strong> {craEntry.session_activity_types?.join(', ') || 'Not specified'}
+                                      <strong>Activity:</strong> {getActivityTypeDisplay(craEntry)}
                                     </div>
                                   </div>
                                 </td>
@@ -1252,7 +1400,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                                 </td>
                                 
                                 <td className="border border-gray-300 p-3 align-top">
-                                  <div className="text-sm">
+                                  <div className="text-sm whitespace-pre-wrap">
                                     {craEntry.reflections_on_experience || 'No reflections provided'}
                                   </div>
                                 </td>
@@ -1409,8 +1557,26 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           {/* SECTION B: Professional development - after A */}
           <div className="mt-6">
             {/* AHPRA Section B Header */}
-            <div className="bg-blue-600 text-white p-4 font-bold text-lg">
-              SECTION B: Record of professional development
+            <div className="bg-blue-600 text-white p-4 font-bold text-lg flex items-center justify-between">
+              <div className="flex-1 text-center">SECTION B: Record of professional development</div>
+              {(logbook.status === 'ready' || logbook.status === 'draft' || isEditable()) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate(`/pd-form`, { 
+                    state: { 
+                      weekStart: logbook.week_start_date,
+                      logbookId: logbook.id,
+                      returnTo: `/logbook/${logbook.id}`
+                    } 
+                  })}
+                  className="text-white hover:bg-blue-700 border border-white/50"
+                  title="Add Section B Entry"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  B
+                </Button>
+              )}
             </div>
             
             {/* Section B Comments for rejected logbooks */}
@@ -1535,9 +1701,8 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                       </thead>
                       <tbody>
                         {sectionBEntries.map((e, i) => (
-                          <>
+                          <React.Fragment key={i}>
                             <tr 
-                              key={i} 
                               className={`border-b border-gray-300 hover:bg-gray-50 ${canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
                               onClick={() => canInlineEdit && handleSectionBEntryClick(e)}
                               title={canInlineEdit ? 'Click to edit this entry' : ''}
@@ -1630,7 +1795,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                                 </td>
                               </tr>
                             )}
-                          </>
+                          </React.Fragment>
                         ))}
                         {sectionBEntries.length === 0 && (
                           <tr>
@@ -1704,8 +1869,26 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
             </div>
 
             {/* SECTION C Header */}
-            <div className="bg-blue-600 text-white p-4 font-bold text-lg text-center">
-              SECTION C: Record of supervision
+            <div className="bg-blue-600 text-white p-4 font-bold text-lg flex items-center justify-between">
+              <div className="flex-1 text-center">SECTION C: Record of supervision</div>
+              {(logbook.status === 'ready' || logbook.status === 'draft' || isEditable()) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate(`/supervision-form`, { 
+                    state: { 
+                      weekStart: logbook.week_start_date,
+                      logbookId: logbook.id,
+                      returnTo: `/logbook/${logbook.id}`
+                    } 
+                  })}
+                  className="text-white hover:bg-blue-700 border border-white/50"
+                  title="Add Section C Entry"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  C
+                </Button>
+              )}
             </div>
             
             {/* Section C Comments for rejected logbooks */}
@@ -1833,9 +2016,8 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                       </thead>
                       <tbody>
                         {sectionCEntries.map((e, i) => (
-                          <>
+                          <React.Fragment key={i}>
                             <tr 
-                              key={i} 
                               className={`border-b border-gray-300 hover:bg-gray-50 ${canInlineEdit ? 'cursor-pointer hover:bg-blue-50' : ''}`}
                               onClick={() => canInlineEdit && handleSectionCEntryClick(e)}
                               title={canInlineEdit ? 'Click to edit this entry' : ''}
@@ -1927,7 +2109,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                                 </td>
                               </tr>
                             )}
-                          </>
+                          </React.Fragment>
                         ))}
                         {sectionCEntries.length === 0 && (
                           <tr>
@@ -2060,20 +2242,10 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           {/* Footer with action buttons */}
           <div className="flex justify-between items-center pt-4 border-t">
             <div className="flex items-center gap-2">
-              {canRegenerate() && (
-                <Button
-                  variant="outline"
-                  onClick={() => setShowRegenerateModal(true)}
-                  className="text-orange-600 border-orange-200 hover:bg-orange-50"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Regenerate
-                </Button>
-              )}
             </div>
             
             <div className="flex items-center gap-2">
-              {isEditable() && (
+              {(validActions?.can_submit || (!validActions && isEditable())) && (
                 <Button
                   variant="default"
                   onClick={handleSubmitForReview}
@@ -2081,6 +2253,16 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
                 >
                   <Send className="h-4 w-4 mr-2" />
                   Submit for Review
+                </Button>
+              )}
+              {(validActions?.can_return_for_edits || (!validActions && logbook.status === 'submitted')) && (
+                <Button
+                  variant="outline"
+                  onClick={handleRequestReturnForEdits}
+                  className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Request Return for Edits
                 </Button>
               )}
               <Button variant="outline" onClick={onClose}>
@@ -2092,39 +2274,6 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
         </DialogContent>
       </Dialog>
 
-      {/* Regenerate Confirmation Modal */}
-      <Dialog open={showRegenerateModal} onOpenChange={setShowRegenerateModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Regenerate Logbook</DialogTitle>
-            <DialogDescription>
-              A logbook already exists for this week. Do you want to regenerate it? This will replace existing data.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowRegenerateModal(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleRegenerate}
-              disabled={regenerating}
-              className="bg-orange-600 hover:bg-orange-700"
-            >
-              {regenerating ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Regenerating...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Yes (Regenerate)
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Section B Edit Modal */}
       {showBEditModal && (
@@ -2151,6 +2300,13 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
           isEditing={!!editingCEntry}
         />
       )}
+
+      {/* Audit Trail Modal */}
+      <LogbookAuditTree
+        logbookId={logbook.id}
+        isOpen={showAuditTrail}
+        onClose={() => setShowAuditTrail(false)}
+      />
 
       {/* Error Overlay with 3-part system */}
       <ErrorOverlay {...errorOverlay} />

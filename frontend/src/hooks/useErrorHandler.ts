@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { errorLogger } from '@/lib/errorLogger'
+import { logError } from '@/lib/errors/errorLogger'
 
 export interface ErrorInfo {
   title?: string
@@ -24,11 +24,8 @@ export const useErrorHandler = (): ErrorHandlerReturn => {
   const [retryAction, setRetryAction] = useState<(() => void) | null>(null)
 
   const showError = useCallback(async (error: Error, context: Partial<ErrorInfo> = {}) => {
-    // Log the error
-    await errorLogger.logError(error, {
-      affectedComponent: context.errorId || 'Unknown Component'
-    })
-
+    console.log('useErrorHandler showError called with:', { error: error.message, context })
+    
     // Get error information from database
     const errorInfo = getErrorInfo(error, context.errorId)
 
@@ -41,8 +38,18 @@ export const useErrorHandler = (): ErrorHandlerReturn => {
       errorId: context.errorId || generateErrorId()
     }
 
+    console.log('Setting error state:', finalErrorInfo)
+
+    // Set error state first to show the overlay
     setCurrentError(finalErrorInfo)
     setShowErrorOverlay(true)
+    
+    console.log('State set, current state should be:', { showErrorOverlay: true, currentError: finalErrorInfo })
+
+    // Log the error asynchronously (don't await to avoid blocking)
+    logError(finalErrorInfo).catch(err => {
+      console.error('Failed to log error:', err)
+    })
   }, [])
 
   const dismissError = useCallback(() => {

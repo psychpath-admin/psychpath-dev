@@ -26,7 +26,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
-import LogbookAuditTrailModal from '@/components/LogbookAuditTrailModal'
+import LogbookAuditTree from '@/components/LogbookAuditTree'
 import SupervisorLogbookDisplay from '@/components/SupervisorLogbookDisplay'
 import ReviewerUnlockQueue from '@/components/ReviewerUnlockQueue'
 import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
@@ -43,6 +43,7 @@ interface LogbookForReview {
   reviewed_at?: string
   resubmitted_at?: string
   supervisor_comments?: string
+  audit_log_count: number
   section_totals: {
     section_a: { weekly_hours: string; cumulative_hours: string }
     section_b: { weekly_hours: string; cumulative_hours: string }
@@ -615,14 +616,22 @@ export default function SupervisorLogbookReview() {
                       Review
                     </Button>
                     
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewAuditTrail(logbook.id)}
-                      title="View Audit Trail"
-                    >
-                      <Activity className="h-4 w-4" />
-                    </Button>
+                    {logbook.audit_log_count > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewAuditTrail(logbook.id)}
+                        title="View Status History"
+                        className="relative"
+                      >
+                        <Activity className="h-4 w-4" />
+                        {logbook.audit_log_count > 0 && (
+                          <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 text-xs p-0 flex items-center justify-center">
+                            {logbook.audit_log_count}
+                          </Badge>
+                        )}
+                      </Button>
+                    )}
                     
                     {logbook.status === 'rejected' && (
                       <Button
@@ -848,7 +857,7 @@ export default function SupervisorLogbookReview() {
                             {(e.reflections_on_experience || e.reflection) && (
                               <div className="mt-3 p-3 bg-white rounded border-l-4 border-blue-200">
                                 <span className="font-medium text-blue-800">Reflection:</span>
-                                <div className="mt-1 text-gray-700">
+                                <div className="mt-1 text-gray-700 whitespace-pre-wrap">
                                   {e.reflections_on_experience || e.reflection}
                                 </div>
                               </div>
@@ -1178,7 +1187,7 @@ export default function SupervisorLogbookReview() {
       )}
 
       {/* Audit Trail Modal */}
-      <LogbookAuditTrailModal
+      <LogbookAuditTree
         logbookId={selectedLogbookId}
         isOpen={auditModalOpen}
         onClose={() => {
