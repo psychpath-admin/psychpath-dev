@@ -8,6 +8,7 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction
 from django.shortcuts import render
+from django.core.exceptions import ValidationError
 from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification, LogbookReviewRequest
 from api.models import Supervision
 from .serializers import (
@@ -808,7 +809,7 @@ def logbook_create(request):
         'is_overdue': logbook.is_overdue(),
         'has_supervisor_comments': logbook.has_supervisor_comments(),
         'is_editable': logbook.is_editable_by_user(request.user),
-        'supervisor_comments': logbook.supervisor_comments,
+        'supervisor_comments': logbook.review_comments,
         'submitted_at': logbook.submitted_at,
         'reviewed_at': logbook.reviewed_at,
         'reviewed_by_name': f"{logbook.reviewed_by.profile.first_name} {logbook.reviewed_by.profile.last_name}".strip() if logbook.reviewed_by and hasattr(logbook.reviewed_by, 'profile') else None,
@@ -865,8 +866,9 @@ def logbook_submit(request):
     if not existing_logbook:
         return Response({'error': 'No logbook found for this week. Please save a draft first.'}, status=status.HTTP_400_BAD_REQUEST)
     
-    if existing_logbook.status in ['submitted', 'approved']:
-        return Response({'error': f'Logbook already {existing_logbook.status}'}, status=status.HTTP_400_BAD_REQUEST)
+    # Check if logbook can be submitted using state machine
+    if not existing_logbook.can_transition_to('submitted', request.user):
+        return Response({'error': f'Logbook cannot be submitted from current status: {existing_logbook.status}'}, status=status.HTTP_400_BAD_REQUEST)
     
     try:
         with transaction.atomic():
@@ -894,27 +896,27 @@ def logbook_submit(request):
             ).update(locked=True)
     except ValueError as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Return updated logbook data
-        return Response({
-            'id': existing_logbook.id,
-            'week_start_date': existing_logbook.week_start_date,
-            'week_end_date': existing_logbook.week_end_date,
-            'week_display': existing_logbook.week_display,
-            'week_starting_display': f"Week of {existing_logbook.week_start_date.strftime('%d %b %Y')}",
-            'status': existing_logbook.status,
-            'rag_status': existing_logbook.get_rag_status(),
-            'is_overdue': existing_logbook.is_overdue(),
-            'has_supervisor_comments': existing_logbook.has_supervisor_comments(),
-            'is_editable': existing_logbook.is_editable_by_user(request.user),
-            'supervisor_comments': existing_logbook.supervisor_comments,
-            'submitted_at': existing_logbook.submitted_at,
-            'reviewed_at': existing_logbook.reviewed_at,
-            'reviewed_by_name': f"{existing_logbook.reviewed_by.profile.first_name} {existing_logbook.reviewed_by.profile.last_name}".strip() if existing_logbook.reviewed_by and hasattr(existing_logbook.reviewed_by, 'profile') else None,
-            'section_totals': existing_logbook.calculate_section_totals(),
-            'active_unlock': None,
-            'has_logbook': True
-        }, status=status.HTTP_200_OK)
+    
+    # Return updated logbook data
+    return Response({
+        'id': existing_logbook.id,
+        'week_start_date': existing_logbook.week_start_date,
+        'week_end_date': existing_logbook.week_end_date,
+        'week_display': existing_logbook.week_display,
+        'week_starting_display': f"Week of {existing_logbook.week_start_date.strftime('%d %b %Y')}",
+        'status': existing_logbook.status,
+        'rag_status': existing_logbook.get_rag_status(),
+        'is_overdue': existing_logbook.is_overdue(),
+        'has_supervisor_comments': existing_logbook.has_supervisor_comments(),
+        'is_editable': existing_logbook.is_editable_by_user(request.user),
+        'supervisor_comments': existing_logbook.review_comments,
+        'submitted_at': existing_logbook.submitted_at,
+        'reviewed_at': existing_logbook.reviewed_at,
+        'reviewed_by_name': f"{existing_logbook.reviewed_by.profile.first_name} {existing_logbook.reviewed_by.profile.last_name}".strip() if existing_logbook.reviewed_by and hasattr(existing_logbook.reviewed_by, 'profile') else None,
+        'section_totals': existing_logbook.calculate_section_totals(),
+        'active_unlock': None,
+        'has_logbook': True
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -997,6 +999,94 @@ def logbook_audit_logs(request, logbook_id):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def logbook_valid_actions(request, logbook_id):
+    """Get valid actions/transitions for a specific logbook and current user"""
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not hasattr(request.user, 'profile'):
+        return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+
+    user_role = request.user.profile.role.lower()
+
+    # Check permissions
+    if user_role in ['provisional', 'registrar'] and logbook.trainee != request.user:
+        return Response({'error': 'Can only view actions for your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+
+    if user_role == 'supervisor':
+        from api.models import Supervision
+        supervisee_relationships = Supervision.objects.filter(
+            supervisor=request.user,
+            role='PRIMARY',
+            status='ACCEPTED'
+        )
+        supervisee_users = [rel.supervisee for rel in supervisee_relationships if rel.supervisee]
+        if logbook.trainee not in supervisee_users:
+            return Response({'error': 'Can only view actions for your supervisees'}, status=status.HTTP_403_FORBIDDEN)
+
+    # Get valid transitions from state machine
+    from .state_machine import LogbookStateMachine
+    valid_transitions = LogbookStateMachine.get_valid_transitions(logbook.status, user_role)
+    
+    # Map transitions to UI actions
+    actions = {
+        'can_submit': 'submitted' in valid_transitions,
+        'can_approve': 'approved' in valid_transitions,
+        'can_reject': 'rejected' in valid_transitions,
+        'can_return_for_edits': 'returned_for_edits' in valid_transitions,
+        'can_unlock': 'unlocked_for_edits' in valid_transitions,
+        'valid_transitions': valid_transitions,
+        'current_status': logbook.status,
+        'user_role': user_role
+    }
+    
+    return Response(actions)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def logbook_request_return_for_edits(request, logbook_id):
+    """Request that a submitted logbook be returned for edits"""
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not hasattr(request.user, 'profile'):
+        return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+
+    user_role = request.user.profile.role.lower()
+
+    # Check permissions - only trainees can request return for edits
+    if user_role not in ['provisional', 'registrar']:
+        return Response({'error': 'Only trainees can request return for edits'}, status=status.HTTP_403_FORBIDDEN)
+
+    # Check ownership
+    if logbook.trainee != request.user:
+        return Response({'error': 'Can only request return for edits on your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+
+    # Get the request reason
+    request_reason = request.data.get('reason', 'Trainee requested return for edits')
+
+    try:
+        # Use state machine to transition to returned_for_edits
+        audit_log = logbook.transition_to('returned_for_edits', request.user, request_reason)
+        
+        return Response({
+            'success': True,
+            'message': 'Logbook has been returned for edits',
+            'audit_log_id': audit_log.id
+        })
+    except ValidationError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': f'Failed to return logbook for edits: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 @support_error_handler
 def supervisor_logbooks(request):
     """Get all logbooks submitted by supervisees for supervisor review"""
@@ -1050,7 +1140,8 @@ def supervisor_logbooks(request):
             'resubmitted_at': logbook.resubmitted_at,
             'review_comments': logbook.review_comments,
             'section_totals': logbook.calculate_section_totals(),
-            'message_count': logbook.messages.count()
+            'message_count': logbook.messages.count(),
+            'audit_log_count': logbook.audit_logs.count()
         })
     
     return Response(supervisor_logbooks)
@@ -1069,21 +1160,11 @@ def logbook_approve(request, logbook_id):
     except WeeklyLogbook.DoesNotExist:
         return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
     
-    if logbook.status != 'submitted':
-        return Response({'error': 'Can only approve submitted logbooks'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    logbook.status = 'approved'
-    logbook.reviewed_at = timezone.now()
-    logbook.reviewed_by = request.user
-    logbook.save()
-    
-    # Create audit log entry
-    LogbookAuditLog.objects.create(
-        logbook=logbook,
-        action='approved',
-        user=request.user,
-        new_status='approved'
-    )
+    # Use state machine to transition to approved
+    try:
+        logbook.transition_to('approved', request.user, 'Logbook approved by supervisor')
+    except ValidationError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     return Response({'message': 'Logbook approved successfully'})
 
@@ -1101,36 +1182,24 @@ def logbook_reject(request, logbook_id):
     except WeeklyLogbook.DoesNotExist:
         return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
     
-    if logbook.status not in ['submitted', 'under_review', 'draft']:
-        return Response({'error': 'Can only reject submitted, under review, or draft logbooks'}, status=status.HTTP_400_BAD_REQUEST)
-    
     comments = request.data.get('comments', '')
     if not comments:
         return Response({'error': 'Comments are required for rejection'}, status=status.HTTP_400_BAD_REQUEST)
     
-    logbook.status = 'rejected'
-    logbook.reviewed_at = timezone.now()
-    logbook.reviewed_by = request.user
-    logbook.review_comments = comments
-    logbook.save()
-    
-    # Unlock entries for editing
-    from section_a.models import SectionAEntry
-    from section_b.models import ProfessionalDevelopmentEntry
-    from section_c.models import SupervisionEntry
-    
-    SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=False)
-    ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=False)
-    SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=False)
-    
-    # Create audit log entry
-    LogbookAuditLog.objects.create(
-        logbook=logbook,
-        action='rejected',
-        user=request.user,
-        new_status='rejected',
-        comments=comments
-    )
+    # Use state machine to transition to rejected
+    try:
+        logbook.transition_to('rejected', request.user, comments)
+        
+        # Unlock entries for editing
+        from section_a.models import SectionAEntry
+        from section_b.models import ProfessionalDevelopmentEntry
+        from section_c.models import SupervisionEntry
+        
+        SectionAEntry.objects.filter(id__in=logbook.section_a_entry_ids).update(locked=False)
+        ProfessionalDevelopmentEntry.objects.filter(id__in=logbook.section_b_entry_ids).update(locked=False)
+        SupervisionEntry.objects.filter(id__in=logbook.section_c_entry_ids).update(locked=False)
+    except ValidationError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     # Create a comment thread for rejection feedback
     from .models import CommentThread, CommentMessage
@@ -2676,3 +2745,21 @@ def logbook_review_history(request, logbook_id):
             'review_started_date': logbook.review_started_at,
         }
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def logbook_by_week(request, week_start_date):
+    """Get logbook by week start date for the authenticated user"""
+    try:
+        logbook = WeeklyLogbook.objects.get(
+            week_start_date=week_start_date,
+            trainee=request.user
+        )
+        serializer = LogbookSerializer(logbook)
+        return Response(serializer.data)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found for this week'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': f'Failed to retrieve logbook: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

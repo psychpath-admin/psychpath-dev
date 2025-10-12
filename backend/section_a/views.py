@@ -102,6 +102,23 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
             'client_age': last_entry.client_age or '',
             'session_activity_types': last_entry.session_activity_types or [],
         })
+    
+    @action(detail=False, methods=['get'])
+    def place_autocomplete(self, request):
+        """Get unique places of practice for autocomplete"""
+        query = request.query_params.get('q', '')
+        queryset = self.get_queryset()
+        
+        if query:
+            queryset = queryset.filter(place_of_practice__icontains=query)
+        
+        # Get unique places of practice
+        places = set()
+        for entry in queryset:
+            if entry.place_of_practice:
+                places.add(entry.place_of_practice)
+        
+        return Response(list(places))
 
 
 class CustomSessionActivityTypeViewSet(viewsets.ModelViewSet):

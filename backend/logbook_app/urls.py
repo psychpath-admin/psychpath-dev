@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     logbook_list, logbook_dashboard_list, logbook_status_summary, eligible_weeks, logbook_draft, logbook_create, logbook_submit, 
-    logbook_detail, logbook_audit_logs, supervisor_logbooks,
+    logbook_detail, logbook_audit_logs, logbook_valid_actions, logbook_request_return_for_edits, supervisor_logbooks,
     logbook_approve, logbook_reject, logbook_entries, logbook_review,
     logbook_messages, logbook_audit_trail, logbook_resubmit,
     logbook_comment_threads, comment_message_reply, entry_comment_thread,
@@ -15,7 +15,9 @@ from .views import (
     logbook_reject_with_reason, logbook_review_requests, review_request_respond,
     review_request_complete, logbook_review_history,
     # Section entries endpoint
-    logbook_section_a_entries, logbook_section_b_entries, logbook_section_c_entries
+    logbook_section_a_entries, logbook_section_b_entries, logbook_section_c_entries,
+    # Week-based logbook lookup
+    logbook_by_week
 )
 
 urlpatterns = [
@@ -29,6 +31,9 @@ urlpatterns = [
     path('submit/', logbook_submit, name='logbook-submit'),
     path('<int:logbook_id>/', logbook_detail, name='logbook-detail'),
     path('<int:logbook_id>/audit-logs/', logbook_audit_logs, name='logbook-audit-logs'),
+    path('<int:logbook_id>/valid-actions/', logbook_valid_actions, name='logbook-valid-actions'),
+    path('<int:logbook_id>/request-return-for-edits/', logbook_request_return_for_edits, name='logbook-request-return-for-edits'),
+    path('week/<str:week_start_date>/', logbook_by_week, name='logbook-by-week'),
     
     # Supervisor endpoints
     path('supervisor/', supervisor_logbooks, name='supervisor-logbooks'),

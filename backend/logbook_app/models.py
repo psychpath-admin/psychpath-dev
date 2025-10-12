@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from utils.duration_utils import minutes_to_hours_minutes, minutes_to_display_format, minutes_to_decimal_hours
 import json
 
@@ -11,11 +12,13 @@ class WeeklyLogbook(models.Model):
     
     STATUS_CHOICES = [
         ('draft', 'Draft'),
+        ('ready', 'Ready for Submission'),
         ('submitted', 'Submitted'),
         ('under_review', 'Under Review'),
         ('returned_for_edits', 'Returned for Edits'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
+        ('unlocked_for_edits', 'Unlocked for Editing'),
         ('locked', 'Locked'),
     ]
     
@@ -254,23 +257,11 @@ class WeeklyLogbook(models.Model):
         if not self.is_complete():
             raise ValueError("Logbook must be complete before submission")
         
-        if self.status not in ['draft', 'ready', 'returned_for_edits', 'rejected']:
-            raise ValueError("Only draft, ready, returned_for_edits, or rejected logbooks can be submitted")
-        
-        self.status = 'submitted'
-        self.submitted_at = timezone.now()
-        self.save()
-        
-        # Log audit trail
-        LogbookAuditLog.objects.create(
-            logbook=self,
-            action='submitted',
-            user=user,
-            user_role=self._get_user_role(user),
-            comments='Logbook submitted for review',
-            previous_status='draft',
-            new_status='submitted'
-        )
+        # Use state machine to transition to submitted
+        try:
+            return self.transition_to('submitted', user, 'Logbook submitted for review')
+        except ValidationError as e:
+            raise ValueError(str(e))
         
         # Send notification to supervisor if assigned
         if self.supervisor:
@@ -573,6 +564,63 @@ class WeeklyLogbook(models.Model):
             comments=f'Notification sent to trainee for {action}',
             metadata={'action': action, 'recipient': 'trainee'}
         )
+    
+    # State Machine Methods
+    def transition_to(self, new_state: str, user, comments: str = '', metadata: dict = None, **kwargs):
+        """
+        Transition logbook to new state using the state machine.
+        
+        Args:
+            new_state: Target state
+            user: User making the transition
+            comments: Optional comments
+            metadata: Optional metadata
+            **kwargs: Additional fields for audit log
+            
+        Returns:
+            LogbookAuditLog instance
+            
+        Raises:
+            ValidationError: If transition is invalid
+        """
+        from .state_machine import LogbookStateTransition
+        return LogbookStateTransition.transition_to(
+            self, new_state, user, comments, metadata, **kwargs
+        )
+    
+    def can_transition_to(self, new_state: str, user) -> bool:
+        """
+        Check if a state transition is valid for the given user.
+        
+        Args:
+            new_state: Target state
+            user: User attempting the transition
+            
+        Returns:
+            True if transition is valid, False otherwise
+        """
+        from .state_machine import LogbookStateMachine
+        user_role = getattr(user.profile, 'role', 'unknown').lower()
+        return LogbookStateMachine.can_transition(self.status, new_state, user_role)
+    
+    def get_valid_transitions(self, user) -> list:
+        """
+        Get valid state transitions for the given user.
+        
+        Args:
+            user: User requesting valid transitions
+            
+        Returns:
+            List of valid next states
+        """
+        from .state_machine import LogbookStateMachine
+        user_role = getattr(user.profile, 'role', 'unknown').lower()
+        return LogbookStateMachine.get_valid_transitions(self.status, user_role)
+    
+    def get_status_display(self) -> str:
+        """Get human-readable status display name."""
+        from .state_machine import LogbookStateMachine
+        return LogbookStateMachine.get_state_display_name(self.status)
 
 
 class LogbookEntry(models.Model):

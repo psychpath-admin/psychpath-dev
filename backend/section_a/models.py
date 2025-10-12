@@ -87,6 +87,10 @@ class SectionAEntry(models.Model):
     duration_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Legacy field")
     reflection = models.TextField(blank=True, help_text="Legacy field")
     
+    # CRA-specific fields
+    activity_type = models.CharField(max_length=100, blank=True, help_text="CRA activity type")
+    custom_activity_type = models.CharField(max_length=100, blank=True, help_text="Custom CRA activity type")
+    
     # Logbook integration
     locked = models.BooleanField(default=False, help_text="True if this entry is part of a submitted logbook")
     supervisor_comment = models.TextField(blank=True, default="", help_text="Supervisor comment for this entry when reviewing a logbook")

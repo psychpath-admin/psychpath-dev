@@ -12,6 +12,7 @@ class LogbookSerializer(serializers.ModelSerializer):
     reviewed_by_name = serializers.SerializerMethodField()
     section_totals = serializers.SerializerMethodField()
     active_unlock = serializers.SerializerMethodField()
+    audit_log_count = serializers.SerializerMethodField()
     
     class Meta:
         model = WeeklyLogbook
@@ -20,7 +21,7 @@ class LogbookSerializer(serializers.ModelSerializer):
             'week_display', 'status', 'is_editable', 'section_a_entry_ids', 'section_b_entry_ids', 
             'section_c_entry_ids', 'supervisor', 'supervisor_name', 'submitted_at', 
             'reviewed_by', 'reviewed_by_name', 'reviewed_at', 'review_comments', 'supervisor_decision_at',
-            'section_totals', 'active_unlock', 'created_at', 'updated_at'
+            'section_totals', 'active_unlock', 'audit_log_count', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'trainee', 'submitted_at', 'reviewed_at', 'created_at', 'updated_at', 'is_editable']
     
@@ -67,6 +68,10 @@ class LogbookSerializer(serializers.ModelSerializer):
                 'duration_minutes': active_unlock.duration_minutes
             }
         return None
+    
+    def get_audit_log_count(self, obj):
+        """Get the count of audit logs for this logbook"""
+        return obj.audit_logs.count()
 
 
 class LogbookDraftSerializer(serializers.Serializer):
