@@ -29,6 +29,20 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
         
         return queryset
     
+    def create(self, request, *args, **kwargs):
+        """Create a new entry and handle conversion notices"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        
+        # Check for conversion notice
+        response_data = serializer.data
+        if hasattr(instance, '_conversion_notice'):
+            response_data['conversion_notice'] = instance._conversion_notice
+        
+        headers = self.get_success_headers(response_data)
+        return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
+    
     def perform_create(self, serializer):
         """Automatically set the trainee to the current user"""
         serializer.save(trainee=self.request.user)

@@ -2453,7 +2453,7 @@ def notification_list(request):
         limit = 10
     
     notifications = Notification.objects.filter(
-        recipient=request.user
+        user=request.user
     ).order_by('-created_at')[:limit]
     
     serializer = NotificationSerializer(notifications, many=True)
@@ -2466,8 +2466,8 @@ def notification_list(request):
 def notification_stats(request):
     """Get notification statistics for the current user"""
     try:
-        total_count = Notification.objects.filter(recipient=request.user).count()
-        unread_count = Notification.objects.filter(recipient=request.user, read=False).count()
+        total_count = Notification.objects.filter(user=request.user).count()
+        unread_count = Notification.objects.filter(user=request.user, read=False).count()
         
         return Response({
             'total': total_count,
@@ -2489,7 +2489,7 @@ def notification_mark_read(request, notification_id):
     try:
         notification = Notification.objects.get(
             id=notification_id,
-            recipient=request.user
+            user=request.user
         )
         notification.mark_as_read()
         return Response({'message': 'Notification marked as read'})

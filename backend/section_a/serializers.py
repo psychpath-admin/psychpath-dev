@@ -54,6 +54,15 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
         simulated = data.get('simulated', False)
         trainee = self.context.get('request').user if self.context.get('request') else None
         
+        # Prevent post-dating of any record
+        if session_date:
+            from datetime import date
+            today = date.today()
+            if session_date > today:
+                raise serializers.ValidationError({
+                    'session_date': f'Cannot create records for future dates. Today is {today.strftime("%d/%m/%Y")}. Please select a date on or before today.'
+                })
+        
         # For DCC entries (client_contact), require at least one activity type
         if entry_type in ['client_contact', 'simulated_contact'] and not session_activity_types:
             raise serializers.ValidationError({
@@ -245,4 +254,36 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # Automatically set the trainee to the current user
         validated_data['trainee'] = self.context['request'].user
-        return super().create(validated_data)
+        
+        # Check for CRA to ICRA conversion before creating
+        conversion_notice = None
+        if (validated_data.get('entry_type') == 'cra' and 
+            validated_data.get('parent_dcc_entry') and 
+            validated_data.get('session_date')):
+            
+            try:
+                parent_entry = SectionAEntry.objects.get(id=validated_data['parent_dcc_entry'])
+                if parent_entry.session_date:
+                    parent_week = SectionAEntry.calculate_week_starting(parent_entry.session_date)
+                    cra_week = SectionAEntry.calculate_week_starting(validated_data['session_date'])
+                    
+                    if parent_week != cra_week:
+                        conversion_notice = (
+                            f"Your Client Related Activity (CRA) has been automatically converted to an "
+                            f"Independent Client Related Activity (ICRA) because the activity date "
+                            f"({validated_data['session_date'].strftime('%d/%m/%Y')}) differs from the parent "
+                            f"client contact date ({parent_entry.session_date.strftime('%d/%m/%Y')}). "
+                            f"ICRA entries represent independent client work not tied to a specific session."
+                        )
+            except SectionAEntry.DoesNotExist:
+                pass
+        
+        # Create the entry
+        instance = super().create(validated_data)
+        
+        # Add conversion notice to the response if applicable
+        if conversion_notice:
+            # Store the notice in a custom attribute that can be accessed by the view
+            instance._conversion_notice = conversion_notice
+        
+        return instance

@@ -61,9 +61,9 @@ class UnlockRequestAdmin(admin.ModelAdmin):
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ['recipient', 'type', 'read', 'created_at']
-    list_filter = ['type', 'read', 'created_at']
-    search_fields = ['recipient__email', 'message']
+    list_display = ['user', 'notification_type', 'read', 'created_at']
+    list_filter = ['notification_type', 'read', 'created_at']
+    search_fields = ['user__email', 'notification_type']
     readonly_fields = ['created_at']
 
 

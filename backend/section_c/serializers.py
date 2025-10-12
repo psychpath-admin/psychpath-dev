@@ -17,6 +17,21 @@ class SupervisionEntrySerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['trainee', 'duration_display', 'duration_hours_minutes', 'created_at', 'updated_at']
+    
+    def validate(self, data):
+        """Validate the entry data"""
+        date_of_supervision = data.get('date_of_supervision')
+        
+        # Prevent post-dating of any record
+        if date_of_supervision:
+            from datetime import date
+            today = date.today()
+            if date_of_supervision > today:
+                raise serializers.ValidationError({
+                    'date_of_supervision': f'Cannot create records for future dates. Today is {today.strftime("%d/%m/%Y")}. Please select a date on or before today.'
+                })
+        
+        return data
 
 class SupervisionWeeklySummarySerializer(serializers.ModelSerializer):
     week_total_display = serializers.CharField(read_only=True)

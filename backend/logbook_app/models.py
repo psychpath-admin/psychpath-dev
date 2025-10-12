@@ -922,22 +922,21 @@ class Notification(models.Model):
         ('system_alert', 'System Alert'),
     ]
     
-    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
-    message = models.TextField()
-    link = models.URLField(blank=True, null=True, help_text="Direct link to related page")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES)
+    payload = models.JSONField(blank=True, null=True, help_text="Additional data for the notification")
     read = models.BooleanField(default=False)
-    type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['recipient', 'read', '-created_at']),
-            models.Index(fields=['type']),
+            models.Index(fields=['user', 'read', '-created_at']),
+            models.Index(fields=['notification_type']),
         ]
     
     def __str__(self):
-        return f"{self.recipient.email} - {self.type} at {self.created_at}"
+        return f"{self.user.email} - {self.notification_type} at {self.created_at}"
     
     def mark_as_read(self):
         """Mark this notification as read"""

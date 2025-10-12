@@ -23,6 +23,21 @@ class ProfessionalDevelopmentEntrySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['trainee', 'week_starting', 'created_at', 'updated_at']
     
+    def validate(self, data):
+        """Validate the entry data"""
+        date_of_activity = data.get('date_of_activity')
+        
+        # Prevent post-dating of any record
+        if date_of_activity:
+            from datetime import date
+            today = date.today()
+            if date_of_activity > today:
+                raise serializers.ValidationError({
+                    'date_of_activity': f'Cannot create records for future dates. Today is {today.strftime("%d/%m/%Y")}. Please select a date on or before today.'
+                })
+        
+        return data
+    
     def create(self, validated_data):
         validated_data['trainee'] = self.context['request'].user
         return super().create(validated_data)
