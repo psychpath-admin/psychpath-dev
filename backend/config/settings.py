@@ -114,6 +114,7 @@ INSTALLED_APPS = [
     'internship_validation', # Added internship validation app
     'registrar_logbook', # Registrar program logbook app
     'competencies', # AHPRA 8 Core Competencies
+    'system_config', # System configuration management
     'epas', # Entrustable Professional Activities
 ]
 
