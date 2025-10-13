@@ -66,8 +66,8 @@ export default function EPABrowser() {
   const fetchData = async () => {
     try {
       const [epasResponse, competenciesResponse] = await Promise.all([
-        apiFetch('/api/epas/api/epas/'),
-        apiFetch('/api/competencies/api/competencies/')
+        apiFetch('/api/epas/epas/'),
+        apiFetch('/api/competencies/competencies/')
       ])
       
       if (epasResponse.ok && competenciesResponse.ok) {

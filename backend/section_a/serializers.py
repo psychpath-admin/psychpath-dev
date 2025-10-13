@@ -117,12 +117,15 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Create entry with cross-week CRA to ICRA conversion feedback"""
+        # Automatically set the trainee to the current user
+        validated_data['trainee'] = self.context['request'].user
+        
         entry_type = validated_data.get('entry_type')
         parent_dcc_entry = validated_data.get('parent_dcc_entry')
         session_date = validated_data.get('session_date')
         
-        # Check if this will be converted from CRA to ICRA
-        converted_to_icra = False
+        # Check for CRA to ICRA conversion before creating
+        conversion_notice = None
         if (entry_type == 'cra' and parent_dcc_entry and session_date):
             try:
                 # parent_dcc_entry could be an ID (int) or a model instance
@@ -134,24 +137,27 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
                 if parent_entry.session_date:
                     parent_week = SectionAEntry.calculate_week_starting(parent_entry.session_date)
                     cra_week = SectionAEntry.calculate_week_starting(session_date)
-                    converted_to_icra = parent_week != cra_week
+                    
+                    if parent_week != cra_week:
+                        conversion_notice = (
+                            f"Your Client Related Activity (CRA) has been automatically converted to an "
+                            f"Independent Client Related Activity (ICRA) because the activity date "
+                            f"({session_date.strftime('%d/%m/%Y')}) differs from the parent "
+                            f"client contact date ({parent_entry.session_date.strftime('%d/%m/%Y')}). "
+                            f"ICRA entries represent independent client work not tied to a specific session."
+                        )
             except (SectionAEntry.DoesNotExist, AttributeError):
                 pass
         
         # Create the entry (model will handle conversion)
-        entry = super().create(validated_data)
+        instance = super().create(validated_data)
         
-        # Add conversion info to the response if applicable
-        if converted_to_icra:
-            # Store conversion info in a custom field for frontend feedback
-            entry._conversion_info = {
-                'converted': True,
-                'original_type': 'cra',
-                'new_type': 'independent_activity',
-                'reason': 'Activity date is in a different week than the parent DCC session'
-            }
+        # Add conversion notice to the response if applicable
+        if conversion_notice:
+            # Store the notice in a custom attribute that can be accessed by the view
+            instance._conversion_notice = conversion_notice
         
-        return entry
+        return instance
     
     def get_total_sessions(self, obj):
         """Calculate total sessions for this client"""
@@ -250,40 +256,3 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
         if obj.entry_type in ['client_contact', 'simulated_contact']:
             return SectionAEntry.get_simulated_hours_total(obj.trainee)
         return None
-    
-    def create(self, validated_data):
-        # Automatically set the trainee to the current user
-        validated_data['trainee'] = self.context['request'].user
-        
-        # Check for CRA to ICRA conversion before creating
-        conversion_notice = None
-        if (validated_data.get('entry_type') == 'cra' and 
-            validated_data.get('parent_dcc_entry') and 
-            validated_data.get('session_date')):
-            
-            try:
-                parent_entry = SectionAEntry.objects.get(id=validated_data['parent_dcc_entry'])
-                if parent_entry.session_date:
-                    parent_week = SectionAEntry.calculate_week_starting(parent_entry.session_date)
-                    cra_week = SectionAEntry.calculate_week_starting(validated_data['session_date'])
-                    
-                    if parent_week != cra_week:
-                        conversion_notice = (
-                            f"Your Client Related Activity (CRA) has been automatically converted to an "
-                            f"Independent Client Related Activity (ICRA) because the activity date "
-                            f"({validated_data['session_date'].strftime('%d/%m/%Y')}) differs from the parent "
-                            f"client contact date ({parent_entry.session_date.strftime('%d/%m/%Y')}). "
-                            f"ICRA entries represent independent client work not tied to a specific session."
-                        )
-            except SectionAEntry.DoesNotExist:
-                pass
-        
-        # Create the entry
-        instance = super().create(validated_data)
-        
-        # Add conversion notice to the response if applicable
-        if conversion_notice:
-            # Store the notice in a custom attribute that can be accessed by the view
-            instance._conversion_notice = conversion_notice
-        
-        return instance

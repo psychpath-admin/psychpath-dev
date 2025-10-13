@@ -14,7 +14,6 @@ class WeeklyLogbook(models.Model):
         ('draft', 'Draft'),
         ('ready', 'Ready for Submission'),
         ('submitted', 'Submitted'),
-        ('under_review', 'Under Review'),
         ('returned_for_edits', 'Returned for Edits'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
@@ -259,13 +258,15 @@ class WeeklyLogbook(models.Model):
         
         # Use state machine to transition to submitted
         try:
-            return self.transition_to('submitted', user, 'Logbook submitted for review')
+            audit_log = self.transition_to('submitted', user, 'Logbook submitted for review')
         except ValidationError as e:
             raise ValueError(str(e))
         
         # Send notification to supervisor if assigned
         if self.supervisor:
             self._send_notification_to_supervisor('submitted')
+        
+        return audit_log
     
     def approve(self, supervisor, comments=''):
         """Approve logbook by supervisor"""
@@ -377,29 +378,18 @@ class WeeklyLogbook(models.Model):
             self._send_notification_to_supervisor('resubmitted')
     
     def start_review(self, supervisor):
-        """Start the review process"""
-        if self.status != 'submitted':
-            raise ValueError("Can only start review for submitted logbooks")
+        """
+        DEPRECATED: Start the review process
         
-        self.status = 'under_review'
-        self.review_started_at = timezone.now()
-        self.reviewed_by = supervisor
-        self.save()
-        
-        # Log audit trail
-        LogbookAuditLog.objects.create(
-            logbook=self,
-            action='review_started',
-            user=supervisor,
-            user_role=self._get_user_role(supervisor),
-            comments='Review process started',
-            new_status='under_review'
-        )
+        This method is deprecated as we no longer use the 'under_review' status.
+        Supervisors now approve/reject directly from 'submitted' status.
+        """
+        raise NotImplementedError("start_review method is deprecated. Use approve_with_changes or reject_with_reason directly.")
     
     def request_changes(self, supervisor, change_requests):
         """Request specific changes from trainee"""
-        if self.status != 'under_review':
-            raise ValueError("Can only request changes for logbooks under review")
+        if self.status != 'submitted':
+            raise ValueError("Can only request changes for submitted logbooks")
         
         self.status = 'returned_for_edits'
         self.returned_at = timezone.now()
@@ -426,8 +416,8 @@ class WeeklyLogbook(models.Model):
     
     def approve_with_changes(self, supervisor, comments=""):
         """Approve logbook with optional comments"""
-        if self.status != 'under_review':
-            raise ValueError("Can only approve logbooks under review")
+        if self.status != 'submitted':
+            raise ValueError("Can only approve submitted logbooks")
         
         self.status = 'approved'
         self.reviewed_at = timezone.now()
@@ -451,8 +441,8 @@ class WeeklyLogbook(models.Model):
     
     def reject_with_reason(self, supervisor, reason):
         """Reject logbook with detailed reason"""
-        if self.status not in ['under_review', 'submitted', 'draft']:
-            raise ValueError("Can only reject logbooks under review, submitted, or draft")
+        if self.status not in ['submitted', 'draft']:
+            raise ValueError("Can only reject submitted or draft logbooks")
         
         self.status = 'rejected'
         self.rejected_at = timezone.now()
@@ -946,11 +936,14 @@ class Notification(models.Model):
     @classmethod
     def create_notification(cls, recipient, message, notification_type, link=None):
         """Create a notification"""
+        payload = {
+            'message': message,
+            'link': link
+        }
         notification = cls.objects.create(
-            recipient=recipient,
-            message=message,
-            type=notification_type,
-            link=link
+            user=recipient,
+            notification_type=notification_type,
+            payload=payload
         )
         return notification
 

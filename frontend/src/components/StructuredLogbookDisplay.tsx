@@ -72,7 +72,7 @@ interface Logbook {
   week_start_date: string
   week_end_date: string
   week_display: string
-  status: 'draft' | 'ready' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked' | 'unlocked_for_edits'
+  status: 'draft' | 'ready' | 'submitted' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked' | 'unlocked_for_edits'
   supervisor_name?: string
   reviewed_by_name?: string
   submitted_at: string
@@ -185,7 +185,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
 
   const fetchCompetencies = async () => {
     try {
-      const response = await apiFetch('/api/competencies/')
+      const response = await apiFetch('/api/competencies/competencies/')
       if (response.ok) {
         const data = await response.json()
         setCompetencies(data)
@@ -250,7 +250,6 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
         return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Ready for Submission</Badge>
       case 'submitted':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Submitted</Badge>
-      case 'under_review':
         return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Under Review</Badge>
       case 'returned_for_edits':
         return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Returned for Edits</Badge>
@@ -271,7 +270,6 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
     switch (status) {
       case 'submitted':
         return <Clock className="h-4 w-4 text-yellow-500" />
-      case 'under_review':
         return <AlertCircle className="h-4 w-4 text-blue-500" />
       case 'returned_for_edits':
         return <Edit className="h-4 w-4 text-orange-500" />

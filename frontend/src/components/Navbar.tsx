@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { Link } from 'react-router-dom'
 import HeaderNotificationBell from '@/components/HeaderNotificationBell'
-import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar, Award, Target, GraduationCap } from 'lucide-react'
+import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar, Award, Target, GraduationCap, Mail } from 'lucide-react'
 // Logo is served from public folder
 
 export function Navbar() {
@@ -150,6 +150,30 @@ export function Navbar() {
                         <div>
                           <div className="font-medium">Manage Trainees</div>
                           <div className="text-xs text-gray-500">Invite & supervise trainees</div>
+                        </div>
+                      </Link>
+                    </div>
+                  </div>
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+            )}
+
+            {/* Supervision - For Supervisees */}
+            {(me?.role === 'PROVISIONAL' || me?.role === 'REGISTRAR') && (
+              <NavigationMenuItem>
+                <NavigationMenuTrigger className="text-sm text-textDark hover:text-primaryBlue">
+                  <Users className="h-4 w-4 mr-2" />
+                  Supervision
+                </NavigationMenuTrigger>
+                <NavigationMenuContent>
+                  <div className="grid gap-3 p-4 w-[350px]">
+                    <div className="grid gap-2">
+                      <h4 className="font-medium text-sm text-textDark">Supervision Management</h4>
+                      <Link to="/supervision-invitations" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <Mail className="h-4 w-4 text-blue-600" />
+                        <div>
+                          <div className="font-medium">Supervision Invitations</div>
+                          <div className="text-xs text-gray-500">View & respond to invitations</div>
                         </div>
                       </Link>
                     </div>

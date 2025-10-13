@@ -1,5 +1,5 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.shortcuts import get_object_or_404
@@ -237,4 +237,41 @@ class ConfigurationAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ConfigurationAuditLogSerializer
     permission_classes = [IsAdminUser]
     filterset_fields = ['configuration', 'user', 'action']
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def logbook_config(request):
+    """Get or set logbook configuration (POST requires support admin)"""
+    config = SystemConfiguration.get_config()
+    
+    if request.method == 'GET':
+        return Response({
+            'target_count': config.target_logbooks_count,
+            'submission_deadline_days': config.submission_deadline_days
+        })
+    
+    elif request.method == 'POST':
+        # Only support admin can modify
+        if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPPORT':
+            return Response({'error': 'Unauthorized'}, status=403)
+        
+        target = request.data.get('target_count')
+        deadline_days = request.data.get('submission_deadline_days')
+        
+        if target is not None:
+            if not isinstance(target, int) or target < 1 or target > 104:
+                return Response({'error': 'Invalid target count (1-104)'}, status=400)
+            config.target_logbooks_count = target
+        
+        if deadline_days is not None:
+            if not isinstance(deadline_days, int) or deadline_days < 1 or deadline_days > 30:
+                return Response({'error': 'Invalid deadline days (1-30)'}, status=400)
+            config.submission_deadline_days = deadline_days
+        
+        config.save()
+        return Response({
+            'target_count': config.target_logbooks_count,
+            'submission_deadline_days': config.submission_deadline_days
+        })
 

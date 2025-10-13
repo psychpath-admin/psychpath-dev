@@ -349,6 +349,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   <Input
                     type="date"
                     value={formData.session_date}
+                    max={new Date().toISOString().split('T')[0]}
                     onChange={(e) => setFormData(prev => ({ ...prev, session_date: e.target.value }))}
                     required
                   />

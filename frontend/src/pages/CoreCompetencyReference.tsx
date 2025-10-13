@@ -33,7 +33,7 @@ export default function CoreCompetencyReference() {
 
   const fetchCompetencies = async () => {
     try {
-      const response = await apiFetch('/api/competencies/api/competencies/')
+      const response = await apiFetch('/api/competencies/competencies/')
       if (response.ok) {
         const data = await response.json()
         setCompetencies(data)

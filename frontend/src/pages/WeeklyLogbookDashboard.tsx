@@ -200,13 +200,11 @@ export default function WeeklyLogbookDashboard() {
       'approved': 'approved',
       'rejected': 'rejected',
       'returned_for_edits': 'pending',
-      'under_review': 'pending',
       'draft': 'draft'
     }
     const statusLabels: Record<string, string> = {
       'submitted': 'Waiting for Review',
       'returned_for_edits': 'Returned for Edits',
-      'under_review': 'Under Review'
     }
     const mappedStatus = statusMap[status] || 'draft'
     const label = statusLabels[status]

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useSmartRefresh } from '@/hooks/useSmartRefresh'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,6 +34,7 @@ import type { PDEntry, PDCompetency, PDWeeklyGroup } from '@/types/pd'
 import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationUtils'
 import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 import { useErrorHandler } from '@/lib/errors'
+import UserNameDisplay from '@/components/UserNameDisplay'
 
 const SectionB: React.FC = () => {
   const navigate = useNavigate()
@@ -98,14 +100,6 @@ const SectionB: React.FC = () => {
     })
   }
 
-  const formatDuration = (minutes: number | string) => {
-    return formatDurationDisplay(minutes)
-  }
-
-  const truncateText = (text: string, maxLength: number) => {
-    if (!text) return ''
-    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text
-  }
 
   // Toggle entry expansion
   const toggleEntryExpansion = (entryId: string) => {
@@ -303,6 +297,12 @@ const SectionB: React.FC = () => {
   ]
 
   const durationQuickLinks = [15, 30, 60, 120, 180, 240, 480]
+
+  // Smart refresh hook for notification-based updates
+  const { manualRefresh } = useSmartRefresh(
+    () => loadData(),
+    ['logbook_submitted', 'logbook_status_updated', 'supervision_invite_pending']
+  )
 
   useEffect(() => {
     loadData()
@@ -616,15 +616,15 @@ const SectionB: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bgSection">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-4">
         {/* Hero Section - PsychPathway Brand */}
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-green-600 to-green-600/90 rounded-card p-8 text-white shadow-md">
+        <div className="mb-4">
+          <div className="bg-gradient-to-r from-green-600 to-green-600/90 rounded-card p-4 text-white shadow-md">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
-                <h1 className="text-4xl font-headings mb-2">Section B: Professional Development</h1>
-                <p className="text-white/90 text-lg font-body">Track your learning activities and competency development</p>
-                <div className="flex gap-2 mt-4">
+                <h1 className="text-3xl font-headings mb-1">Section B: Professional Development</h1>
+                <p className="text-white/90 text-base font-body">Track your learning activities and competency development</p>
+                <div className="flex gap-2 mt-3">
                   <Button
                     onClick={() => window.location.href = '/section-a'}
                     className="px-3 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700"
@@ -639,7 +639,15 @@ const SectionB: React.FC = () => {
                   </Button>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col items-end">
+                <div className="mb-3">
+                  <UserNameDisplay 
+                    className="text-white" 
+                    variant="small" 
+                    showRole={true}
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
                 <Button 
                   onClick={handleCreateNew}
                   size="lg"
@@ -666,10 +674,12 @@ const SectionB: React.FC = () => {
                   <BarChart3 className="h-5 w-5 mr-2" />
                   Weekly Logbooks
                 </Button>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
 
         {/* PD Compliance Dashboard */}
         {(() => {
@@ -1562,8 +1572,8 @@ const SectionB: React.FC = () => {
                       </div>
                     </div>
                   )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
             ))
           )}
           
@@ -1682,6 +1692,7 @@ const SectionB: React.FC = () => {
                   <Input
                     type="date"
                     value={formData.date_of_activity}
+                    max={new Date().toISOString().split('T')[0]}
                     onChange={(e) => setFormData(prev => ({ ...prev, date_of_activity: e.target.value }))}
                   />
                 </div>

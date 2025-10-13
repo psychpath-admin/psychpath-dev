@@ -181,6 +181,7 @@ function SectionBForm({ onCancel, entryId }: SectionBFormProps) {
                 <Input
                   type="date"
                   value={formData.date_of_activity}
+                  max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setFormData(prev => ({ ...prev, date_of_activity: e.target.value }))}
                   required
                 />

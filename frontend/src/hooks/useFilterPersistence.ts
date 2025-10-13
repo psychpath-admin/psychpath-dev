@@ -70,7 +70,9 @@ export function useSimpleFilterPersistence<T>(
     try {
       const saved = localStorage.getItem(storageKey)
       if (saved) {
-        return JSON.parse(saved)
+        const parsed = JSON.parse(saved)
+        // Ensure we never return null or undefined
+        return parsed !== null && parsed !== undefined ? parsed : defaultValue
       }
     } catch (error) {
       console.warn(`Failed to load saved filter for ${key}:`, error)

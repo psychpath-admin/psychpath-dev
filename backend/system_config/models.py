@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class ConfigurationCategory(models.Model):
@@ -26,6 +27,16 @@ class SystemConfiguration(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    target_logbooks_count = models.PositiveIntegerField(
+        default=52,
+        validators=[MinValueValidator(1), MaxValueValidator(104)],
+        help_text="Target number of logbooks for trainees to complete"
+    )
+    submission_deadline_days = models.PositiveIntegerField(
+        default=14,
+        validators=[MinValueValidator(1), MaxValueValidator(30)],
+        help_text="Number of days after week start date when logbook submission becomes overdue"
+    )
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -38,6 +49,19 @@ class SystemConfiguration(models.Model):
 
     def __str__(self):
         return self.name
+    
+    @classmethod
+    def get_config(cls):
+        """Get or create the main system configuration"""
+        config, created = cls.objects.get_or_create(
+            name='main',
+            defaults={
+                'description': 'Main system configuration',
+                'target_logbooks_count': 52,
+                'submission_deadline_days': 14
+            }
+        )
+        return config
 
 
 class ConfigurationItem(models.Model):

@@ -20,12 +20,33 @@ import EditRejectedLogbook from '@/pages/EditRejectedLogbook'
 import SectionA from '@/pages/SectionA'
 import SectionB from '@/pages/SectionB'
 import SectionC from '@/pages/SectionC'
-import CRAForm from '@/pages/CRAForm'
+import CRAForm from '@/components/CRAForm'
+import SupervisionInvitations from '@/pages/SupervisionInvitations'
 
 // Wrapper component for CRA form to handle routing
 function CRAFormWrapper() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [saving, setSaving] = useState(false)
+  const [entryForm, setEntryForm] = useState({
+    session_date: new Date().toISOString().split('T')[0],
+    client_id: '',
+    place_of_practice: '',
+    client_age: '',
+    presenting_issues: '',
+    session_activity_types: [] as string[],
+    duration_minutes: '15',
+    reflections_on_experience: '',
+    entry_type: 'cra',
+    parent_dcc_entry: null
+  })
+  const [customActivityTypes, setCustomActivityTypes] = useState<string[]>([])
+  const [newCustomActivityType, setNewCustomActivityType] = useState('')
+  const [clientSuggestions] = useState<string[]>([])
+  
+  const parentDccId = (location.state as any)?.parentDccId
+  const entryId = (location.state as any)?.entryId
+  const isEditing = !!entryId
   
   const handleCancel = () => {
     const returnTo = (location.state as any)?.returnTo
@@ -37,13 +58,80 @@ function CRAFormWrapper() {
     }
   }
   
-  const parentDccId = (location.state as any)?.parentDccId
-  const returnTo = (location.state as any)?.returnTo
+  const handleSubmit = async (data: any) => {
+    setSaving(true)
+    try {
+      if (isEditing) {
+        // Handle edit logic here
+        console.log('Editing CRA entry:', data)
+      } else {
+        // Handle create logic here
+        console.log('Creating CRA entry:', data)
+      }
+      handleCancel()
+    } catch (error) {
+      console.error('Error saving CRA entry:', error)
+    } finally {
+      setSaving(false)
+    }
+  }
   
-  return <CRAForm onCancel={handleCancel} parentDccId={parentDccId} returnTo={returnTo} />
+  const handleActivityTypeToggle = (type: string) => {
+    setEntryForm(prev => ({
+      ...prev,
+      session_activity_types: prev.session_activity_types.includes(type)
+        ? prev.session_activity_types.filter((t: string) => t !== type)
+        : [...prev.session_activity_types, type]
+    }))
+  }
+  
+  const handleAddCustomActivityType = () => {
+    if (newCustomActivityType.trim()) {
+      setCustomActivityTypes(prev => [...prev, newCustomActivityType.trim()])
+      setNewCustomActivityType('')
+      setShowCustomInput(false)
+    }
+  }
+  
+  const handleDeleteCustomActivityType = (index: number) => {
+    setCustomActivityTypes(prev => prev.filter((_, i) => i !== index))
+  }
+  
+  const calculateWeekStarting = (date: string) => {
+    const d = new Date(date)
+    const day = d.getDay()
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    return new Date(d.setDate(diff)).toISOString().split('T')[0]
+  }
+  
+  const handleClientIdChange = () => {
+    // Handle client ID changes if needed
+  }
+  
+  return (
+    <CRAForm
+      onSubmit={handleSubmit}
+      onCancel={handleCancel}
+      saving={saving}
+      entryForm={entryForm}
+      setEntryForm={setEntryForm}
+      handleActivityTypeToggle={handleActivityTypeToggle}
+      handleAddCustomActivityType={handleAddCustomActivityType}
+      newCustomActivityType={newCustomActivityType}
+      setNewCustomActivityType={setNewCustomActivityType}
+      customActivityTypes={customActivityTypes}
+      handleDeleteCustomActivityType={handleDeleteCustomActivityType}
+      calculateWeekStarting={calculateWeekStarting}
+      title={isEditing ? 'Edit Client Related Activity (CRA)' : 'Add Client Related Activity (CRA)'}
+      showClientIdInput={true}
+      onClientIdChange={handleClientIdChange}
+      clientSuggestions={clientSuggestions}
+      isEditing={isEditing}
+      entryId={entryId}
+    />
+  )
 }
 import Dashboard from '@/pages/Dashboard'
-import CRAEdit from '@/pages/CRAEdit'
 import UserProfile from '@/pages/UserProfile'
 import ForgotPassword from '@/pages/ForgotPassword'
 import RegisterTerms from '@/pages/RegisterTerms'
@@ -183,8 +271,17 @@ function App() {
           <Route path="/logbook/:id" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
           <Route path="/logbook/:id/edit" element={<RequireAuth><EditRejectedLogbook /></RequireAuth>} />
           <Route path="/section-a/cra" element={<RequireAuth><CRAFormWrapper /></RequireAuth>} />
-          <Route path="/section-a/cra-edit" element={<RequireAuth><CRAEdit /></RequireAuth>} />
+          <Route path="/section-a/cra-edit" element={<RequireAuth><CRAFormWrapper /></RequireAuth>} />
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
+          <Route path="/supervision-invitations" element={
+            <RequireAuth>
+              {me?.role === 'SUPERVISOR' ? (
+                <Navigate to="/supervisor/dashboard" replace />
+              ) : (
+                <SupervisionInvitations />
+              )}
+            </RequireAuth>
+          } />
           <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
           <Route path="/competencies" element={<RequireAuth><CoreCompetencyReference /></RequireAuth>} />
           <Route path="/competency-viewer" element={<RequireAuth><CoreCompetencyViewer /></RequireAuth>} />

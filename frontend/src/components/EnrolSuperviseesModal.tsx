@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Plus, X, Mail, UserPlus, AlertCircle, CheckCircle } from 'lucide-react'
+import { Plus, X, UserPlus, AlertCircle, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
 import ErrorOverlay from '@/components/ErrorOverlay'
@@ -98,8 +98,6 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
           setEmails([''])
           onEnrolmentComplete?.()
         } else {
-          // Debug: Log the errors to see what we're getting
-          console.log('Invitation errors:', data.errors)
           
           // Check for endorsement validation errors
           const endorsementErrors = data.errors.filter(error => 
@@ -110,7 +108,9 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
           const existingSupervisionErrors = data.errors.filter(error => 
             error.includes('already has an active supervision relationship') ||
             error.includes('already has a secondary supervisor') ||
-            error.includes('must first have a Primary Supervisor')
+            error.includes('must first have a Primary Supervisor') ||
+            error.includes('already pending') ||
+            error.includes('already exists')
           )
           
           // Check for database schema errors
@@ -122,37 +122,82 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
             (error.includes('endorsement') && !error.includes('You need'))
           )
           
-          console.log('Database errors detected:', databaseErrors)
-          
           if (endorsementErrors.length > 0) {
             // Show error overlay for endorsement validation errors
             showError(
               new Error('Endorsement Required for Supervision'),
               {
                 title: 'Supervision Invitation Failed',
-                errorId: 'ENDORSEMENT-001'
+                errorId: 'ENDORSEMENT-001',
+                summary: 'Missing Endorsement',
+                explanation: 'You do not have the required endorsement to supervise this registrar.',
+                userAction: 'Please update your profile to include the required Area of Practice Endorsement (AOPE) that matches this registrar\'s endorsement.'
               }
             )
           } else if (existingSupervisionErrors.length > 0) {
-            // Show error overlay for existing supervision relationship errors
-            showError(
-              new Error('Registrar Already Has Supervisor'),
-              {
-                title: 'Supervision Invitation Failed',
-                errorId: 'EXISTING-SUPERVISION-001'
-              }
-            )
+            // Determine specific error based on message content
+            const isPendingError = existingSupervisionErrors.some(e => e.includes('already pending'))
+            const isExistsError = existingSupervisionErrors.some(e => e.includes('already exists'))
+            
+            if (isPendingError) {
+              showError(
+                new Error('Invitation Already Pending'),
+                {
+                  title: 'Duplicate Invitation',
+                  errorId: 'INVITATION-PENDING-001',
+                  summary: 'Invitation Already Sent',
+                  explanation: 'An invitation has already been sent to this supervisee and is still pending their response.',
+                  userAction: 'Please wait for the supervisee to accept or decline the existing invitation, or check your "Supervision Invitations" section to see the status of pending invitations. If the invitation has expired, you can resend it.'
+                }
+              )
+            } else if (isExistsError) {
+              showError(
+                new Error('Supervision Relationship Already Exists'),
+                {
+                  title: 'Existing Relationship',
+                  errorId: 'SUPERVISION-EXISTS-001',
+                  summary: 'Supervision Already Active',
+                  explanation: 'A supervision relationship already exists with this supervisee in the selected role.',
+                  userAction: 'Please check your "Active Supervisions" section to view existing relationships, or select a different supervision role if you wish to supervise in another capacity.'
+                }
+              )
+            } else {
+              // Other existing supervision relationship errors
+              showError(
+                new Error('Registrar Already Has Supervisor'),
+                {
+                  title: 'Supervision Invitation Failed',
+                  errorId: 'EXISTING-SUPERVISION-001',
+                  summary: 'Supervision Conflict',
+                  explanation: existingSupervisionErrors.join(' '),
+                  userAction: 'Please review the error details above and ensure the registrar does not already have a supervisor in the selected role, or that they meet the requirements for the supervision type you selected.'
+                }
+              )
+            }
           } else if (databaseErrors.length > 0) {
             // Show error overlay for database/schema errors
             showError(
               new Error('System Configuration Error'),
               {
                 title: 'Supervision Invitation Failed',
-                errorId: 'DATABASE-001'
+                errorId: 'DATABASE-001',
+                summary: 'System Error',
+                explanation: 'A system configuration issue is preventing the invitation from being sent.',
+                userAction: 'Please contact support with error ID DATABASE-001 for assistance.'
               }
             )
           } else {
-            toast.warning(`Sent ${data.results.length} invitations with ${data.errors.length} errors`)
+            // Generic errors not categorized above
+            showError(
+              new Error('Invitation Errors'),
+              {
+                title: 'Some Invitations Failed',
+                errorId: 'INVITATION-GENERIC-001',
+                summary: 'Partial Success',
+                explanation: `Successfully sent ${data.results.length} invitation(s), but ${data.errors.length} invitation(s) failed. Errors: ${data.errors.join('; ')}`,
+                userAction: 'Please review the error details above and correct any issues before trying again. You may need to check the supervisee email addresses or their existing supervision relationships.'
+              }
+            )
           }
         }
       } else {
@@ -195,7 +240,9 @@ export const EnrolSuperviseesModal: React.FC<EnrolSuperviseesModalProps> = ({
             new Error(summary),
             {
               title: 'Supervision Invitation Failed',
-              errorId
+              errorId,
+              explanation,
+              userAction
             }
           )
           } else {

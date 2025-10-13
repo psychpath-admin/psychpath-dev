@@ -258,10 +258,40 @@ class UnlockRequestSerializer(serializers.ModelSerializer):
 class NotificationSerializer(serializers.ModelSerializer):
     """Serializer for Notification model"""
     
+    message = serializers.SerializerMethodField()
+    action_url = serializers.SerializerMethodField()
+    type_display = serializers.SerializerMethodField()
+    
     class Meta:
         model = Notification
-        fields = ['id', 'user', 'notification_type', 'payload', 'read', 'created_at']
+        fields = ['id', 'user', 'notification_type', 'type_display', 'payload', 'message', 'action_url', 'read', 'created_at']
         read_only_fields = ['id', 'created_at']
+    
+    def get_message(self, obj):
+        """Extract message from payload"""
+        if obj.payload and isinstance(obj.payload, dict):
+            return obj.payload.get('message', '')
+        return ''
+    
+    def get_action_url(self, obj):
+        """Extract action_url from payload"""
+        if obj.payload and isinstance(obj.payload, dict):
+            return obj.payload.get('link', '')
+        return ''
+    
+    def get_type_display(self, obj):
+        """Get human-readable notification type"""
+        type_display_map = {
+            'logbook_submission': 'Logbook Submission',
+            'logbook_approved': 'Logbook Approved',
+            'logbook_rejected': 'Logbook Rejected',
+            'logbook_returned': 'Logbook Returned',
+            'supervision_invite': 'Supervision Invitation',
+            'supervision_accepted': 'Supervision Accepted',
+            'supervision_rejected': 'Supervision Rejected',
+            'system_alert': 'System Alert',
+        }
+        return type_display_map.get(obj.notification_type, obj.notification_type.replace('_', ' ').title())
 
 
 class LogbookReviewRequestSerializer(serializers.ModelSerializer):

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useSmartRefresh } from '@/hooks/useSmartRefresh'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,6 +32,7 @@ import {
 import type { SupervisionEntry, SupervisionWeeklyGroup } from '@/types/supervision'
 import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 import { useErrorHandler } from '@/lib/errors'
+import UserNameDisplay from '@/components/UserNameDisplay'
 
 const SectionC: React.FC = () => {
   const navigate = useNavigate()
@@ -349,6 +351,14 @@ const SectionC: React.FC = () => {
     }
   }, [groupByWeek, weeklyGroups, dateFrom, dateTo, supervisorType, supervisionType, durationMin, durationMax, searchTerm, sortBy, expandedWeeks])
 
+  // Smart refresh hook for notification-based updates
+  const { manualRefresh: refreshSectionC } = useSmartRefresh(
+    () => loadData(),
+    ['logbook_submitted', 'logbook_status_updated', 'supervision_invite_pending']
+  )
+  
+  // refreshSectionC is available for manual refresh if needed
+
   useEffect(() => {
     loadData()
   }, [])
@@ -450,15 +460,15 @@ const SectionC: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bgSection">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-4">
         {/* Hero Section - PsychPathway Brand */}
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-purple-600 to-purple-600/90 rounded-card p-8 text-white shadow-md">
+        <div className="mb-4">
+          <div className="bg-gradient-to-r from-purple-600 to-purple-600/90 rounded-card p-4 text-white shadow-md">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
-                <h1 className="text-4xl font-headings mb-2">Section C: Supervision</h1>
-                <p className="text-white/90 text-lg font-body">Track your supervision sessions and professional development</p>
-                <div className="flex gap-2 mt-4">
+                <h1 className="text-3xl font-headings mb-1">Section C: Supervision</h1>
+                <p className="text-white/90 text-base font-body">Track your supervision sessions and professional development</p>
+                <div className="flex gap-2 mt-3">
                   <Button
                     onClick={() => window.location.href = '/section-a'}
                     className="px-3 py-2 rounded-md bg-primaryBlue text-white text-sm hover:bg-blue-700"
@@ -473,7 +483,15 @@ const SectionC: React.FC = () => {
                   </Button>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col items-end">
+                <div className="mb-3">
+                  <UserNameDisplay 
+                    className="text-white" 
+                    variant="small" 
+                    showRole={true}
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
                 <Button 
                   onClick={handleCreateNewEntry}
                   size="lg"
@@ -491,10 +509,12 @@ const SectionC: React.FC = () => {
                   <Users className="h-5 w-5 mr-2" />
                   Weekly Logbooks
                 </Button>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
 
         {/* Summary Cards */}
         {(() => {
@@ -1692,6 +1712,7 @@ const SectionC: React.FC = () => {
                     <Input
                       type="date"
                       value={formData.date_of_supervision}
+                      max={new Date().toISOString().split('T')[0]}
                       onChange={(e) => setFormData({ ...formData, date_of_supervision: e.target.value })}
                       required
                     />

@@ -306,6 +306,7 @@ function SectionCForm({ onCancel, entryId }: SectionCFormProps) {
                 <Input
                   type="date"
                   value={formData.date_of_supervision}
+                  max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setFormData(prev => ({ ...prev, date_of_supervision: e.target.value }))}
                   required
                 />

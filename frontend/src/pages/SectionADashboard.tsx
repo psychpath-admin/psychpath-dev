@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+import { useSmartRefresh } from '@/hooks/useSmartRefresh'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +22,7 @@ import {
   deleteCustomActivityType
 } from '@/lib/api'
 import CRAForm from '@/components/CRAForm'
+import UserNameDisplay from '@/components/UserNameDisplay'
 import { minutesToHoursMinutes, formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 import { useFilterPersistence, useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
 
@@ -153,6 +155,12 @@ export default function SectionADashboard() {
   const [activityType, setActivityType] = useSimpleFilterPersistence<string>('section-a-activity-type', 'all') // 'all', 'DCC', 'CRA', 'ICRA'
   const [reviewedFilter, setReviewedFilter] = useSimpleFilterPersistence<string>('section-a-reviewed-filter', 'all') // 'all', 'reviewed', 'not_reviewed'
 
+  // Smart refresh hook for notification-based updates
+  const { manualRefresh } = useSmartRefresh(
+    () => loadDCCEntries(),
+    ['logbook_submitted', 'logbook_status_updated', 'supervision_invite_pending']
+  )
+
   useEffect(() => {
     loadDCCEntries()
   }, [pagination.current_page, pagination.records_per_page, sortBy, dateFrom, dateTo, sessionType, durationMin, durationMax, clientPseudonym, activityType, reviewedFilter])
@@ -190,9 +198,14 @@ export default function SectionADashboard() {
       setAllEntries(fetchedEntries)
       
       // Include all Section A entry types (DCC, CRA, ICRA)
-      let filteredEntries = fetchedEntries.filter((entry: DCCEntry) => 
-        entry.entry_type === 'client_contact' || entry.entry_type === 'cra' || entry.entry_type === 'independent_activity'
-      )
+      // Filter out CRA entries that have a parent_dcc_entry (they'll be shown nested in their parent DCC)
+      let filteredEntries = fetchedEntries.filter((entry: DCCEntry) => {
+        if (entry.entry_type === 'cra' && entry.parent_dcc_entry) {
+          // Don't show CRA entries with a parent DCC as standalone entries
+          return false
+        }
+        return entry.entry_type === 'client_contact' || entry.entry_type === 'cra' || entry.entry_type === 'independent_activity'
+      })
       
       // Apply filters
       if (dateFrom) {
@@ -350,7 +363,7 @@ export default function SectionADashboard() {
     setCraFormData({
       client_id: entry.client_id,
       client_pseudonym: entry.client_id, // Default to same as client_id for consistency
-      session_date: entry.session_date,
+      session_date: entry.session_date ? new Date(entry.session_date).toISOString().split('T')[0] : '',
       place_of_practice: '',
       presenting_issues: '',
       session_activity_types: [],
@@ -470,14 +483,35 @@ export default function SectionADashboard() {
       if (editingCRAId) {
         await updateSectionAEntry(editingCRAId, entryData)
         toast.success('ICRA entry updated successfully!')
+        setShowICRAForm(false)
+        setSelectedEntry(null)
+        setEditingCRAId(null)
       } else {
-        await createSectionAEntry(entryData)
-        toast.success('ICRA entry created successfully!')
+        const response = await createSectionAEntry(entryData)
+        
+        // Close modal first
+        setShowICRAForm(false)
+        setSelectedEntry(null)
+        setEditingCRAId(null)
+        
+        // Check for conversion notice
+        if (response && response.conversion_notice) {
+          // Longer delay to ensure modal is completely closed and DOM updated
+          setTimeout(() => {
+            toast.info(response.conversion_notice, {
+              duration: 8000,
+              style: {
+                backgroundColor: '#f0f9ff',
+                border: '1px solid #0ea5e9',
+                color: '#0c4a6e',
+                zIndex: 9999
+              }
+            })
+          }, 300)
+        } else {
+          toast.success('ICRA entry created successfully!')
+        }
       }
-
-      setShowICRAForm(false)
-      setSelectedEntry(null)
-      setEditingCRAId(null)
       setIcraFormData({
         client_id: '',
         client_pseudonym: '',
@@ -730,15 +764,15 @@ export default function SectionADashboard() {
 
   return (
     <div className="min-h-screen bg-bgSection">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-4">
         {/* Hero Section - PsychPathway Brand */}
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-600/90 rounded-card p-8 text-white shadow-md">
+        <div className="mb-4">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-600/90 rounded-card p-4 text-white shadow-md">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
-                <h1 className="text-4xl font-headings mb-2">Section A: Direct Client Contact</h1>
-                <p className="text-white/90 text-lg font-body">Track your client interactions and build your professional portfolio</p>
-                <div className="flex gap-2 mt-4">
+                <h1 className="text-3xl font-headings mb-1">Section A: Direct Client Contact</h1>
+                <p className="text-white/90 text-base font-body">Track your client interactions and build your professional portfolio</p>
+                <div className="flex gap-2 mt-3">
                   <Button
                     onClick={() => window.location.href = '/section-b'}
                     className="px-3 py-2 rounded-md bg-green-600 text-white text-sm hover:bg-green-700"
@@ -753,7 +787,15 @@ export default function SectionADashboard() {
                   </Button>
                 </div>
               </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-col items-end">
+                    <div className="mb-3">
+                      <UserNameDisplay 
+                        className="text-white" 
+                        variant="small" 
+                        showRole={true}
+                      />
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3">
                     <Button 
                       onClick={() => setShowSmartForm(true)}
                       size="lg"
@@ -779,6 +821,7 @@ export default function SectionADashboard() {
                   <BarChart3 className="h-5 w-5 mr-2" />
                   Weekly Logbooks
                 </Button>
+                    </div>
                   </div>
             </div>
           </div>
@@ -1097,8 +1140,8 @@ export default function SectionADashboard() {
                 </div>
 
               {/* Compliance Summary */}
-              <div className="bg-bgCard p-6 rounded-lg border border-border mb-8">
-                <h3 className="text-lg font-semibold text-textDark mb-4 font-headings">Section A Compliance Summary</h3>
+              <div className="bg-bgCard p-4 rounded-lg border border-border mb-4">
+                <h3 className="text-lg font-semibold text-textDark mb-3 font-headings">Section A Compliance Summary</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -2065,16 +2108,79 @@ export default function SectionADashboard() {
                                   {/* CRA Entries */}
                                   {entry.cra_entries && entry.cra_entries.length > 0 && (
                                     <div className="mt-4">
-                                      <h4 className="font-semibold text-gray-900 mb-2">Client Related Activities</h4>
-                                      <div className="space-y-2">
+                                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                        <FileText className="h-4 w-4" />
+                                        Client Related Activities ({entry.cra_entries.length})
+                                      </h4>
+                                      <div className="space-y-3">
                                         {entry.cra_entries.map((craEntry, craIndex) => (
-                                          <Card key={craEntry.id} className="bg-gray-50 border-gray-200">
-                                            <CardContent className="p-3">
-                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                                                <div><span className="font-medium">Activity:</span> {craEntry.session_activity_types.join(', ')}</div>
-                                                <div><span className="font-medium">Duration:</span> {formatDurationDisplay(craEntry.duration_minutes)}</div>
-                                                <div className="md:col-span-2"><span className="font-medium">Description:</span> {craEntry.presenting_issues}</div>
+                                          <Card key={craEntry.id} className="bg-green-50 border-green-200 hover:bg-green-100 transition-colors">
+                                            <CardContent className="p-4">
+                                              <div className="flex justify-between items-start mb-3">
+                                                <div className="flex items-center gap-2">
+                                                  <Badge className="bg-green-100 text-green-800 border-green-300">
+                                                    CRA
+                                                  </Badge>
+                                                  <span className="font-medium text-green-900">
+                                                    {formatDateDDMMYYYY(craEntry.session_date)}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => handleEditCRA(craEntry)}
+                                                    title="Edit CRA"
+                                                    className="h-8 w-8 p-0 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-md border-green-300 hover:border-green-400 rounded-lg"
+                                                  >
+                                                    <Edit className="h-3 w-3 text-green-700" />
+                                                  </Button>
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => handleDeleteCRA(craEntry)}
+                                                    title="Delete CRA"
+                                                    className="h-8 w-8 p-0 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-md border-red-300 hover:border-red-400 rounded-lg"
+                                                  >
+                                                    <Trash2 className="h-3 w-3 text-red-600" />
+                                                  </Button>
+                                                </div>
                                               </div>
+                                              
+                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                                <div className="flex items-center gap-2">
+                                                  <FileText className="h-4 w-4 text-green-600 flex-shrink-0" />
+                                                  <span className="font-medium text-green-800">Activity:</span>
+                                                  <span className="text-green-700">
+                                                    {craEntry.session_activity_types.join(', ')}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <Clock className="h-4 w-4 text-green-600 flex-shrink-0" />
+                                                  <span className="font-medium text-green-800">Duration:</span>
+                                                  <span className="text-green-700">
+                                                    {formatDurationDisplay(craEntry.duration_minutes)}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              
+                                              {craEntry.presenting_issues && (
+                                                <div className="mt-3 pt-3 border-t border-green-200">
+                                                  <div className="flex items-start gap-2">
+                                                    <span className="font-medium text-green-800 text-sm">Description:</span>
+                                                    <span className="text-green-700 text-sm">{craEntry.presenting_issues}</span>
+                                                  </div>
+                                                </div>
+                                              )}
+                                              
+                                              {craEntry.reflections_on_experience && (
+                                                <div className="mt-3 pt-3 border-t border-green-200">
+                                                  <div className="flex items-start gap-2">
+                                                    <span className="font-medium text-green-800 text-sm">Reflections:</span>
+                                                    <span className="text-green-700 text-sm">{craEntry.reflections_on_experience}</span>
+                                                  </div>
+                                                </div>
+                                              )}
                                             </CardContent>
                                           </Card>
                                         ))}
@@ -2300,15 +2406,31 @@ export default function SectionADashboard() {
                       ...data,
                       entry_type: 'cra',
                       parent_dcc_entry: selectedEntry.id,
-                      client_id: selectedEntry.client_id,
-                      session_date: selectedEntry.session_date,
-                      week_starting: selectedEntry.week_starting
+                      week_starting: calculateWeekStarting(data.session_date)
                     }
-                    await createSectionAEntry(craData)
+                    const response = await createSectionAEntry(craData)
+                    
+                    // Close modal first
+                    setShowCRAForm(false)
+                    setSelectedEntry(null)
+                    loadDCCEntries()
+                    
+                    // Then show conversion notice if applicable
+                    if (response && response.conversion_notice) {
+                      // Longer delay to ensure modal is completely closed and DOM updated
+                      setTimeout(() => {
+                        toast.info(response.conversion_notice, {
+                          duration: 8000,
+                          style: {
+                            backgroundColor: '#f0f9ff',
+                            border: '1px solid #0ea5e9',
+                            color: '#0c4a6e',
+                            zIndex: 9999
+                          }
+                        })
+                      }, 300)
+                    }
                   }
-                  setShowCRAForm(false)
-                  setSelectedEntry(null)
-                  loadDCCEntries()
                 } catch (error) {
                   console.error('Error saving CRA entry:', error)
                 }
@@ -2415,6 +2537,7 @@ export default function SectionADashboard() {
                 <Input
                   type="date"
                   value={smartFormData.date}
+                  max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setSmartFormData(prev => ({ ...prev, date: e.target.value }))}
                   className={formErrors.date ? 'border-red-500' : ''}
                 />

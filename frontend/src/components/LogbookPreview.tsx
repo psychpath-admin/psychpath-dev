@@ -27,7 +27,7 @@ interface Logbook {
   week_start_date: string
   week_end_date: string
   week_display: string
-  status: 'draft' | 'ready' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
+  status: 'draft' | 'ready' | 'submitted' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked' | 'unlocked_for_edits'
   supervisor_name?: string
   reviewed_by_name?: string
   submitted_at: string
@@ -75,13 +75,11 @@ export default function LogbookPreview({ logbook, onClose }: LogbookPreviewProps
       'approved': 'approved',
       'rejected': 'rejected',
       'returned_for_edits': 'pending',
-      'under_review': 'pending',
       'draft': 'draft'
     }
     const statusLabels: Record<string, string> = {
       'submitted': 'Waiting for Review',
       'returned_for_edits': 'Returned for Edits',
-      'under_review': 'Under Review'
     }
     const mappedStatus = statusMap[status] || 'draft'
     const label = statusLabels[status]

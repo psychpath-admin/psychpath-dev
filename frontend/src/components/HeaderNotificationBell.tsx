@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -10,6 +10,7 @@ import { Bell, Clock, CheckCircle, AlertCircle, MessageSquare, Unlock } from 'lu
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
+import { emitRefreshEvent } from '@/hooks/useSmartRefresh'
 
 interface Notification {
   id: number
@@ -41,11 +42,6 @@ export default function HeaderNotificationBell() {
     }
   }, [open])
 
-  // Auto-refresh stats every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(fetchNotificationStats, 30000)
-    return () => clearInterval(interval)
-  }, [])
 
   const fetchNotificationStats = async () => {
     try {
@@ -73,7 +69,7 @@ export default function HeaderNotificationBell() {
     }
   }
 
-  const markAsRead = async (notificationId: number) => {
+  const markAsRead = async (notificationId: number, notificationType?: string) => {
     try {
       const response = await apiFetch(`/api/logbook/notifications/${notificationId}/read/`, {
         method: 'PATCH'
@@ -90,6 +86,11 @@ export default function HeaderNotificationBell() {
           ...prev,
           unread: Math.max(0, prev.unread - 1)
         }))
+
+        // Emit refresh event based on notification type
+        if (notificationType) {
+          emitRefreshEvent(notificationType, { notificationId })
+        }
       }
     } catch (error) {
       console.error('Error marking notification as read:', error)
@@ -179,13 +180,17 @@ export default function HeaderNotificationBell() {
                     !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                   }`}
                   onClick={() => {
+                    // Mark as read first and emit refresh event
+                    if (!notification.read) {
+                      markAsRead(notification.id, notification.notification_type)
+                    }
+
                     if (notification.action_url) {
                       setOpen(false)
+                      // Show visual feedback
+                      toast.success('Updated with latest changes')
                       // Navigate to action URL
                       window.location.href = notification.action_url
-                    }
-                    if (!notification.read) {
-                      markAsRead(notification.id)
                     }
                   }}
                 >

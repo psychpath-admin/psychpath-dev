@@ -1,9 +1,8 @@
-import React, { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Save } from 'lucide-react'
 
 interface CRAFormProps {
   onSubmit: (data: any) => void
@@ -11,7 +10,6 @@ interface CRAFormProps {
   saving: boolean
   entryForm: any
   setEntryForm: (form: any) => void
-  handleActivityTypeToggle: (type: string) => void
   handleAddCustomActivityType: () => void
   newCustomActivityType: string
   setNewCustomActivityType: (value: string) => void
@@ -31,7 +29,6 @@ export default function CRAForm({
   saving,
   entryForm,
   setEntryForm,
-  handleActivityTypeToggle,
   handleAddCustomActivityType,
   newCustomActivityType,
   setNewCustomActivityType,
@@ -46,9 +43,21 @@ export default function CRAForm({
 }: CRAFormProps) {
   const [validationError, setValidationError] = useState('')
   const [showReflections, setShowReflections] = useState((entryForm.reflections_on_experience || '').length > 0)
+  
+  // Make formData reactive with useMemo
+  const formData = useMemo(() => ({
+    session_date: entryForm.session_date ?? '',
+    client_pseudonym: entryForm.client_pseudonym ?? '',
+    place_of_practice: entryForm.place_of_practice ?? '',
+    presenting_issues: entryForm.presenting_issues ?? '',
+    session_activity_types: entryForm.session_activity_types ?? [],
+    duration_minutes: entryForm.duration_minutes ?? '50',
+    reflections_on_experience: entryForm.reflections_on_experience ?? '',
+    simulated: entryForm.simulated ?? false
+  }), [entryForm])
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-md">
+    <Card className="w-full max-w-md">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">{title}</CardTitle>
           <Button
@@ -64,11 +73,13 @@ export default function CRAForm({
           <form onSubmit={(e) => {
             e.preventDefault()
             setValidationError('')
+            
             // Validate that at least one activity type is selected
-            if (entryForm.session_activity_types.length === 0) {
+            if (formData.session_activity_types.length === 0) {
               setValidationError('Please select at least one activity type')
               return
             }
+            
             onSubmit(entryForm)
           }} className="space-y-6">
             {/* Client Pseudonym (CRA/ICRA) */}
@@ -78,7 +89,7 @@ export default function CRAForm({
                   Client Pseudonym <span className="text-red-500">*</span>
                 </label>
                 <Input
-                  value={entryForm.client_pseudonym || entryForm.client_id}
+                  value={formData.client_pseudonym || entryForm.client_id}
                   onChange={(e) => {
                     setEntryForm({ ...entryForm, client_pseudonym: e.target.value })
                     if (onClientIdChange) onClientIdChange(e.target.value)
@@ -101,7 +112,8 @@ export default function CRAForm({
               </label>
               <Input
                 type="date"
-                value={entryForm.session_date || ''}
+                value={formData.session_date}
+                max={new Date().toISOString().split('T')[0]}
                 onChange={(e) => {
                   const newDate = e.target.value
                   setEntryForm({ 
@@ -121,14 +133,20 @@ export default function CRAForm({
               </label>
               <Input
                 type="text"
-                value={entryForm.session_activity_types.join(', ')}
+                value={formData.session_activity_types.join(', ')}
                 onChange={(e) => {
-                  const types = e.target.value.split(',').map(t => t.trim()).filter(t => t)
+                  const types = e.target.value.split(',').map((t: string) => t.trim()).filter((t: string) => t)
                   setEntryForm({ ...entryForm, session_activity_types: types })
                 }}
                 placeholder="Enter activity type..."
                 required
               />
+              {validationError && (
+                <div className="text-red-600 text-sm mt-1 flex items-center gap-1">
+                  <span className="text-orange-500">⚠</span>
+                  {validationError}
+                </div>
+              )}
               {/* Standard activity types */}
               <div className="flex flex-wrap gap-2 mt-2">
                 {['report writing', 'case formulation', 'test scoring', 'documentation', 'file review'].map((type) => (
@@ -136,12 +154,12 @@ export default function CRAForm({
                     key={type}
                     type="button"
                     onClick={() => {
-                      const currentTypes = entryForm.session_activity_types.filter(t => t !== type)
-                      const newTypes = entryForm.session_activity_types.includes(type) ? currentTypes : [...currentTypes, type]
+                      const currentTypes = formData.session_activity_types.filter((t: string) => t !== type)
+                      const newTypes = formData.session_activity_types.includes(type) ? currentTypes : [...currentTypes, type]
                       setEntryForm({ ...entryForm, session_activity_types: newTypes })
                     }}
                     className={`px-2 py-1 text-xs rounded border ${
-                      entryForm.session_activity_types.includes(type)
+                      formData.session_activity_types.includes(type)
                         ? 'bg-blue-100 text-blue-800 border-blue-300'
                         : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
                     }`}
@@ -163,28 +181,27 @@ export default function CRAForm({
                         key={type.id}
                         type="button"
                         onClick={() => {
-                          const currentTypes = entryForm.session_activity_types.filter(t => t !== type.name)
-                          const newTypes = entryForm.session_activity_types.includes(type.name) ? currentTypes : [...currentTypes, type.name]
+                          const currentTypes = formData.session_activity_types.filter((t: string) => t !== type.name)
+                          const newTypes = formData.session_activity_types.includes(type.name) ? currentTypes : [...currentTypes, type.name]
                           setEntryForm({ ...entryForm, session_activity_types: newTypes })
                         }}
                         className={`px-2 py-1 text-xs rounded border flex items-center gap-1 ${
-                          entryForm.session_activity_types.includes(type.name)
+                          formData.session_activity_types.includes(type.name)
                             ? 'bg-green-100 text-green-800 border-green-300'
                             : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
                         }`}
                       >
                         {type.name}
-                        <button
-                          type="button"
+                        <span
                           onClick={(e) => {
                             e.stopPropagation()
                             handleDeleteCustomActivityType(type.id)
                           }}
-                          className="ml-1 text-red-500 hover:text-red-700"
+                          className="ml-1 text-red-500 hover:text-red-700 cursor-pointer"
                           title="Delete custom type"
                         >
                           ×
-                        </button>
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -226,7 +243,7 @@ export default function CRAForm({
                 </label>
                 <Input
                   type="number"
-                  value={entryForm.duration_minutes || ''}
+                  value={formData.duration_minutes}
                   onChange={(e) => setEntryForm({ ...entryForm, duration_minutes: e.target.value })}
                   placeholder="15"
                   min="1"
@@ -276,7 +293,7 @@ export default function CRAForm({
                   Reflections <span className="text-red-500">*</span>
                 </label>
                 <Textarea
-                  value={entryForm.reflections_on_experience || ''}
+                  value={formData.reflections_on_experience}
                   onChange={(e) => setEntryForm({ ...entryForm, reflections_on_experience: e.target.value })}
                   placeholder="Enter your reflections on this client related activity..."
                   rows={4}
@@ -305,7 +322,7 @@ export default function CRAForm({
                   textShadow: '2px 2px 4px rgba(0,0,0,1) !important',
                   fontFamily: 'Arial, sans-serif !important',
                   zIndex: '9999 !important',
-                  position: 'relative !important'
+                  position: 'relative' as const
                 }}
               >
                 <span style={{ color: '#000000 !important', fontSize: '20px !important', fontWeight: '900 !important' }}>
@@ -325,17 +342,16 @@ export default function CRAForm({
                   textShadow: '2px 2px 4px rgba(0,0,0,1) !important',
                   fontFamily: 'Arial, sans-serif !important',
                   zIndex: '9999 !important',
-                  position: 'relative !important'
+                  position: 'relative' as const
                 }}
               >
                 <span style={{ color: '#000000 !important', fontSize: '20px !important', fontWeight: '900 !important' }}>
-                  SUBMIT
+                  {isEditing ? 'UPDATE' : 'SUBMIT'}
                 </span>
               </button>
             </div>
           </form>
         </CardContent>
       </Card>
-    </div>
   )
 }

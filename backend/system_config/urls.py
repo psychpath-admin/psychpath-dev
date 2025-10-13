@@ -11,4 +11,5 @@ router.register(r'audit-logs', views.ConfigurationAuditLogViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('logbook-config/', views.logbook_config, name='logbook-config'),
 ]

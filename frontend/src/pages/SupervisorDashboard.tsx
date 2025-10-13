@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useSmartRefresh } from '@/hooks/useSmartRefresh'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/status'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useNotifications } from '@/hooks/useNotifications'
-import NotificationBell from '@/components/NotificationBell'
 import { apiFetch } from '@/lib/api'
+import { EnrolSuperviseesModal } from '@/components/EnrolSuperviseesModal'
 import { 
   Users, 
   FileText, 
@@ -41,6 +42,8 @@ interface Supervisee {
   target_hours: number
   supervision_ratio: number
   next_epa_due: string
+  hasLogbooks: boolean
+  latestLogbookId: number | null
 }
 
 interface LogbookForReview {
@@ -60,11 +63,20 @@ interface LogbookForReview {
 
 interface SupervisionInvitation {
   id: number
-  name: string
-  email: string
-  type: string
+  supervisor: number
+  supervisor_name: string
+  supervisee: number | null
+  supervisee_email: string
+  supervisee_name: string
+  role: string
   status: string
-  expires: string
+  verification_token: string
+  created_at: string
+  expires_at: string
+  accepted_at: string | null
+  rejected_at: string | null
+  is_expired: boolean
+  can_be_accepted: boolean
 }
 
 interface DashboardStats {
@@ -93,6 +105,15 @@ export default function SupervisorDashboard() {
   // Notification data
   const { } = useNotifications(5)
 
+  // Smart refresh hook for notification-based updates
+  const { } = useSmartRefresh(
+    () => {
+      fetchDashboardData()
+      fetchUnlockRequestCount()
+    },
+    ['logbook_submitted', 'logbook_status_updated', 'supervision_invite_pending', 'unlock_requested', 'unlock_approved', 'unlock_denied']
+  )
+
   // Fetch supervisees data
   const fetchSupervisees = async () => {
     try {
@@ -107,22 +128,46 @@ export default function SupervisorDashboard() {
         const superviseesData = await response.json()
         const active = superviseesData.filter((item: any) => item.status === 'ACCEPTED')
         
-        const transformed = active.map((item: any) => ({
-          id: item.id.toString(),
-          name: item.supervisee_name || item.supervisee_email || 'Unknown User',
-          email: item.supervisee_email,
-          status: 'on-track' as const,
-          role: item.supervisee_role || 'Registrar',
-          supervisionId: item.id,
-          supervision_type: item.role,
-          rag_status: 'green' as const, // TODO: Calculate actual RAG status
-          last_logbook_status: 'No submissions',
-          last_logbook_date: 'Never',
-          total_hours_logged: 0, // TODO: Calculate from logbooks
-          target_hours: 1500,
-          supervision_ratio: 1,
-          next_epa_due: 'TBD'
-        }))
+        // Fetch all logbooks for all supervisees in one call
+        let allLogbooks: any[] = []
+        try {
+          const logbookResponse = await fetch('/api/logbook/supervisor/', {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+              'Content-Type': 'application/json',
+            },
+          })
+          if (logbookResponse.ok) {
+            allLogbooks = await logbookResponse.json()
+          }
+        } catch (error) {
+          console.error('Error fetching logbook data:', error)
+        }
+        
+        const transformed = active.map((item: any) => {
+          // Find logbooks for this specific supervisee
+          const superviseeLogbooks = allLogbooks.filter(logbook => logbook.trainee_email === item.supervisee_email)
+          const latestLogbook = superviseeLogbooks.length > 0 ? superviseeLogbooks[0] : null
+          
+          return {
+            id: item.id.toString(),
+            name: item.supervisee_name || item.supervisee_email || 'Unknown User',
+            email: item.supervisee_email,
+            status: 'on-track' as const,
+            role: item.supervisee_role || 'Registrar',
+            supervisionId: item.id,
+            supervision_type: item.role,
+            rag_status: 'green' as const, // TODO: Calculate actual RAG status
+            last_logbook_status: latestLogbook ? latestLogbook.status : 'No submissions',
+            last_logbook_date: latestLogbook ? new Date(latestLogbook.submitted_at || latestLogbook.created_at).toLocaleDateString() : 'Never',
+            total_hours_logged: latestLogbook ? parseFloat(latestLogbook.section_totals?.total?.cumulative_hours || '0') : 0,
+            target_hours: 1500,
+            supervision_ratio: 1,
+            next_epa_due: 'TBD',
+            hasLogbooks: latestLogbook !== null,
+            latestLogbookId: latestLogbook?.id || null
+          }
+        })
         
         setSupervisees(transformed)
         return transformed
@@ -157,14 +202,29 @@ export default function SupervisorDashboard() {
   // Fetch supervision invitations
   const fetchSupervisionInvitations = async () => {
     try {
-      // This would need to be implemented in the backend
-      // For now, return empty array
-      setSupervisionInvitations([])
-      return []
+      const response = await fetch('/api/supervisions/', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      if (response.ok) {
+        const invitationsData = await response.json()
+        // Filter to show only pending invitations for the invitations card
+        const pendingInvitations = invitationsData.filter((item: any) => item.status === 'PENDING')
+        setSupervisionInvitations(pendingInvitations)
+        return pendingInvitations
+      } else {
+        console.error('Failed to fetch supervision invitations:', response.statusText)
+        setSupervisionInvitations([])
+        return []
+      }
     } catch (error) {
       console.error('Error fetching supervision invitations:', error)
+      setSupervisionInvitations([])
+      return []
     }
-    return []
   }
 
   // Calculate dashboard stats
@@ -224,14 +284,6 @@ export default function SupervisorDashboard() {
     fetchUnlockRequestCount()
   }, [])
 
-  // Auto-refresh every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchDashboardData()
-      fetchUnlockRequestCount()
-    }, 30000)
-    return () => clearInterval(interval)
-  }, [])
 
   const getRAGColor = (status: string) => {
     switch (status) {
@@ -354,11 +406,10 @@ export default function SupervisorDashboard() {
           </Card>
         )}
         
-        {/* Header with Tooltip Toggle and Notification Bell */}
+        {/* Header with Tooltip Toggle */}
         <div className="flex justify-between items-center">
           <div></div>
           <div className="flex items-center gap-3">
-            <NotificationBell />
             <Button
               variant="outline"
               size="sm"
@@ -556,14 +607,23 @@ export default function SupervisorDashboard() {
                     </div>
                     
                     <div className="flex gap-2">
-       <Button 
-         size="sm" 
-         className="bg-blue-600 hover:bg-blue-700 text-white"
-         onClick={() => window.location.href = `/logbooks/${supervisee.id}/review`}
-       >
-         <FileText className="h-4 w-4 mr-2" />
-         Review Logbook
-       </Button>
+                      <Button 
+                        size="sm" 
+                        className="bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        onClick={() => {
+                          if (supervisee.hasLogbooks && supervisee.latestLogbookId) {
+                            window.location.href = `/logbooks/${supervisee.latestLogbookId}/review`
+                          } else {
+                            // Navigate to logbook review page but show "no logbooks" message
+                            window.location.href = `/logbook`
+                          }
+                        }}
+                        disabled={!supervisee.hasLogbooks}
+                        title={supervisee.hasLogbooks ? 'Review latest logbook' : 'No logbooks available for review'}
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        {supervisee.hasLogbooks ? 'Review Logbook' : 'No Logbooks'}
+                      </Button>
                       <Button 
                         size="sm" 
                         variant="outline"
@@ -630,17 +690,17 @@ export default function SupervisorDashboard() {
                 <TableBody>
                   {filteredInvitations.map((invitation) => (
                     <TableRow key={invitation.id}>
-                      <TableCell className="font-medium">{invitation.name}</TableCell>
-                      <TableCell>{invitation.email}</TableCell>
+                      <TableCell className="font-medium">{invitation.supervisee_name || 'N/A'}</TableCell>
+                      <TableCell>{invitation.supervisee_email}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{invitation.type}</Badge>
+                        <Badge variant="outline">{invitation.role}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(invitation.status)}>
                           {invitation.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>{formatDate(invitation.expires)}</TableCell>
+                      <TableCell>{formatDate(invitation.expires_at)}</TableCell>
                       <TableCell>
                         <Button size="sm" variant="outline" className="bg-white hover:bg-gray-50 text-gray-700 border-gray-300">
                           Remove
@@ -655,10 +715,18 @@ export default function SupervisorDashboard() {
                 <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Invitations</h3>
                 <p className="text-gray-600 mb-4">No supervision invitations found.</p>
-                <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Send Invitation
-                </Button>
+                <EnrolSuperviseesModal 
+                  trigger={
+                    <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Send Invitation
+                    </Button>
+                  }
+                  onEnrolmentComplete={() => {
+                    // Refresh the supervision invitations after enrolment
+                    fetchSupervisees()
+                  }}
+                />
               </div>
             )}
           </CardContent>

@@ -52,8 +52,8 @@ export default function CoreCompetencyViewer() {
   const fetchData = async () => {
     try {
       const [competenciesResponse, epasResponse] = await Promise.all([
-        apiFetch('/api/competencies/api/competencies/'),
-        apiFetch('/api/epas/api/epas/')
+        apiFetch('/api/competencies/competencies/'),
+        apiFetch('/api/epas/epas/')
       ])
       
       if (competenciesResponse.ok && epasResponse.ok) {

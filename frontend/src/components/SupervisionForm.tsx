@@ -74,6 +74,7 @@ export default function SupervisionForm({
                 <Input
                   type="date"
                   value={formData.date_of_supervision}
+                  max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setFormData({ ...formData, date_of_supervision: e.target.value })}
                 />
               </div>

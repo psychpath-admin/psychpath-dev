@@ -9,6 +9,49 @@ All backups are stored in OneDrive for safe keeping.
 
 ## Checkpoints
 
+### Checkpoint: 2025-01-11 - Testing CRA with Date in Prior Week
+
+- **Date**: 2025-01-11 (22:45 UTC+10)
+- **Git Commit**: `b45614c` on branch `feature/fix-logbook-submit-error`
+- **Status**: Testing CRA conversion logic and debugging React warnings
+- **Message**: "testing CRA with a date in a prior week"
+
+### Checkpoint: 2025-10-12 - Dashboard Standardization Complete
+
+- **Date**: 2025-10-12 (18:49 UTC+10)
+- **Git Commit**: `b45614c` on branch `feature/fix-logbook-submit-error`
+- **Status**: Dashboard standardization complete - all sections now consistent
+- **Message**: "Standardised dashboards by grouping by week starting"
+
+**Accomplishments:**
+
+**Dashboard Consistency Achieved:**
+- ✅ **Section A, B, C Display Standardization**: All sections now use identical display methods
+- ✅ **Weekly Grouping**: Made permanent default view across all dashboards
+- ✅ **Button Style Consistency**: All sections use circular icon-only buttons in top-right corner
+- ✅ **Expanded Details Structure**: Consistent "Session Details" headers across all sections
+- ✅ **Visual Indicators**: Unified entry type badges and locked status indicators
+
+**Technical Improvements:**
+- ✅ **Section B Button Fix**: Replaced text buttons with circular icon-only buttons
+- ✅ **JSX Structure Fix**: Resolved syntax errors in Section B dashboard
+- ✅ **Display Method Alignment**: Icon+text pattern consistent across all sections
+- ✅ **Locking Logic**: Applied consistently across Section A, B, and C
+
+**User Experience:**
+- ✅ **Consistent Interface**: All dashboards now look and behave identically
+- ✅ **Weekly Organization**: Default view groups entries by week with headers and totals
+- ✅ **Visual Feedback**: Clear locked status indicators and disabled buttons
+- ✅ **Intuitive Navigation**: Standardized expand/collapse behavior
+
+**Files Modified:**
+- `frontend/src/pages/SectionB.tsx` - Complete display standardization
+- `frontend/src/pages/SectionADashboard.tsx` - Button style consistency
+- `frontend/src/pages/SectionC.tsx` - Weekly grouping default
+- Various API and serializer updates for locking logic
+
+**Status**: All dashboard sections now provide a completely consistent user experience with weekly organization as the standard view.
+
 ### Checkpoint: 2025-10-12 - Phase 1 & 2 Complete, Ready for Testing
 
 - **Date**: 2025-10-12 (14:10 UTC+10)
@@ -211,6 +254,34 @@ pg_restore --clean --create -h localhost -U psychpath -d postgres \
 
 # Restore code
 tar -xzf "~/OneDrive - CHANGE YOUR MIND PSYCHOLOGY PTY LTD/PsychPATH-Backups/20251010_215520/fs_backup.tar.gz" \
+  -C "/Users/macdemac/Local Sites/PsychPATH"
+```
+
+
+### Checkpoint: 2025-10-12 20251012_184850
+
+- **Date**: 2025-10-12 at 18:49:17
+- **Git Commit**: `b45614c` on branch `feature/fix-logbook-submit-error`
+- **Filesystem Backup**: ` 54M` (local: `backups/fs_backup_20251012_184850.tar.gz`)
+- **Database Backup**: `296K` (PostgreSQL custom format + globals)
+- **OneDrive Location**: `~/OneDrive - CHANGE YOUR MIND PSYCHOLOGY PTY LTD/PsychPATH-Backups/20251012_184850/`
+- **Message**: Standardised dashboards by grouping by week starting
+
+**Artifacts:**
+- `fs_backup.tar.gz` - Full source code (excluding node_modules, venv, etc.)
+- `psychpath.dump` - PostgreSQL database (custom format)
+- `postgres_globals.sql` - PostgreSQL roles and permissions
+- `MANIFEST.env` - Backup metadata
+- `SHA256SUMS.txt` - File checksums
+
+**Recovery:**
+```bash
+# Restore database
+pg_restore --clean --create -h localhost -U psychpath -d postgres \
+  "~/OneDrive - CHANGE YOUR MIND PSYCHOLOGY PTY LTD/PsychPATH-Backups/20251012_184850/psychpath.dump"
+
+# Restore code
+tar -xzf "~/OneDrive - CHANGE YOUR MIND PSYCHOLOGY PTY LTD/PsychPATH-Backups/20251012_184850/fs_backup.tar.gz" \
   -C "/Users/macdemac/Local Sites/PsychPATH"
 ```
 

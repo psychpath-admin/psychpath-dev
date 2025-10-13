@@ -872,6 +872,17 @@ def logbook_submit(request):
     
     try:
         with transaction.atomic():
+            # Set supervisor if not already set (for draft logbooks)
+            if not existing_logbook.supervisor:
+                supervisor_relationship = Supervision.objects.filter(
+                    supervisee=request.user,
+                    role='PRIMARY',
+                    status='ACCEPTED'
+                ).first()
+                if supervisor_relationship:
+                    existing_logbook.supervisor = supervisor_relationship.supervisor
+                    existing_logbook.save()
+            
             # Use the new workflow method
             existing_logbook.submit_for_review(request.user)
             
@@ -2274,7 +2285,7 @@ def logbook_review(request, logbook_id):
     except WeeklyLogbook.DoesNotExist:
         return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    if logbook.status not in ['submitted', 'under_review', 'draft']:
+    if logbook.status not in ['submitted', 'draft']:
         return Response({'error': 'Logbook is not awaiting review'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Persist per-entry supervisor comments
@@ -2499,28 +2510,13 @@ def notification_mark_read(request, notification_id):
 
 # Enhanced Review Flow API Endpoints
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-@support_error_handler
-def logbook_start_review(request, logbook_id):
-    """Start the review process for a submitted logbook"""
-    if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
-        return Response({'error': 'Only supervisors can start reviews'}, status=status.HTTP_403_FORBIDDEN)
-    
-    try:
-        logbook = WeeklyLogbook.objects.get(id=logbook_id)
-    except WeeklyLogbook.DoesNotExist:
-        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-    try:
-        logbook.start_review(request.user)
-        serializer = EnhancedLogbookSerializer(logbook, context={'request': request})
-        return Response({
-            'message': 'Review started successfully',
-            'logbook': serializer.data
-        })
-    except ValueError as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+# DEPRECATED: Start review endpoint - no longer needed as we removed under_review status
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# @support_error_handler
+# def logbook_start_review(request, logbook_id):
+#     """DEPRECATED: Start the review process for a submitted logbook"""
+#     return Response({'error': 'This endpoint is deprecated. Use approve or reject endpoints directly.'}, status=status.HTTP_410_GONE)
 
 
 @api_view(['POST'])

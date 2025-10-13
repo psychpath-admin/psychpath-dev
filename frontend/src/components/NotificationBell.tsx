@@ -86,14 +86,6 @@ export default function NotificationBell() {
   useEffect(() => {
     fetchNotifications()
     fetchStats()
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchNotifications()
-      fetchStats()
-    }, 30000)
-
-    return () => clearInterval(interval)
   }, [])
 
   return (

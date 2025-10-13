@@ -99,6 +99,7 @@ export default function PDForm({
                 <Input
                   type="date"
                   value={formData.date_of_activity}
+                  max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setFormData({ ...formData, date_of_activity: e.target.value })}
                 />
               </div>

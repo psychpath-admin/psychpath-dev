@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useSmartRefresh } from '@/hooks/useSmartRefresh'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -7,8 +8,6 @@ import { Progress } from '@/components/ui/progress'
 import { 
   BookOpen, 
   Calendar, 
-  Clock, 
-  CheckCircle, 
   AlertCircle,
   Eye,
   FileText,
@@ -35,6 +34,7 @@ import UnlockRequestModal from '@/components/UnlockRequestModal'
 import LogbookAuditTree from '@/components/LogbookAuditTree'
 import { StatusBadge } from '@/components/status'
 import { useFilterPersistence, useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
+import UserNameDisplay from '@/components/UserNameDisplay'
 
 interface Logbook {
   id: number
@@ -42,7 +42,7 @@ interface Logbook {
   week_start_date: string
   week_end_date: string
   week_display: string
-  status: 'draft' | 'ready' | 'submitted' | 'under_review' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked'
+  status: 'draft' | 'ready' | 'submitted' | 'returned_for_edits' | 'approved' | 'rejected' | 'locked' | 'unlocked_for_edits'
   supervisor_name?: string
   reviewed_by_name?: string
   active_unlock?: {
@@ -67,10 +67,6 @@ interface Logbook {
     section_c: { weekly_hours: string; cumulative_hours: string }
     total: { weekly_hours: string; cumulative_hours: string }
   }
-  active_unlock?: {
-    unlock_expires_at: string
-    duration_minutes: number
-  }
 }
 
 interface LogbookMetrics {
@@ -80,7 +76,6 @@ interface LogbookMetrics {
   lockedLogbooks: number
   regeneratedLogbooks: number
   overdueLogbooks: number
-  avgReviewTime: number
   nextDueDate: string | null
   internshipWeeksEstimate: number
 }
@@ -113,15 +108,14 @@ export default function LogbookDashboard() {
   
   // New state for dashboard functionality
   const [metrics, setMetrics] = useState<LogbookMetrics | null>(null)
-  const [statusCounts, setStatusCounts] = useState({
-    draft: 0,
-    submitted: 0,
-    under_review: 0,
-    returned_for_edits: 0,
-    approved: 0,
-    rejected: 0,
-    locked: 0
-  })
+  const [targetLogbooks, setTargetLogbooks] = useState(52) // Default fallback
+  const [submissionDeadlineDays, setSubmissionDeadlineDays] = useState(14) // Default 2 weeks
+
+  // Smart refresh hook for notification-based updates
+  const { manualRefresh } = useSmartRefresh(
+    () => fetchLogbooks(true, false), // Silent refresh
+    ['logbook_submitted', 'logbook_status_updated', 'logbook_approved', 'logbook_rejected', 'unlock_requested', 'unlock_approved', 'unlock_denied']
+  )
   
   // Persistent filters - defaults to oldest first for provisional users
   const [filters, setFilters] = useFilterPersistence<LogbookFilters>('logbook-dashboard', {
@@ -140,6 +134,7 @@ export default function LogbookDashboard() {
 
   useEffect(() => {
     fetchLogbooks()
+    fetchLogbookConfig()
   }, [])
 
   // Refresh when component becomes visible (e.g., returning from navigation)
@@ -193,7 +188,6 @@ export default function LogbookDashboard() {
           setLogbooks(data)
         }
         calculateMetrics(data)
-        calculateStatusCounts(data)
         // Only show toast for explicit manual refreshes
         if (showToast) toast.success('Logbooks updated')
       } else {
@@ -209,17 +203,19 @@ export default function LogbookDashboard() {
     }
   }
 
-  // Auto-refresh functionality to catch supervisor actions
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Pause auto-refresh when a detailed view/modal is open
-      if (!structuredLogbook) {
-        fetchLogbooks(true, false) // Silent auto-refresh
+  const fetchLogbookConfig = async () => {
+    try {
+      const response = await apiFetch('/api/config/logbook-config/')
+      if (response.ok) {
+        const data = await response.json()
+        setTargetLogbooks(data.target_count || 52)
+        setSubmissionDeadlineDays(data.submission_deadline_days || 14)
       }
-    }, 10 * 60 * 1000) // Refresh every 10 minutes
-
-    return () => clearInterval(interval)
-  }, [])
+    } catch (error) {
+      console.error('Failed to fetch config:', error)
+      // Keep defaults
+    }
+  }
 
   const calculateMetrics = (logbookData: Logbook[]) => {
     const now = new Date()
@@ -228,32 +224,80 @@ export default function LogbookDashboard() {
     const totalLogbooks = logbookData.length
     const submittedLogbooks = logbookData.filter(l => l.status === 'submitted').length
     const approvedLogbooks = logbookData.filter(l => l.status === 'approved').length
-    const lockedLogbooks = logbookData.filter(l => l.is_locked).length
+    const lockedLogbooks = logbookData.filter(l => l.is_locked || l.status === 'approved').length
     const regeneratedLogbooks = logbookData.filter(l => l.regenerated).length
+    // Calculate overdue logbooks: week_start_date + deadline_days < today AND not submitted/approved/rejected
     const overdueLogbooks = logbookData.filter(l => {
-      if (!l.due_date) return false
-      return l.due_date < today && ['draft', 'submitted'].includes(l.status)
+      if (!l.week_start_date) return false
+      
+      // Calculate deadline date
+      const weekStartDate = new Date(l.week_start_date)
+      const deadlineDate = new Date(weekStartDate)
+      deadlineDate.setDate(weekStartDate.getDate() + submissionDeadlineDays)
+      
+      const deadlineDateStr = deadlineDate.toISOString().split('T')[0]
+      
+      // Check if past deadline AND not in submitted/approved/rejected status
+      return deadlineDateStr < today && !['submitted', 'approved', 'rejected'].includes(l.status)
     }).length
     
-    // Calculate average review time
-    const reviewedLogbooks = logbookData.filter(l => l.submitted_at && l.reviewed_at)
-    const avgReviewTime = reviewedLogbooks.length > 0 
-      ? reviewedLogbooks.reduce((sum, l) => {
-          const submitted = new Date(l.submitted_at)
-          const reviewed = new Date(l.reviewed_at!)
-          const diffTime = Math.abs(reviewed.getTime() - submitted.getTime())
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-          return sum + diffDays
-        }, 0) / reviewedLogbooks.length
-      : 0
+    // Find next due date: next upcoming submission deadline
+    let nextDueDate = null
     
-    // Find next due date
-    const upcomingLogbooks = logbookData.filter(l => {
-      if (!l.due_date) return false
-      return l.due_date >= today && ['draft', 'submitted'].includes(l.status)
-    }).sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime())
+    // Check existing logbooks with future deadlines first
+    const existingDeadlines = logbookData
+      .filter(l => l.week_start_date)
+      .map(l => {
+        // Calculate submission deadline for each logbook
+        const weekStartDate = new Date(l.week_start_date!)
+        const deadlineDate = new Date(weekStartDate)
+        deadlineDate.setDate(weekStartDate.getDate() + submissionDeadlineDays)
+        
+        return {
+          ...l,
+          submissionDeadline: deadlineDate.toISOString().split('T')[0]
+        }
+      })
+      .filter(l => l.submissionDeadline >= today) // Only future deadlines
+      .sort((a, b) => new Date(a.submissionDeadline).getTime() - new Date(b.submissionDeadline).getTime()) // Sort by deadline date
     
-    const nextDueDate = upcomingLogbooks.length > 0 ? upcomingLogbooks[0].due_date || null : null
+    if (existingDeadlines.length > 0) {
+      // Use existing logbook deadline
+      nextDueDate = existingDeadlines[0].submissionDeadline
+    } else {
+      // Calculate next expected deadline based on current date
+      // Check multiple weeks to find the next upcoming deadline
+      const currentDate = new Date()
+      const currentWeekStart = new Date(currentDate)
+      currentWeekStart.setDate(currentDate.getDate() - currentDate.getDay() + 1) // Monday of current week
+      
+      // Check current week and several previous/next weeks
+      const weeksToCheck = [-2, -1, 0, 1, 2] // Check 2 weeks before, 1 week before, current, 1 week after, 2 weeks after
+      let upcomingDeadlines = []
+      
+      for (const weekOffset of weeksToCheck) {
+        const weekStart = new Date(currentWeekStart)
+        weekStart.setDate(currentWeekStart.getDate() + (weekOffset * 7))
+        
+        const deadline = new Date(weekStart)
+        deadline.setDate(weekStart.getDate() + submissionDeadlineDays)
+        
+        // Only include deadlines that are in the future (not today)
+        if (deadline.toISOString().split('T')[0] > today) {
+          upcomingDeadlines.push({
+            weekStart: weekStart.toISOString().split('T')[0],
+            deadline: deadline.toISOString().split('T')[0]
+          })
+        }
+      }
+      
+      // Sort by deadline date and take the earliest
+      upcomingDeadlines.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+      
+      if (upcomingDeadlines.length > 0) {
+        nextDueDate = upcomingDeadlines[0].deadline
+      }
+    }
     
     setMetrics({
       totalLogbooks,
@@ -262,32 +306,11 @@ export default function LogbookDashboard() {
       lockedLogbooks,
       regeneratedLogbooks,
       overdueLogbooks,
-      avgReviewTime: Math.round(avgReviewTime * 10) / 10,
       nextDueDate,
       internshipWeeksEstimate: 52 // Default estimate, could be from user profile
     })
   }
 
-  const calculateStatusCounts = (logbookData: Logbook[]) => {
-    const counts = {
-      draft: 0,
-      submitted: 0,
-      under_review: 0,
-      returned_for_edits: 0,
-      approved: 0,
-      rejected: 0,
-      locked: 0
-    }
-
-    logbookData.forEach(logbook => {
-      counts[logbook.status as keyof typeof counts]++
-      if (logbook.is_locked) {
-        counts.locked++
-      }
-    })
-
-    setStatusCounts(counts)
-  }
 
   const getStatusBadge = (logbook: Logbook) => {
     // Map logbook statuses to StatusBadge component statuses
@@ -296,7 +319,6 @@ export default function LogbookDashboard() {
       'approved': 'approved',
       'rejected': 'rejected',
       'returned_for_edits': 'pending',  // Use pending with custom label
-      'under_review': 'pending',
       'draft': 'draft',
       'ready': 'draft',  // Ready status maps to draft style
       'unlocked_for_edits': 'pending'  // Only show "Unlocked for Editing" if status is actually unlocked_for_edits
@@ -305,7 +327,6 @@ export default function LogbookDashboard() {
     const statusLabels: Record<string, string> = {
       'submitted': 'Waiting for Review',
       'returned_for_edits': 'Returned for Edits',
-      'under_review': 'Under Review',
       'ready': 'Ready for Submission',
       'unlocked_for_edits': 'Unlocked for Editing'
     }
@@ -456,17 +477,25 @@ export default function LogbookDashboard() {
   return (
     <div className="space-y-6">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg p-8 text-white">
-        <div className="flex items-center justify-between">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg p-4 text-white">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-3xl font-bold tracking-tight mb-1">
               Weekly Logbook Status Dashboard
             </h1>
-            <p className="text-blue-100">
+            <p className="text-blue-100 text-base">
               Monitor your administrative progress and logbook workflow readiness
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col items-end">
+            <div className="mb-3">
+              <UserNameDisplay 
+                className="" 
+                variant="default" 
+                showRole={true}
+              />
+            </div>
+            <div className="flex gap-2">
             <Button
               variant="outline"
               size="lg"
@@ -494,11 +523,12 @@ export default function LogbookDashboard() {
               <FileText className="h-5 w-5 mr-2" />
               Section C
             </Button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Status Summary Cards */}
+      {/* Summary Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Tooltip Toggle */}
         <Card className="lg:col-span-4">
@@ -506,7 +536,7 @@ export default function LogbookDashboard() {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <BarChart3 className="h-5 w-5" />
-                Logbook Status Summary
+                Logbook Summary Metrics
               </CardTitle>
               <Button
                 variant="outline"
@@ -520,15 +550,34 @@ export default function LogbookDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-              {/* Draft */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Logbooks Created */}
               <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
-                <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-gray-600">{statusCounts.draft}</div>
-                  <div className="text-sm text-gray-500">Draft</div>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Logbooks Created</p>
+                      <p className="text-2xl font-bold text-gray-900">{metrics?.totalLogbooks || 0}</p>
+                      <p className="text-xs text-gray-500">Target: {targetLogbooks}</p>
+                      {targetLogbooks > 0 && (
+                        <>
+                          <Progress 
+                            value={Math.round(((metrics?.totalLogbooks || 0) / targetLogbooks) * 100)} 
+                            className="mt-2 h-2"
+                          />
+                          <p className="text-xs text-blue-600 mt-1">
+                            {Math.round(((metrics?.totalLogbooks || 0) / targetLogbooks) * 100)}% complete
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <BookOpen className="h-6 w-6 text-blue-600" />
+                    </div>
+                  </div>
                   {showTooltips && (
                     <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      Logbooks in draft status - not yet submitted for review
+                      Total number of logbooks created out of your target. Progress bar shows completion percentage.
                       <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                     </div>
                   )}
@@ -537,54 +586,19 @@ export default function LogbookDashboard() {
 
               {/* Submitted */}
               <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
-                <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-yellow-600">{statusCounts.submitted}</div>
-                  <div className="text-sm text-gray-500">Submitted</div>
-                  {showTooltips && (
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      Logbooks submitted and waiting for supervisor review
-                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Submitted</p>
+                      <p className="text-2xl font-bold text-gray-900">{metrics?.submittedLogbooks || 0}</p>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Under Review */}
-              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
-                <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-blue-600">{statusCounts.under_review}</div>
-                  <div className="text-sm text-gray-500">Under Review</div>
-                  {showTooltips && (
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      Logbooks currently being reviewed by supervisor
-                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                      <Send className="h-6 w-6 text-yellow-600" />
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Returned for Edits */}
-              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
-                <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-orange-600">{statusCounts.returned_for_edits}</div>
-                  <div className="text-sm text-gray-500">Returned</div>
+                  </div>
                   {showTooltips && (
                     <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      Logbooks returned for edits with supervisor feedback
-                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Rejected */}
-              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
-                <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-red-600">{statusCounts.rejected}</div>
-                  <div className="text-sm text-gray-500">Rejected</div>
-                  {showTooltips && (
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      Logbooks rejected by supervisor - requires resubmission
+                      Logbooks currently submitted and awaiting supervisor review.
                       <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                     </div>
                   )}
@@ -593,26 +607,85 @@ export default function LogbookDashboard() {
 
               {/* Approved */}
               <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
-                <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-green-600">{statusCounts.approved}</div>
-                  <div className="text-sm text-gray-500">Approved</div>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Approved</p>
+                      <p className="text-2xl font-bold text-gray-900">{metrics?.approvedLogbooks || 0}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <Eye className="h-6 w-6 text-green-600" />
+                    </div>
+                  </div>
                   {showTooltips && (
                     <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      Logbooks approved by supervisor - completed
+                      Logbooks that have been approved by your supervisor and are now locked.
                       <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Locked */}
+              {/* Regenerated */}
               <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
-                <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-purple-600">{statusCounts.locked}</div>
-                  <div className="text-sm text-gray-500">Locked</div>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Regenerated</p>
+                      <p className="text-2xl font-bold text-gray-900">{metrics?.regeneratedLogbooks || 0}</p>
+                    </div>
+                    <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="h-6 w-6 text-purple-600" />
+                    </div>
+                  </div>
                   {showTooltips && (
                     <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      Logbook entries locked from editing
+                      Logbooks that were regenerated due to corrections or updates.
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Overdue */}
+              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Overdue</p>
+                      <p className="text-2xl font-bold text-gray-900">{metrics?.overdueLogbooks || 0}</p>
+                      <p className="text-xs text-gray-500">Past {submissionDeadlineDays}-day deadline</p>
+                    </div>
+                    <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
+                      <AlertCircle className="h-6 w-6 text-red-600" />
+                    </div>
+                  </div>
+                  {showTooltips && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Logbooks past their {submissionDeadlineDays}-day submission deadline but not yet submitted or approved.
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Next Due Date */}
+              <Card className={`relative group ${showTooltips ? 'cursor-help' : ''}`}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Next Due Date</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {metrics?.nextDueDate ? new Date(metrics.nextDueDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : 'None'}
+                      </p>
+                    </div>
+                    <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <Calendar className="h-6 w-6 text-orange-600" />
+                    </div>
+                  </div>
+                  {showTooltips && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      The next upcoming submission deadline (week start + {submissionDeadlineDays} days). Helps you plan ahead.
                       <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                     </div>
                   )}
@@ -623,144 +696,6 @@ export default function LogbookDashboard() {
         </Card>
       </div>
 
-      {/* KPI Cards */}
-      {metrics && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Logbooks Created */}
-          <Card className="relative group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Logbooks Created</p>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.totalLogbooks}</p>
-                  <p className="text-xs text-gray-500">Target: {metrics.internshipWeeksEstimate}</p>
-                </div>
-                <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <BookOpen className="h-6 w-6 text-blue-600" />
-                </div>
-              </div>
-              <div className="mt-4">
-                <Progress 
-                  value={(metrics.totalLogbooks / metrics.internshipWeeksEstimate) * 100} 
-                  className="h-2"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  {Math.round((metrics.totalLogbooks / metrics.internshipWeeksEstimate) * 100)}% complete
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Submitted Logbooks */}
-          <Card className="relative group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Submitted</p>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.submittedLogbooks}</p>
-                </div>
-                <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Send className="h-6 w-6 text-yellow-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Approved Logbooks */}
-          <Card className="relative group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Approved</p>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.approvedLogbooks}</p>
-                </div>
-                <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="h-6 w-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Locked Logbooks */}
-          <Card className="relative group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Finalised (Locked)</p>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.lockedLogbooks}</p>
-                </div>
-                <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <Lock className="h-6 w-6 text-gray-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Regenerated Logbooks */}
-          <Card className="relative group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Regenerated</p>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.regeneratedLogbooks}</p>
-                </div>
-                <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="h-6 w-6 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Overdue Logbooks */}
-          <Card className="relative group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Overdue</p>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.overdueLogbooks}</p>
-                  <p className="text-xs text-gray-500">Due but not approved</p>
-                </div>
-                <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
-                  <AlertCircle className="h-6 w-6 text-red-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Avg Review Time */}
-          <Card className="relative group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Avg Review Time</p>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.avgReviewTime}</p>
-                  <p className="text-xs text-gray-500">days</p>
-                </div>
-                <div className="h-12 w-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                  <Clock className="h-6 w-6 text-indigo-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Next Due Date */}
-          <Card className="relative group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Next Due Date</p>
-                  <p className="text-lg font-bold text-gray-900">
-                    {metrics.nextDueDate ? new Date(metrics.nextDueDate).toLocaleDateString('en-AU') : 'None'}
-                  </p>
-                </div>
-                <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="h-6 w-6 text-orange-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* Filters & Search */}
       <Card>
@@ -922,7 +857,7 @@ export default function LogbookDashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => fetchLogbooks(true, true)}
+                onClick={() => manualRefresh()}
                 disabled={refreshing}
                 className="flex items-center gap-2"
                 title="Refresh logbooks"
@@ -1152,59 +1087,6 @@ export default function LogbookDashboard() {
         </CardContent>
       </Card>
 
-      {/* Compliance Checklist */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle className="h-5 w-5" />
-            Compliance Checklist
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {metrics && (
-              <>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium">All weeks have created logbooks</span>
-                  <Badge variant={metrics.totalLogbooks >= metrics.internshipWeeksEstimate ? "default" : "secondary"}>
-                    {metrics.totalLogbooks}/{metrics.internshipWeeksEstimate}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium">≥ 90% logbooks submitted</span>
-                  <Badge variant={metrics.submittedLogbooks >= metrics.totalLogbooks * 0.9 ? "default" : "secondary"}>
-                    {Math.round((metrics.submittedLogbooks / metrics.totalLogbooks) * 100)}%
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium">≥ 80% logbooks reviewed</span>
-                  <Badge variant={metrics.approvedLogbooks >= metrics.totalLogbooks * 0.8 ? "default" : "secondary"}>
-                    {Math.round((metrics.approvedLogbooks / metrics.totalLogbooks) * 100)}%
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium">Timely submissions (≤ 2 overdue)</span>
-                  <Badge variant={metrics.overdueLogbooks <= 2 ? "default" : "destructive"}>
-                    {metrics.overdueLogbooks}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium">Review times &lt; 5 days</span>
-                  <Badge variant={metrics.avgReviewTime < 5 ? "default" : "secondary"}>
-                    {metrics.avgReviewTime} days
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium">All approved logbooks locked</span>
-                  <Badge variant={metrics.lockedLogbooks >= metrics.approvedLogbooks ? "default" : "secondary"}>
-                    {metrics.lockedLogbooks}/{metrics.approvedLogbooks}
-                  </Badge>
-                </div>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Modals */}
       {showCreationModal && (
