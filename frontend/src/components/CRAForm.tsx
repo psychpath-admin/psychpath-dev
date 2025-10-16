@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useModalContext } from '@/contexts/ModalContext'
+import ReportIssueIcon from './ReportIssueIcon'
 
 interface CRAFormProps {
   onSubmit: (data: any) => void
@@ -56,18 +58,38 @@ export default function CRAForm({
     simulated: entryForm.simulated ?? false
   }), [entryForm])
 
+  // Modal context integration - only if available (when used in modal)
+  let setModalOpen: ((open: boolean) => void) | null = null
+  try {
+    const modalContext = useModalContext()
+    setModalOpen = modalContext.setModalOpen
+  } catch {
+    // Not in modal context, that's fine
+  }
+  
+  // Set modal open when component mounts and clean up when unmounts
+  useEffect(() => {
+    if (setModalOpen) {
+      setModalOpen(true)
+      return () => setModalOpen(false)
+    }
+  }, [setModalOpen])
+
   return (
     <Card className="w-full max-w-md">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">{title}</CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-            className="h-8 w-8 p-0"
-          >
-            <span className="text-lg">×</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            {setModalOpen && <ReportIssueIcon />}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              className="h-8 w-8 p-0"
+            >
+              <span className="text-lg">×</span>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={(e) => {

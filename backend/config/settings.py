@@ -104,6 +104,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
+    'channels',
     # Local
     'api',
     'logbook_app',
@@ -291,3 +292,27 @@ PROGRAM_REQUIREMENTS = {
         }
     }
 }
+
+# Django Channels Configuration
+ASGI_APPLICATION = 'config.asgi.application'
+
+# Channel layers configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}
+
+# Fallback to in-memory channel layer for development if Redis is not available
+try:
+    import redis
+    redis.Redis(host='127.0.0.1', port=6379, db=0).ping()
+except:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }

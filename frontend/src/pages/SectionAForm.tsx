@@ -16,6 +16,7 @@ import {
 } from '@/lib/autocompleteApi'
 import { useErrorHandler, ErrorOverlay } from '@/lib/errors'
 import { useButtonConfig } from '@/hooks/useButtonConfig'
+import SuccessMessage from '@/components/SuccessMessage'
 
 interface SectionAFormProps {
   onCancel: () => void
@@ -57,6 +58,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   })
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const [clientSuggestions, setClientSuggestions] = useState<string[]>([])
   const [placeSuggestions, setPlaceSuggestions] = useState<string[]>([])
   const isEditing = !!entryId
@@ -203,27 +205,32 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
 
       if (isEditing && entryId) {
         await updateSectionAEntry(parseInt(entryId), entryData)
-        toast.success('DCC entry updated successfully!')
         createdEntryId = parseInt(entryId)
       } else {
         const response = await createSectionAEntry(entryData)
         createdEntryId = response.id
-        toast.success('DCC entry created successfully!')
       }
 
+      // Show success message
+      setShowSuccessMessage(true)
+
       if (action === 'dcc_only') {
-        onCancel() // Navigate back to dashboard
+        // Navigate back after showing success message
+        setTimeout(() => {
+          onCancel()
+        }, 4000)
       } else if (action === 'dcc_and_cra') {
-        // Navigate to CRA form with the created DCC entry ID
-        // Use the returnTo from the original navigation state
+        // Navigate to CRA form with the created DCC entry ID after showing success message
         const originalReturnTo = (location.state as any)?.returnTo || '/section-a'
         
-        navigate('/section-a/cra', { 
-          state: { 
-            parentDccId: createdEntryId,
-            returnTo: originalReturnTo
-          } 
-        })
+        setTimeout(() => {
+          navigate('/section-a/cra', { 
+            state: { 
+              parentDccId: createdEntryId,
+              returnTo: originalReturnTo
+            } 
+          })
+        }, 4000)
       }
     } catch (error: any) {
       console.error('Error creating entry:', error)
@@ -297,19 +304,32 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading entry data...</p>
+      <>
+        <SuccessMessage 
+          show={showSuccessMessage}
+          message="Section A entry saved successfully"
+          onClose={() => setShowSuccessMessage(false)}
+        />
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading entry data...</p>
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center gap-4 mb-6">
+    <>
+      <SuccessMessage 
+        show={showSuccessMessage}
+        message="Section A entry saved successfully"
+        onClose={() => setShowSuccessMessage(false)}
+      />
+      <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center gap-4 mb-6">
           <Button variant="outline" onClick={onCancel}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to DCC Logbook
@@ -508,16 +528,17 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
       
       {/* Error Overlay with standard help system */}
-      <ErrorOverlay
+      {/* <ErrorOverlay
         isOpen={errorOverlay.isOpen}
         onClose={errorOverlay.onClose}
         onGetHelp={errorOverlay.onGetHelp}
         error={errorOverlay.error}
-      />
-    </div>
+      /> */}
+    </>
   )
 }
 

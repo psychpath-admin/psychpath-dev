@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge'
 import { Calendar, Clock, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
+import { useModalContext } from '@/contexts/ModalContext'
+import ReportIssueIcon from './ReportIssueIcon'
 
 interface EligibleWeek {
   week_start: string
@@ -34,9 +36,26 @@ export default function LogbookCreationModal({ onClose, onLogbookCreated }: Logb
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
+  // Modal context integration - only if available (when used in modal)
+  let setModalOpen: ((open: boolean) => void) | null = null
+  try {
+    const modalContext = useModalContext()
+    setModalOpen = modalContext.setModalOpen
+  } catch {
+    // Not in modal context, that's fine
+  }
+  
   useEffect(() => {
     fetchEligibleWeeks()
-  }, [])
+    if (setModalOpen) {
+      setModalOpen(true)
+    }
+    return () => {
+      if (setModalOpen) {
+        setModalOpen(false)
+      }
+    }
+  }, [setModalOpen])
 
   const fetchEligibleWeeks = async () => {
     try {
@@ -144,11 +163,18 @@ export default function LogbookCreationModal({ onClose, onLogbookCreated }: Logb
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl bg-white text-gray-900">
-        <DialogHeader>
-          <DialogTitle className="text-gray-900">Create New Logbook</DialogTitle>
-          <DialogDescription className="text-gray-600">
-            Select a week to compile into a logbook for supervisor review. Only past weeks with entries are available.
-          </DialogDescription>
+        <DialogHeader className="flex flex-row items-center justify-between">
+          <div className="flex-1">
+            <DialogTitle className="text-gray-900">Create New Logbook</DialogTitle>
+            <DialogDescription className="text-gray-600">
+              Select a week to compile into a logbook for supervisor review. Only past weeks with entries are available.
+            </DialogDescription>
+          </div>
+          {setModalOpen && (
+            <div className="ml-4">
+              <ReportIssueIcon />
+            </div>
+          )}
         </DialogHeader>
 
         <div className="space-y-4">

@@ -744,7 +744,7 @@ const SectionB: React.FC = () => {
               </div>
 
               {/* Compliance Overview Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-6 mb-8">
                 {/* Total PD Hours Logged */}
                 <div className="relative group">
                   <Card className={`brand-card hover:shadow-md transition-all duration-300 ${ragStatus.border} ${ragStatus.bg}`}>
@@ -949,64 +949,88 @@ const SectionB: React.FC = () => {
                     <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                   </div>
                 </div>
+
+                {/* Active Learning */}
+                <div className="relative group">
+                  <Card className="brand-card hover:shadow-md transition-all duration-300">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="h-12 w-12 bg-green-500/10 rounded-full flex items-center justify-center">
+                          <BookOpen className="h-6 w-6 text-green-600" />
+                        </div>
+                        <Badge variant="outline" className="text-green-600 border-green-600 text-xs font-semibold">
+                          Active
+                        </Badge>
+                      </div>
+                      <div className="text-2xl font-bold text-textDark mb-1">
+                        {formatDurationWithUnit(activeMinutes)}
+                      </div>
+                      <div className="text-xs font-semibold text-textDark mb-1 font-body">Active Learning</div>
+                      <div className="text-xs text-textLight mb-2">of {formatDurationWithUnit(totalMinutes)} total</div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="h-2 rounded-full transition-all duration-500 bg-green-500"
+                          style={{ width: `${totalMinutes > 0 ? (activeMinutes / totalMinutes) * 100 : 0}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-textLight mt-1">
+                        {totalMinutes > 0 ? `${((activeMinutes / totalMinutes) * 100).toFixed(1)}% active learning` : 'No entries yet'}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="font-semibold mb-2">Active Learning Hours</div>
+                    <div className="mb-2">Tracks time spent in active learning activities that directly contribute to professional development.</div>
+                    <div className="mb-2"><strong>Active Learning:</strong> {formatDurationWithUnit(activeMinutes)} hours</div>
+                    <div className="mb-2"><strong>Total PD Hours:</strong> {formatDurationWithUnit(totalMinutes)} hours</div>
+                    <div className="mb-2"><strong>Active Learning Ratio:</strong> {totalMinutes > 0 ? `${((activeMinutes / totalMinutes) * 100).toFixed(1)}%` : '0%'}</div>
+                    <div className="text-xs text-gray-300">
+                      <strong>Definition:</strong> Active learning includes workshops, courses, conferences, and hands-on training
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+
+                {/* Competencies Covered */}
+                <div className="relative group">
+                  <Card className="brand-card hover:shadow-md transition-all duration-300">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="h-12 w-12 bg-purple-500/10 rounded-full flex items-center justify-center">
+                          <BarChart3 className="h-6 w-6 text-purple-600" />
+                        </div>
+                        <Badge variant="outline" className="text-purple-600 border-purple-600 text-xs font-semibold">
+                          {uniqueCompetencies}
+                        </Badge>
+                      </div>
+                      <div className="text-2xl font-bold text-textDark mb-1">
+                        {uniqueCompetencies}
+                      </div>
+                      <div className="text-xs font-semibold text-textDark mb-1 font-body">Competencies Covered</div>
+                      <div className="text-xs text-textLight mb-2">unique areas</div>
+                      <div className="text-xs text-textLight">
+                        {uniqueCompetencies > 0 ? '✓ Building competency portfolio' : 'No competencies logged yet'}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
+                    <div className="font-semibold mb-2">Competencies Covered</div>
+                    <div className="mb-2">Tracks the number of unique competency areas you've developed through your PD activities.</div>
+                    <div className="mb-2"><strong>Unique Competencies:</strong> {uniqueCompetencies} different areas</div>
+                    <div className="mb-2"><strong>Total PD Entries:</strong> {totalEntries} activities logged</div>
+                    <div className="mb-2"><strong>Competency Diversity:</strong> {uniqueCompetencies > 0 ? 'Building a well-rounded skill set' : 'Start logging activities to build competencies'}</div>
+                    <div className="text-xs text-gray-300">
+                      <strong>Importance:</strong> Diverse competencies demonstrate comprehensive professional development
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
             </div>
 
-              {/* Compliance Summary */}
-              <div className="bg-bgCard p-6 rounded-lg border border-border mb-8">
-                <h3 className="text-lg font-semibold text-textDark mb-4 font-headings">PD Compliance Summary</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                      <span className="font-medium">Total Hours: {formatDurationWithUnit(totalMinutes)} / {userProfile.internship_weeks_estimate * userProfile.weekly_pd_commitment_hours}h goal</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                      <span className="font-medium">Progress Ratio: {(progressRatio * 100).toFixed(1)}% (Target: 100%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                      <span className="font-medium">Supervisor Reviews: {reviewPercentage.toFixed(1)}% (Target: ≥75%)</span>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="font-medium">Internship Progress: {internshipProgress.weeksElapsed} weeks ({internshipProgress.progressPercentage.toFixed(1)}%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="font-medium">Competencies Covered: {uniqueCompetencies} unique areas</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="font-medium">Active Learning: {formatDurationWithUnit(activeMinutes)} of {formatDurationWithUnit(totalMinutes)}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Legend */}
-                <div className="mt-4 pt-4 border-t border-border">
-                  <div className="flex items-center gap-6 text-xs">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      <span className="text-textLight">On Track / Compliant</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                      <span className="text-textLight">At Risk (75-99%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                      <span className="text-textLight">Non-Compliant (&lt;75%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="text-textLight">Informational</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </>
           )
         })()}

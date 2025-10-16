@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
@@ -14,7 +15,8 @@ import psutil
 import signal
 from datetime import datetime, timedelta
 from api.models import UserProfile
-from .models import SupportUser, UserActivity, SupportTicket, SystemAlert, WeeklyStats
+from .models import SupportUser, UserActivity, SupportTicket, SystemAlert, WeeklyStats, ChatSession, ChatMessage, SupportUserStatus
+from .emails import send_new_ticket_email, send_ticket_reply_email, send_ticket_update_email
 from section_b.models import ProfessionalDevelopmentEntry
 from section_c.models import SupervisionEntry
 from section_a.models import SectionAEntry
@@ -360,6 +362,9 @@ def get_weekly_stats(request):
 def get_server_status(request):
     """Get status of Django and frontend servers"""
     try:
+        # Debug: Log the request
+        print(f"Server status request from user: {request.user.is_authenticated}, is_staff: {request.user.is_staff}")
+        
         django_running = is_django_running()
         frontend_running = is_frontend_running()
         
@@ -379,9 +384,11 @@ def get_server_status(request):
         return JsonResponse(status)
     
     except Exception as e:
+        print(f"Server status error: {e}")
         return JsonResponse({'error': str(e)}, status=500)
 
 @staff_member_required
+@csrf_exempt
 @require_http_methods(["POST"])
 def control_server(request):
     """Start, stop, or restart servers"""
@@ -406,6 +413,7 @@ def control_server(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 @staff_member_required
+@csrf_exempt
 @require_http_methods(["POST"])
 def reset_user_password(request):
     """Reset a user's password"""
@@ -476,10 +484,27 @@ def get_all_users(request):
 def is_django_running():
     """Check if Django server is running"""
     try:
+        # First try PID file method
         if os.path.exists('django.pid'):
             with open('django.pid', 'r') as f:
                 pid = int(f.read().strip())
             return psutil.pid_exists(pid)
+        
+        # If no PID file, try HTTP request method
+        try:
+            import urllib.request
+            response = urllib.request.urlopen('http://localhost:8000/admin/', timeout=2)
+            return response.getcode() in [200, 302]  # 200 or redirect to login
+        except:
+            pass
+            
+        # If HTTP fails, try to find Django process by name
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['cmdline'] and any('manage.py' in arg and 'runserver' in arg for arg in proc.info['cmdline']):
+                    return True
+            except:
+                pass
     except:
         pass
     return False
@@ -487,11 +512,28 @@ def is_django_running():
 def is_frontend_running():
     """Check if frontend server is running"""
     try:
+        # First try PID file method
         frontend_pid_file = os.path.join(settings.BASE_DIR, '..', 'frontend', 'frontend.pid')
         if os.path.exists(frontend_pid_file):
             with open(frontend_pid_file, 'r') as f:
                 pid = int(f.read().strip())
             return psutil.pid_exists(pid)
+        
+        # If no PID file, try HTTP request method
+        try:
+            import urllib.request
+            response = urllib.request.urlopen('http://localhost:5173/', timeout=2)
+            return response.getcode() == 200
+        except:
+            pass
+            
+        # If HTTP fails, try to find Vite/Node process by name
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['cmdline'] and any('vite' in arg.lower() or 'npm' in arg or 'node' in arg for arg in proc.info['cmdline']):
+                    return True
+            except:
+                pass
     except:
         pass
     return False
@@ -592,3 +634,914 @@ def stop_servers(server):
             results.append(f'Error stopping frontend server: {str(e)}')
     
     return '; '.join(results)
+
+
+# New API endpoints for support tickets and chat
+from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.response import Response
+from rest_framework import status
+import json
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_support_ticket(request):
+    """Create a new support ticket"""
+    try:
+        data = request.data
+        subject = data.get('subject', '').strip()
+        description = data.get('description', '').strip()
+        priority = data.get('priority', 'MEDIUM')
+        tags = data.get('tags', [])
+        ticket_type = data.get('ticket_type', 'QUESTION')
+        
+        # Auto-capture metadata from request headers
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        current_url = data.get('current_url', '')
+        browser_info = data.get('browser_info', '')
+        app_version = data.get('app_version', '')
+        
+        # Planning fields (optional for ticket creation)
+        user_story = data.get('user_story', '')
+        acceptance_criteria = data.get('acceptance_criteria', [])
+        
+        # Context data from frontend (form data, console errors, etc.)
+        context_data = data.get('context_data', {})
+        
+        if not subject or not description:
+            return Response({'error': 'Subject and description are required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Prepare ticket creation data
+        ticket_data = {
+            'user': request.user,
+            'ticket_type': ticket_type,
+            'subject': subject,
+            'description': description,
+            'priority': priority,
+            'tags': tags,
+            'current_url': current_url,
+            'browser_info': browser_info,
+            'user_agent': user_agent,
+            'app_version': app_version,
+            'user_story': user_story,
+            'acceptance_criteria': acceptance_criteria,
+            'context_data': context_data,
+        }
+        
+        # Set stage for all ticket types to avoid database constraint violation
+        ticket_data['stage'] = 'IDEA'
+        
+        ticket = SupportTicket.objects.create(**ticket_data)
+        
+        # Send email notification to support team
+        send_new_ticket_email(ticket)
+        
+        return Response({
+            'id': ticket.id,
+            'ticket_type': ticket.ticket_type,
+            'subject': ticket.subject,
+            'status': ticket.status,
+            'priority': ticket.priority,
+            'created_at': ticket.created_at.isoformat(),
+            'message': 'Ticket created successfully'
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_tickets(request):
+    """Get all tickets for the current user"""
+    try:
+        tickets = SupportTicket.objects.filter(user=request.user).order_by('-created_at')
+        
+        ticket_list = []
+        for ticket in tickets:
+            ticket_list.append({
+                'id': ticket.id,
+                'ticket_type': ticket.ticket_type,
+                'subject': ticket.subject,
+                'status': ticket.status,
+                'priority': ticket.priority,
+                'stage': ticket.stage,
+                'business_value': ticket.business_value,
+                'effort_estimate': ticket.effort_estimate,
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat(),
+                'has_unread_messages': ticket.has_unread_messages,
+                'last_message_at': ticket.last_message_at.isoformat() if ticket.last_message_at else None,
+                'assigned_to': ticket.assigned_to.email if ticket.assigned_to else None,
+                'tags': ticket.tags,
+                'target_milestone': ticket.target_milestone
+            })
+        
+        return Response({'tickets': ticket_list})
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_ticket_detail(request, ticket_id):
+    """Get detailed information about a specific ticket"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id, user=request.user)
+        
+        # Get chat session and messages
+        session = ChatSession.objects.filter(ticket=ticket).first()
+        messages = []
+        if session:
+            chat_messages = ChatMessage.objects.filter(session=session).order_by('created_at')
+            for msg in chat_messages:
+                messages.append({
+                    'id': msg.id,
+                    'message': msg.message,
+                    'sender': {
+                        'id': msg.sender.id,
+                        'email': msg.sender.email,
+                        'first_name': msg.sender.first_name,
+                        'last_name': msg.sender.last_name,
+                    },
+                    'is_support': msg.is_support,
+                    'created_at': msg.created_at.isoformat(),
+                    'read_by_user': msg.read_by_user,
+                    'read_by_support': msg.read_by_support,
+                })
+        
+        return Response({
+            'ticket': {
+                'id': ticket.id,
+                'ticket_type': ticket.ticket_type,
+                'subject': ticket.subject,
+                'description': ticket.description,
+                'status': ticket.status,
+                'priority': ticket.priority,
+                'stage': ticket.stage,
+                'business_value': ticket.business_value,
+                'effort_estimate': ticket.effort_estimate,
+                'implementation_notes': ticket.implementation_notes,
+                'user_story': ticket.user_story,
+                'acceptance_criteria': ticket.acceptance_criteria,
+                'test_plan': ticket.test_plan,
+                'target_milestone': ticket.target_milestone,
+                'completed_at': ticket.completed_at.isoformat() if ticket.completed_at else None,
+                'related_tickets': [t.id for t in ticket.related_tickets.all()],
+                'user': {
+                    'email': ticket.user.email,
+                    'first_name': ticket.user.first_name,
+                    'last_name': ticket.user.last_name,
+                    'name': f"{ticket.user.first_name} {ticket.user.last_name}".strip() or ticket.user.email
+                },
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat(),
+                'resolved_at': ticket.resolved_at.isoformat() if ticket.resolved_at else None,
+                'assigned_to': ticket.assigned_to.email if ticket.assigned_to else None,
+                'tags': ticket.tags,
+                'has_unread_messages': ticket.has_unread_messages,
+                'last_message_at': ticket.last_message_at.isoformat() if ticket.last_message_at else None,
+                'context_data': ticket.context_data,
+                'messages': messages,
+                'session_id': session.id if session else None
+            }
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_ticket_message(request, ticket_id):
+    """Send a message to a support ticket"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        # Check if user owns the ticket or is staff
+        if ticket.user != request.user and not request.user.is_staff:
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        data = request.data
+        message_content = data.get('message', '').strip()
+        
+        if not message_content:
+            return Response({'error': 'Message content is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get or create chat session for this ticket
+        session, created = ChatSession.objects.get_or_create(
+            ticket=ticket,
+            defaults={
+                'user': ticket.user,
+                'status': 'ACTIVE'
+            }
+        )
+        
+        # Create the message
+        is_support_message = request.user.is_staff
+        chat_message = ChatMessage.objects.create(
+            session=session,
+            sender=request.user,
+            message=message_content,
+            is_support=is_support_message,
+            read_by_user=is_support_message,  # Mark as read by user if sent by support
+            read_by_support=not is_support_message  # Mark as read by support if sent by user
+        )
+        
+        # Update session's last_message_at
+        session.last_message_at = timezone.now()
+        session.save()
+        
+        # Update ticket's unread status
+        if is_support_message:
+            ticket.has_unread_messages = False  # Support replied, user needs to read
+        else:
+            ticket.has_unread_messages = True  # User replied, support needs to read
+        ticket.last_message_at = timezone.now()
+        ticket.save()
+        
+        # Send email notification
+        send_ticket_reply_email(ticket, chat_message, is_support_message)
+        
+        return Response({
+            'id': chat_message.id,
+            'message': chat_message.message,
+            'sender': {
+                'id': request.user.id,
+                'email': request.user.email,
+                'first_name': request.user.first_name,
+                'last_name': request.user.last_name,
+            },
+            'is_support': chat_message.is_support,
+            'created_at': chat_message.created_at.isoformat(),
+            'read_by_user': chat_message.read_by_user,
+            'read_by_support': chat_message.read_by_support,
+        }, status=status.HTTP_201_CREATED)
+        
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_support_online_status(request):
+    """Check if support team is online"""
+    try:
+        # Check if any support staff are online
+        online_support = SupportUserStatus.objects.filter(
+            is_online=True
+        ).first()
+        
+        if online_support and online_support.is_actually_online:
+            return Response({
+                'is_online': True,
+                'support_name': f"{online_support.user.first_name} {online_support.user.last_name}".strip() or online_support.user.email
+            })
+        
+        return Response({'is_online': False})
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_ticket_changes(request, ticket_id):
+    """Check if ticket has changes since last check - lightweight endpoint"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id, user=request.user)
+        
+        # Get the last modified timestamp from the request
+        last_check = request.GET.get('last_check')
+        if last_check:
+            try:
+                from datetime import datetime
+                last_check_dt = datetime.fromisoformat(last_check.replace('Z', '+00:00'))
+                
+                # Check if ticket was modified after last check
+                if ticket.updated_at <= last_check_dt:
+                    # Check if any messages were added after last check
+                    session = ChatSession.objects.filter(ticket=ticket).first()
+                    if session:
+                        latest_message = ChatMessage.objects.filter(session=session).order_by('-created_at').first()
+                        if latest_message and latest_message.created_at <= last_check_dt:
+                            # No changes
+                            return Response({'has_changes': False})
+                
+                # Changes detected
+                return Response({'has_changes': True})
+            except (ValueError, TypeError):
+                pass
+        
+        # If no last_check provided or invalid, assume changes
+        return Response({'has_changes': True})
+        
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def send_ticket_message_dashboard(request, ticket_id):
+    """Send a message to a support ticket (Django session authenticated for admin dashboard)"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        # Check if user owns the ticket or is staff
+        if ticket.user != request.user and not request.user.is_staff:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        import json
+        data = json.loads(request.body)
+        message_content = data.get('message', '').strip()
+        
+        if not message_content:
+            return JsonResponse({'error': 'Message content is required'}, status=400)
+        
+        # Get or create chat session for this ticket
+        session, created = ChatSession.objects.get_or_create(
+            ticket=ticket,
+            defaults={
+                'user': ticket.user,
+                'status': 'ACTIVE'
+            }
+        )
+        
+        # Create the message
+        is_support_message = request.user.is_staff
+        chat_message = ChatMessage.objects.create(
+            session=session,
+            sender=request.user,
+            message=message_content,
+            is_support=is_support_message,
+            read_by_user=is_support_message,  # Mark as read by user if sent by support
+            read_by_support=not is_support_message  # Mark as read by support if sent by user
+        )
+        
+        # Update session's last_message_at
+        session.last_message_at = timezone.now()
+        session.save()
+        
+        # Update ticket's unread status
+        if is_support_message:
+            ticket.has_unread_messages = False  # Support replied, user needs to read
+        else:
+            ticket.has_unread_messages = True  # User replied, support needs to read
+        ticket.last_message_at = timezone.now()
+        ticket.save()
+        
+        # Send email notification
+        send_ticket_reply_email(ticket, chat_message, is_support_message)
+        
+        return JsonResponse({
+            'id': chat_message.id,
+            'message': chat_message.message,
+            'sender': {
+                'id': request.user.id,
+                'email': request.user.email,
+                'first_name': request.user.first_name,
+                'last_name': request.user.last_name,
+            },
+            'is_support': chat_message.is_support,
+            'created_at': chat_message.created_at.isoformat(),
+            'read_by_user': chat_message.read_by_user,
+            'read_by_support': chat_message.read_by_support,
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def toggle_support_status(request):
+    """Toggle support staff online status (staff only)"""
+    try:
+        data = json.loads(request.body)
+        is_online = data.get('is_online', False)
+        
+        status, created = SupportUserStatus.objects.get_or_create(
+            user=request.user,
+            defaults={'is_online': is_online, 'auto_status': False}
+        )
+        
+        status.is_online = is_online
+        status.auto_status = False  # Manual override
+        status.last_activity = timezone.now()
+        status.save()
+        
+        return JsonResponse({
+            'is_online': status.is_online,
+            'message': f"Status updated to {'Online' if is_online else 'Offline'}"
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_all_tickets_dashboard(request):
+    """Get all tickets for support dashboard (staff only) - Django session auth"""
+    try:
+        tickets = SupportTicket.objects.all().order_by('-created_at')
+        
+        ticket_list = []
+        for ticket in tickets:
+            # Get chat session info
+            session = ChatSession.objects.filter(ticket=ticket).first()
+            unread_count = 0
+            if session:
+                unread_count = ChatMessage.objects.filter(
+                    session=session,
+                    is_support=False,
+                    read_by_support=False
+                ).count()
+            
+            ticket_list.append({
+                'id': ticket.id,
+                'subject': ticket.subject,
+                'description': ticket.description,
+                'status': ticket.status,
+                'priority': ticket.priority,
+                'user': {
+                    'email': ticket.user.email,
+                    'first_name': ticket.user.first_name,
+                    'last_name': ticket.user.last_name,
+                    'name': f"{ticket.user.first_name} {ticket.user.last_name}".strip() or ticket.user.email
+                },
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat(),
+                'has_unread_messages': ticket.has_unread_messages,
+                'unread_count': unread_count,
+                'assigned_to': ticket.assigned_to.email if ticket.assigned_to else None,
+                'tags': ticket.tags,
+                'session_id': session.id if session else None
+            })
+        
+        return JsonResponse({'tickets': ticket_list})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_tickets(request):
+    """Get all tickets for support dashboard (staff only)"""
+    # Check if user is staff
+    if not request.user.is_staff:
+        return Response({'error': 'Permission denied. Staff access required.'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        tickets = SupportTicket.objects.all().order_by('-created_at')
+        
+        ticket_list = []
+        for ticket in tickets:
+            # Get chat session info
+            session = ChatSession.objects.filter(ticket=ticket).first()
+            unread_count = 0
+            if session:
+                unread_count = ChatMessage.objects.filter(
+                    session=session,
+                    is_support=False,
+                    read_by_support=False
+                ).count()
+            
+            ticket_list.append({
+                'id': ticket.id,
+                'subject': ticket.subject,
+                'description': ticket.description,
+                'status': ticket.status,
+                'priority': ticket.priority,
+                'user': {
+                    'email': ticket.user.email,
+                    'first_name': ticket.user.first_name,
+                    'last_name': ticket.user.last_name,
+                    'name': f"{ticket.user.first_name} {ticket.user.last_name}".strip() or ticket.user.email
+                },
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat(),
+                'has_unread_messages': ticket.has_unread_messages,
+                'unread_count': unread_count,
+                'assigned_to': ticket.assigned_to.email if ticket.assigned_to else None,
+                'tags': ticket.tags,
+                'session_id': session.id if session else None
+            })
+        
+        return Response({'tickets': ticket_list})
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_admin_ticket_detail_dashboard(request, ticket_id):
+    """Get detailed information about a specific ticket for admin (staff only) - Django session auth"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        # Get chat session and messages
+        session = ChatSession.objects.filter(ticket=ticket).first()
+        messages = []
+        if session:
+            chat_messages = ChatMessage.objects.filter(session=session).order_by('created_at')
+            for msg in chat_messages:
+                messages.append({
+                    'id': msg.id,
+                    'message': msg.message,
+                    'sender': {
+                        'id': msg.sender.id,
+                        'email': msg.sender.email,
+                        'first_name': msg.sender.first_name,
+                        'last_name': msg.sender.last_name,
+                    },
+                    'is_support': msg.is_support,
+                    'created_at': msg.created_at.isoformat(),
+                    'read_by_user': msg.read_by_user,
+                    'read_by_support': msg.read_by_support,
+                })
+        
+        return JsonResponse({
+            'ticket': {
+                'id': ticket.id,
+                'ticket_type': ticket.ticket_type,
+                'subject': ticket.subject,
+                'description': ticket.description,
+                'status': ticket.status,
+                'priority': ticket.priority,
+                'stage': ticket.stage,
+                'business_value': ticket.business_value,
+                'effort_estimate': ticket.effort_estimate,
+                'implementation_notes': ticket.implementation_notes,
+                'user_story': ticket.user_story,
+                'acceptance_criteria': ticket.acceptance_criteria,
+                'test_plan': ticket.test_plan,
+                'target_milestone': ticket.target_milestone,
+                'completed_at': ticket.completed_at.isoformat() if ticket.completed_at else None,
+                'related_tickets': [t.id for t in ticket.related_tickets.all()],
+                'user': {
+                    'email': ticket.user.email,
+                    'first_name': ticket.user.first_name,
+                    'last_name': ticket.user.last_name,
+                    'name': f"{ticket.user.first_name} {ticket.user.last_name}".strip() or ticket.user.email
+                },
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat(),
+                'resolved_at': ticket.resolved_at.isoformat() if ticket.resolved_at else None,
+                'assigned_to': ticket.assigned_to.email if ticket.assigned_to else None,
+                'tags': ticket.tags,
+                'has_unread_messages': ticket.has_unread_messages,
+                'last_message_at': ticket.last_message_at.isoformat() if ticket.last_message_at else None,
+                'context_data': ticket.context_data,
+                'messages': messages,
+                'session_id': session.id if session else None
+            }
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_admin_ticket_detail(request, ticket_id):
+    """Get detailed information about a specific ticket for admin (staff only)"""
+    # Check if user is staff
+    if not request.user.is_staff:
+        return Response({'error': 'Permission denied. Staff access required.'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        # Get chat session and messages
+        session = ChatSession.objects.filter(ticket=ticket).first()
+        messages = []
+        if session:
+            chat_messages = ChatMessage.objects.filter(session=session).order_by('created_at')
+            for msg in chat_messages:
+                messages.append({
+                    'id': msg.id,
+                    'message': msg.message,
+                    'sender': {
+                        'id': msg.sender.id,
+                        'email': msg.sender.email,
+                        'first_name': msg.sender.first_name,
+                        'last_name': msg.sender.last_name,
+                    },
+                    'is_support': msg.is_support,
+                    'created_at': msg.created_at.isoformat(),
+                    'read_by_user': msg.read_by_user,
+                    'read_by_support': msg.read_by_support,
+                })
+        
+        return Response({
+            'ticket': {
+                'id': ticket.id,
+                'ticket_type': ticket.ticket_type,
+                'subject': ticket.subject,
+                'description': ticket.description,
+                'status': ticket.status,
+                'priority': ticket.priority,
+                'stage': ticket.stage,
+                'business_value': ticket.business_value,
+                'effort_estimate': ticket.effort_estimate,
+                'implementation_notes': ticket.implementation_notes,
+                'user_story': ticket.user_story,
+                'acceptance_criteria': ticket.acceptance_criteria,
+                'test_plan': ticket.test_plan,
+                'target_milestone': ticket.target_milestone,
+                'completed_at': ticket.completed_at.isoformat() if ticket.completed_at else None,
+                'related_tickets': [t.id for t in ticket.related_tickets.all()],
+                'user': {
+                    'email': ticket.user.email,
+                    'first_name': ticket.user.first_name,
+                    'last_name': ticket.user.last_name,
+                    'name': f"{ticket.user.first_name} {ticket.user.last_name}".strip() or ticket.user.email
+                },
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat(),
+                'resolved_at': ticket.resolved_at.isoformat() if ticket.resolved_at else None,
+                'assigned_to': ticket.assigned_to.email if ticket.assigned_to else None,
+                'tags': ticket.tags,
+                'has_unread_messages': ticket.has_unread_messages,
+                'last_message_at': ticket.last_message_at.isoformat() if ticket.last_message_at else None,
+                'context_data': ticket.context_data,
+                'messages': messages,
+                'session_id': session.id if session else None
+            }
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def update_ticket_status(request, ticket_id):
+    """Update ticket status (staff only)"""
+    try:
+        data = json.loads(request.body)
+        new_status = data.get('status', '')
+        assigned_to = data.get('assigned_to', None)
+        
+        if new_status not in [choice[0] for choice in SupportTicket.STATUS_CHOICES]:
+            return JsonResponse({'error': 'Invalid status'}, status=400)
+        
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        old_status = ticket.status
+        ticket.status = new_status
+        
+        if assigned_to:
+            try:
+                user = User.objects.get(email=assigned_to)
+                ticket.assigned_to = user
+            except User.DoesNotExist:
+                return JsonResponse({'error': 'User not found'}, status=400)
+        
+        if new_status in ['RESOLVED', 'CLOSED']:
+            ticket.resolved_at = timezone.now()
+        
+        ticket.save()
+        
+        # Send email notification to user about status change
+        if old_status != new_status:
+            send_ticket_update_email(ticket, old_status, new_status, request.user)
+        
+        return JsonResponse({
+            'id': ticket.id,
+            'status': ticket.status,
+            'assigned_to': ticket.assigned_to.email if ticket.assigned_to else None,
+            'message': 'Ticket status updated successfully'
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def promote_to_planned(request, ticket_id):
+    """Admin: Promote idea to planned status"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        # Only allow promotion of Feature/Task tickets in IDEA stage
+        if ticket.ticket_type not in ['FEATURE', 'TASK'] or ticket.stage != 'IDEA':
+            return Response({'error': 'Only Feature/Task tickets in IDEA stage can be promoted'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        data = request.data
+        
+        # Validate required fields for planning
+        effort_estimate = data.get('effort_estimate')
+        business_value = data.get('business_value', 'MEDIUM')
+        user_story = data.get('user_story', '')
+        acceptance_criteria = data.get('acceptance_criteria', [])
+        
+        if not effort_estimate:
+            return Response({'error': 'Effort estimate is required to promote to planned'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update planning fields
+        ticket.effort_estimate = effort_estimate
+        ticket.business_value = business_value
+        ticket.user_story = user_story
+        ticket.acceptance_criteria = acceptance_criteria
+        ticket.stage = 'PLANNED'
+        ticket.save()
+        
+        return Response({
+            'id': ticket.id,
+            'stage': ticket.stage,
+            'effort_estimate': ticket.effort_estimate,
+            'business_value': ticket.business_value,
+            'message': 'Ticket promoted to planned status'
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_roadmap(request):
+    """Get roadmap view of planned items"""
+    try:
+        # Get tickets in planning stages
+        tickets = SupportTicket.objects.filter(
+            stage__in=['PLANNED', 'IN_DEVELOPMENT', 'TESTING'],
+            ticket_type__in=['FEATURE', 'TASK']
+        ).order_by('business_value', 'target_milestone', 'created_at')
+        
+        roadmap_data = []
+        for ticket in tickets:
+            roadmap_data.append({
+                'id': ticket.id,
+                'subject': ticket.subject,
+                'ticket_type': ticket.ticket_type,
+                'stage': ticket.stage,
+                'business_value': ticket.business_value,
+                'effort_estimate': ticket.effort_estimate,
+                'target_milestone': ticket.target_milestone,
+                'priority': ticket.priority,
+                'created_at': ticket.created_at.isoformat(),
+                'user': {
+                    'name': f"{ticket.user.first_name} {ticket.user.last_name}".strip() or ticket.user.email
+                }
+            })
+        
+        return Response({'roadmap': roadmap_data})
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def get_planning_dashboard(request):
+    """Admin: Get planning dashboard statistics"""
+    try:
+        stats = {}
+        
+        # Count by stage
+        stats['by_stage'] = {
+            'ideas': SupportTicket.objects.filter(stage='IDEA', ticket_type__in=['FEATURE', 'TASK']).count(),
+            'planned': SupportTicket.objects.filter(stage='PLANNED').count(),
+            'in_development': SupportTicket.objects.filter(stage='IN_DEVELOPMENT').count(),
+            'testing': SupportTicket.objects.filter(stage='TESTING').count(),
+            'deployed': SupportTicket.objects.filter(stage='DEPLOYED').count(),
+        }
+        
+        # Ideas needing triage
+        ideas = SupportTicket.objects.filter(stage='IDEA', ticket_type__in=['FEATURE', 'TASK'])\
+            .order_by('-priority', '-created_at')[:10]
+        
+        ideas_list = []
+        for idea in ideas:
+            ideas_list.append({
+                'id': idea.id,
+                'subject': idea.subject,
+                'ticket_type': idea.ticket_type,
+                'priority': idea.priority,
+                'created_at': idea.created_at.isoformat(),
+                'user': idea.user.email
+            })
+        
+        stats['ideas_needing_triage'] = ideas_list
+        
+        # Active work summary
+        active_work = SupportTicket.objects.filter(
+            stage__in=['PLANNED', 'IN_DEVELOPMENT', 'TESTING']
+        ).order_by('stage', 'business_value')
+        
+        active_list = []
+        for item in active_work:
+            active_list.append({
+                'id': item.id,
+                'subject': item.subject,
+                'stage': item.stage,
+                'business_value': item.business_value,
+                'effort_estimate': item.effort_estimate,
+                'assigned_to': item.assigned_to.email if item.assigned_to else None,
+                'target_milestone': item.target_milestone
+            })
+        
+        stats['active_work'] = active_list
+        
+        return Response(stats)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def update_test_plan(request, ticket_id):
+    """Admin: Update test plan for a ticket"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        data = request.data
+        test_plan = data.get('test_plan', {})
+        
+        # Validate test plan structure
+        if not isinstance(test_plan, dict):
+            return Response({'error': 'Test plan must be a valid object'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        ticket.test_plan = test_plan
+        ticket.save()
+        
+        return Response({
+            'id': ticket.id,
+            'test_plan': ticket.test_plan,
+            'message': 'Test plan updated successfully'
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def update_ticket_stage(request, ticket_id):
+    """Admin: Update ticket stage"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        data = request.data
+        new_stage = data.get('stage')
+        
+        if new_stage not in [choice[0] for choice in SupportTicket._meta.get_field('stage').choices]:
+            return Response({'error': 'Invalid stage'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        old_stage = ticket.stage
+        ticket.stage = new_stage
+        
+        # Set completed_at if moving to DEPLOYED
+        if new_stage == 'DEPLOYED' and not ticket.completed_at:
+            ticket.completed_at = timezone.now()
+        
+        ticket.save()
+        
+        return Response({
+            'id': ticket.id,
+            'stage': ticket.stage,
+            'previous_stage': old_stage,
+            'completed_at': ticket.completed_at.isoformat() if ticket.completed_at else None,
+            'message': f'Ticket stage updated from {old_stage} to {new_stage}'
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

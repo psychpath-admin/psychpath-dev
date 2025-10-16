@@ -37,6 +37,116 @@ class SystemConfiguration(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(30)],
         help_text="Number of days after week start date when logbook submission becomes overdue"
     )
+    
+    # ============================================================================
+    # AHPRA 5+1 Supervision Requirements Configuration
+    # ============================================================================
+    
+    # Total Supervision Hours
+    min_supervision_hours_total = models.PositiveIntegerField(
+        default=80,
+        validators=[MinValueValidator(1), MaxValueValidator(200)],
+        help_text="Minimum total supervision hours required for 5+1 program"
+    )
+    min_practice_hours_per_supervision = models.PositiveIntegerField(
+        default=17,
+        validators=[MinValueValidator(1), MaxValueValidator(50)],
+        help_text="Minimum practice hours for each supervision hour (1:17 ratio)"
+    )
+    
+    # Supervision Type Breakdown
+    min_individual_supervision_hours = models.PositiveIntegerField(
+        default=50,
+        validators=[MinValueValidator(1), MaxValueValidator(200)],
+        help_text="Minimum individual supervision hours (typically 2/3 of total)"
+    )
+    min_individual_supervision_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=66.67,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Minimum percentage of individual supervision"
+    )
+    max_group_supervision_hours = models.PositiveIntegerField(
+        default=30,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Maximum group supervision hours"
+    )
+    
+    # Direct vs Indirect Supervision
+    min_direct_supervision_hours = models.PositiveIntegerField(
+        default=70,
+        validators=[MinValueValidator(1), MaxValueValidator(200)],
+        help_text="Minimum direct supervision hours (in-person, video, phone)"
+    )
+    max_phone_supervision_hours = models.PositiveIntegerField(
+        default=20,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Maximum phone supervision hours"
+    )
+    max_indirect_supervision_hours = models.PositiveIntegerField(
+        default=10,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Maximum indirect/asynchronous supervision hours"
+    )
+    
+    # Observational Requirements
+    required_assessment_observations = models.PositiveIntegerField(
+        default=4,
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+        help_text="Required number of assessment observations"
+    )
+    required_intervention_observations = models.PositiveIntegerField(
+        default=4,
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+        help_text="Required number of intervention observations"
+    )
+    total_required_observations = models.PositiveIntegerField(
+        default=8,
+        validators=[MinValueValidator(0), MaxValueValidator(40)],
+        help_text="Total required observations (assessments + interventions)"
+    )
+    
+    # Supervisor Requirements
+    require_board_approved_supervisor = models.BooleanField(
+        default=True,
+        help_text="Require supervisor to be Board-approved"
+    )
+    allow_secondary_supervisor = models.BooleanField(
+        default=True,
+        help_text="Allow secondary supervisors"
+    )
+    
+    # Cultural Supervision
+    allow_cultural_supervision = models.BooleanField(
+        default=True,
+        help_text="Allow culturally-informed supervision for Indigenous trainees"
+    )
+    cultural_supervision_counts_toward_minimum = models.BooleanField(
+        default=True,
+        help_text="Count cultural supervision towards minimum hours requirement"
+    )
+    
+    # Timing & Distribution
+    require_regular_supervision_distribution = models.BooleanField(
+        default=True,
+        help_text="Require regular distribution of supervision throughout internship"
+    )
+    min_weeks_with_supervision = models.PositiveIntegerField(
+        default=48,
+        validators=[MinValueValidator(1), MaxValueValidator(104)],
+        help_text="Minimum number of weeks that must have supervision logged"
+    )
+    supervision_frequency_warning_weeks = models.PositiveIntegerField(
+        default=2,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text="Alert if no supervision logged for this many weeks"
+    )
+    
+    # ============================================================================
+    # End AHPRA Configuration
+    # ============================================================================
+    
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -58,7 +168,26 @@ class SystemConfiguration(models.Model):
             defaults={
                 'description': 'Main system configuration',
                 'target_logbooks_count': 52,
-                'submission_deadline_days': 14
+                'submission_deadline_days': 14,
+                # AHPRA Supervision defaults
+                'min_supervision_hours_total': 80,
+                'min_practice_hours_per_supervision': 17,
+                'min_individual_supervision_hours': 50,
+                'min_individual_supervision_percentage': 66.67,
+                'max_group_supervision_hours': 30,
+                'min_direct_supervision_hours': 70,
+                'max_phone_supervision_hours': 20,
+                'max_indirect_supervision_hours': 10,
+                'required_assessment_observations': 4,
+                'required_intervention_observations': 4,
+                'total_required_observations': 8,
+                'require_board_approved_supervisor': True,
+                'allow_secondary_supervisor': True,
+                'allow_cultural_supervision': True,
+                'cultural_supervision_counts_toward_minimum': True,
+                'require_regular_supervision_distribution': True,
+                'min_weeks_with_supervision': 48,
+                'supervision_frequency_warning_weeks': 2,
             }
         )
         return config

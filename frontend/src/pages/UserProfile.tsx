@@ -18,6 +18,7 @@ import ProvisionalPsychologistWelcomeOverlay from '@/components/ProvisionalPsych
 import { getCityInfo } from '@/lib/cityMapping'
 import { useErrorHandler } from '@/hooks/useErrorHandler'
 import ErrorOverlay from '@/components/ErrorOverlay'
+import SuccessMessage from '@/components/SuccessMessage'
 import DisconnectionRequestModal from '@/components/DisconnectionRequestModal'
 
 interface UserProfile {
@@ -134,6 +135,7 @@ const UserProfile: React.FC = () => {
   const [isAuthed, setIsAuthed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const [signatureFile, setSignatureFile] = useState<File | null>(null)
   const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
   const [initialsFile, setInitialsFile] = useState<File | null>(null)
@@ -1089,11 +1091,8 @@ const UserProfile: React.FC = () => {
           throw new Error(errorData.error || 'Failed to update profile')
         }
 
-        // Show success message with role-specific text
-        const successMessage = profile.role === 'SUPERVISOR' 
-          ? 'Supervisor profile updated successfully!' 
-          : 'Profile updated successfully!'
-        alert(successMessage)
+        // Show success message
+        setShowSuccessMessage(true)
         
         // Reload profile to get updated data from server
         await loadProfile()
@@ -1225,10 +1224,16 @@ const UserProfile: React.FC = () => {
   console.log('UserProfile render - profile.role:', profile.role, 'qualification_level:', profile.qualification_level)
   
   return (
-    <div className="container mx-auto py-8 space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="font-headings text-3xl text-textDark">User Profile</h1>
-      </div>
+    <>
+      <SuccessMessage 
+        show={showSuccessMessage}
+        message="Profile updated successfully"
+        onClose={() => setShowSuccessMessage(false)}
+      />
+      <div className="container mx-auto py-8 space-y-8">
+        <div className="flex items-center justify-between">
+          <h1 className="font-headings text-3xl text-textDark">User Profile</h1>
+        </div>
 
       {/* Authentication Notice */}
       {!isAuthed && (
@@ -2579,7 +2584,8 @@ const UserProfile: React.FC = () => {
           onSuccess={handleDisconnectionSuccess}
         />
       )}
-    </div>
+      </div>
+    </>
   )
 }
 

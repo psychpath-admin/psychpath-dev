@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { Link } from 'react-router-dom'
 import HeaderNotificationBell from '@/components/HeaderNotificationBell'
-import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar, Award, Target, GraduationCap, Mail } from 'lucide-react'
+import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar, Award, Target, GraduationCap, Mail, HelpCircle, MapPin } from 'lucide-react'
 // Logo is served from public folder
 
 export function Navbar() {
@@ -57,30 +57,30 @@ export function Navbar() {
                   <div className="grid gap-3 p-4 w-[400px]">
                     <div className="grid gap-2">
                       <h4 className="font-medium text-sm text-textDark">Logbook Sections</h4>
-                      <Link to="/section-a" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
-                        <FileText className="h-4 w-4 text-blue-600" />
-                        <div>
+                      <Link to="/section-a" className="flex items-start gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <FileText className="h-4 w-4 text-blue-600 mt-0.5" />
+                        <div className="text-left">
                           <div className="font-medium">Section A</div>
                           <div className="text-xs text-gray-500">Direct Client Contact</div>
                         </div>
                       </Link>
-                      <Link to="/section-b" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
-                        <FileText className="h-4 w-4 text-green-600" />
-                        <div>
+                      <Link to="/section-b" className="flex items-start gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <FileText className="h-4 w-4 text-green-600 mt-0.5" />
+                        <div className="text-left">
                           <div className="font-medium">Section B</div>
                           <div className="text-xs text-gray-500">Professional Development</div>
                         </div>
                       </Link>
-                      <Link to="/section-c" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
-                        <FileText className="h-4 w-4 text-purple-600" />
-                        <div>
+                      <Link to="/section-c" className="flex items-start gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <FileText className="h-4 w-4 text-purple-600 mt-0.5" />
+                        <div className="text-left">
                           <div className="font-medium">Section C</div>
                           <div className="text-xs text-gray-500">Supervision</div>
                         </div>
                       </Link>
-                      <Link to="/logbook" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
-                        <ClipboardList className="h-4 w-4 text-indigo-600" />
-                        <div>
+                      <Link to="/logbook" className="flex items-start gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <ClipboardList className="h-4 w-4 text-indigo-600 mt-0.5" />
+                        <div className="text-left">
                           <div className="font-medium">Weekly Logbook</div>
                           <div className="text-xs text-gray-500">Submit & Review</div>
                         </div>
@@ -222,6 +222,22 @@ export function Navbar() {
               <HeaderNotificationBell />
               <NavigationMenu>
                 <NavigationMenuList>
+                  {/* Help Button */}
+                  <NavigationMenuItem>
+                    <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue flex items-center gap-2" to="/support-tickets">
+                      <HelpCircle className="h-4 w-4" />
+                      Help
+                    </Link>
+                  </NavigationMenuItem>
+
+                  {/* Roadmap Button */}
+                  <NavigationMenuItem>
+                    <Link className="px-3 py-2 text-sm text-textDark hover:text-primaryBlue flex items-center gap-2" to="/roadmap">
+                      <MapPin className="h-4 w-4" />
+                      Roadmap
+                    </Link>
+                  </NavigationMenuItem>
+                  
                   <NavigationMenuItem>
                     <NavigationMenuTrigger className="text-sm text-textDark hover:text-primaryBlue">
                       <User className="h-4 w-4 mr-2" />

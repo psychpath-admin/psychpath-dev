@@ -3,15 +3,14 @@ import './App.css'
 import Navbar from '@/components/Navbar'
 import RegistrarNavigation from '@/components/registrar/RegistrarNavigation'
 import PathwaySwitcher from '@/components/PathwaySwitcher'
-import { AuthProvider } from '@/context/AuthContext'
 import LoginPage from '@/pages/LoginPage'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import EPADetail from '@/pages/EPADetail'
 import SupervisorQueue from '@/pages/SupervisorQueue'
 import OrgDashboard from '@/pages/OrgDashboard'
 import SupervisorLinks from '@/pages/SupervisorLinks'
-import { useEffect, useState } from 'react'
-import { apiFetch } from '@/lib/api'
+import { useState } from 'react'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import MyReflections from '@/pages/MyReflections'
 import WeeklyLogbookEditor from '@/pages/WeeklyLogbookEditor'
 import LogbookPage from '@/pages/LogbookPage'
@@ -22,6 +21,8 @@ import SectionB from '@/pages/SectionB'
 import SectionC from '@/pages/SectionC'
 import CRAForm from '@/components/CRAForm'
 import SupervisionInvitations from '@/pages/SupervisionInvitations'
+import SupportTickets from '@/pages/SupportTickets'
+import Roadmap from '@/pages/Roadmap'
 
 // Wrapper component for CRA form to handle routing
 function CRAFormWrapper() {
@@ -161,6 +162,8 @@ import RegistrarReports from '@/pages/registrar/RegistrarReports'
 import ConfigurationManagement from '@/pages/ConfigurationManagement'
 import ConfigurationExample from '@/components/ConfigurationExample'
 import CompetenciesHelp from '@/pages/CompetenciesHelp'
+import ReportIssueButton from '@/components/ReportIssueButton'
+import { ModalProvider } from '@/contexts/ModalContext'
 
 // Component to redirect users to appropriate dashboard based on role
 const DashboardRedirect: React.FC<{ userRole?: string }> = ({ userRole }) => {
@@ -172,52 +175,28 @@ const DashboardRedirect: React.FC<{ userRole?: string }> = ({ userRole }) => {
   return <Dashboard userRole={userRole} />
 }
 
-function App() {
-  const [me, setMe] = useState<{ role?: string } | null>(null)
-  const [loaded, setLoaded] = useState(false)
+function AppContent() {
+  const { user, isLoading } = useAuth()
 
   // Setup global error handling
   React.useEffect(() => {
     setupGlobalErrorHandling()
   }, [])
 
-  useEffect(() => {
-    console.log('App: Starting auth check')
-    const token = localStorage.getItem('accessToken')
-    if (!token) {
-      console.log('App: No token, setting loaded to true')
-      setLoaded(true)
-      return
-    }
-    console.log('App: Token found, checking /api/me/')
-    apiFetch('/api/me/').then(async (r) => {
-      if (r.ok) {
-        const userData = await r.json()
-        console.log('App: User data received:', userData)
-        console.log('App: User role:', userData.role)
-        console.log('App: User role type:', typeof userData.role)
-        setMe(userData)
-      } else {
-        console.log('App: Auth failed, status:', r.status)
-        // Clear invalid tokens
-        localStorage.removeItem('accessToken')
-        localStorage.removeItem('refreshToken')
-        setMe(null)
-      }
-    }).catch((error) => {
-      console.log('App: Auth error:', error)
-      // Clear invalid tokens on error
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('refreshToken')
-      setMe(null)
-    }).finally(() => {
-      console.log('App: Setting loaded to true')
-      setLoaded(true)
-    })
-  }, [])
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) => {
-    if (!me) return <Navigate to="/login" replace />
+    if (!user) return <Navigate to="/login" replace />
     
     const isRegistrarPath = window.location.pathname.startsWith('/registrar')
     
@@ -225,9 +204,9 @@ function App() {
       <>
         {isRegistrarPath ? <RegistrarNavigation /> : <Navbar />}
         <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
-          {(me.role === 'REGISTRAR') && (
+          {(user.role === 'REGISTRAR') && (
             <PathwaySwitcher 
-              userRole={me.role}
+              userRole={user.role}
               hasRegistrarProgram={true}
               hasProvisionalProgram={true}
             />
@@ -244,11 +223,10 @@ function App() {
   }
 
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <div className="min-h-screen">
-          {!loaded ? null : (
-          <Routes>
+    <ModalProvider>
+      <div className="min-h-screen">
+        {user && <ReportIssueButton />}
+      <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/register" element={<PublicRoute><RegisterTerms /></PublicRoute>} />
@@ -256,7 +234,7 @@ function App() {
           <Route path="/register/verify" element={<PublicRoute><RegisterVerify /></PublicRoute>} />
           <Route path="/register/subscribe" element={<PublicRoute><RegisterSubscribe /></PublicRoute>} />
 
-          <Route path="/" element={<RequireAuth><DashboardRedirect userRole={me?.role} /></RequireAuth>} />
+          <Route path="/" element={<RequireAuth><DashboardRedirect userRole={user?.role} /></RequireAuth>} />
           <Route path="/epa/:code" element={<RequireAuth><EPADetail /></RequireAuth>} />
           <Route path="/section-a" element={<RequireAuth><SectionA /></RequireAuth>} />
           <Route path="/section-a/create" element={<RequireAuth><SectionA /></RequireAuth>} />
@@ -275,7 +253,7 @@ function App() {
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           <Route path="/supervision-invitations" element={
             <RequireAuth>
-              {me?.role === 'SUPERVISOR' ? (
+              {user?.role === 'SUPERVISOR' ? (
                 <Navigate to="/supervisor/dashboard" replace />
               ) : (
                 <SupervisionInvitations />
@@ -286,31 +264,41 @@ function App() {
           <Route path="/competencies" element={<RequireAuth><CoreCompetencyReference /></RequireAuth>} />
           <Route path="/competency-viewer" element={<RequireAuth><CoreCompetencyViewer /></RequireAuth>} />
           <Route path="/epas" element={<RequireAuth><EPABrowser /></RequireAuth>} />
-          {me?.role === 'ORG_ADMIN' && <Route path="/admin/epa-coverage" element={<RequireAuth><EPACoverageAudit /></RequireAuth>} />}
+          {user?.role === 'ORG_ADMIN' && <Route path="/admin/epa-coverage" element={<RequireAuth><EPACoverageAudit /></RequireAuth>} />}
           <Route path="/help/errors" element={<ErrorHelp />} />
           <Route path="/competencies-help" element={<CompetenciesHelp />} />
           {/* Configuration Management Routes - Admin Only */}
-          {me?.role === 'ORG_ADMIN' && <Route path="/admin/configuration" element={<RequireAuth><ConfigurationManagement /></RequireAuth>} />}
+          {user?.role === 'ORG_ADMIN' && <Route path="/admin/configuration" element={<RequireAuth><ConfigurationManagement /></RequireAuth>} />}
           <Route path="/config-demo" element={<RequireAuth><ConfigurationExample /></RequireAuth>} />
           {/* Registrar Routes */}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar" element={<RequireAuth><RegistrarDashboard /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/setup" element={<RequireAuth><RegistrarProgramSetup /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/practice" element={<RequireAuth><RegistrarPracticeLog /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/practice/new" element={<RequireAuth><RegistrarPracticeEntryForm /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/practice/:id/edit" element={<RequireAuth><RegistrarPracticeEntryForm /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/supervision" element={<RequireAuth><RegistrarSupervisionLog /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/reports" element={<RequireAuth><RegistrarReports /></RequireAuth>} />}
-      {me?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
-      {me?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
-      {me?.role === 'SUPERVISOR' && <Route path="/supervisor/dashboard" element={<RequireAuth><SupervisorDashboard /></RequireAuth>} />}
-      {me?.role === 'SUPERVISOR' && <Route path="/supervisor/logbook-review" element={<RequireAuth><SupervisorLogbookReview /></RequireAuth>} />}
-          {me?.role === 'SUPERVISOR' && <Route path="/logbooks/:id/review" element={<RequireAuth><LogbookReview /></RequireAuth>} />}
-          {me?.role === 'ORG_ADMIN' && <Route path="/org" element={<RequireAuth><OrgDashboard /></RequireAuth>} />}
+                    {user?.role === 'REGISTRAR' && <Route path="/registrar" element={<RequireAuth><RegistrarDashboard /></RequireAuth>} />}
+                    {user?.role === 'REGISTRAR' && <Route path="/registrar/setup" element={<RequireAuth><RegistrarProgramSetup /></RequireAuth>} />}
+                    {user?.role === 'REGISTRAR' && <Route path="/registrar/practice" element={<RequireAuth><RegistrarPracticeLog /></RequireAuth>} />}
+                    {user?.role === 'REGISTRAR' && <Route path="/registrar/practice/new" element={<RequireAuth><RegistrarPracticeEntryForm /></RequireAuth>} />}
+                    {user?.role === 'REGISTRAR' && <Route path="/registrar/practice/:id/edit" element={<RequireAuth><RegistrarPracticeEntryForm /></RequireAuth>} />}
+                    {user?.role === 'REGISTRAR' && <Route path="/registrar/supervision" element={<RequireAuth><RegistrarSupervisionLog /></RequireAuth>} />}
+                    {user?.role === 'REGISTRAR' && <Route path="/registrar/reports" element={<RequireAuth><RegistrarReports /></RequireAuth>} />}
+      {user?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
+      {user?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
+      {user?.role === 'SUPERVISOR' && <Route path="/supervisor/dashboard" element={<RequireAuth><SupervisorDashboard /></RequireAuth>} />}
+      {user?.role === 'SUPERVISOR' && <Route path="/supervisor/logbook-review" element={<RequireAuth><SupervisorLogbookReview /></RequireAuth>} />}
+          {user?.role === 'SUPERVISOR' && <Route path="/logbooks/:id/review" element={<RequireAuth><LogbookReview /></RequireAuth>} />}
+          {user?.role === 'ORG_ADMIN' && <Route path="/org" element={<RequireAuth><OrgDashboard /></RequireAuth>} />}
+          <Route path="/support-tickets" element={<RequireAuth><SupportTickets /></RequireAuth>} />
+          <Route path="/roadmap" element={<RequireAuth><Roadmap /></RequireAuth>} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-        )}
         <Toaster position="top-right" richColors />
       </div>
+    </ModalProvider>
+  )
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
       </AuthProvider>
     </ErrorBoundary>
   )

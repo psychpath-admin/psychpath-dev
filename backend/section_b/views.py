@@ -16,6 +16,7 @@ from .serializers import (
     PDWeeklySummarySerializer,
     PDEntryWithSummarySerializer
 )
+from audit_utils import log_section_b_create, log_section_b_update, log_section_b_delete
 
 
 class ProfessionalDevelopmentEntryListCreateView(generics.ListCreateAPIView):
@@ -45,6 +46,9 @@ class ProfessionalDevelopmentEntryListCreateView(generics.ListCreateAPIView):
         date_of_activity = serializer.validated_data['date_of_activity']
         week_starting = date_of_activity - timedelta(days=date_of_activity.weekday())
         instance = serializer.save(trainee=self.request.user, week_starting=week_starting)
+        
+        # Log the creation
+        log_section_b_create(self.request.user, instance, self.request)
         
         # Update weekly summary
         self.update_weekly_summary(self.request.user, week_starting)
@@ -92,20 +96,48 @@ class ProfessionalDevelopmentEntryDetailView(generics.RetrieveUpdateDestroyAPIVi
         return ProfessionalDevelopmentEntry.objects.all()
     
     def perform_update(self, serializer):
+        # Capture old data before update
+        instance = self.get_object()
+        old_data = {
+            'activity_type': instance.activity_type,
+            'date_of_activity': str(instance.date_of_activity) if instance.date_of_activity else None,
+            'duration_minutes': instance.duration_minutes,
+            'competencies_covered': instance.competencies_covered,
+        }
+        
         # Recalculate week starting date if date changed
         if 'date_of_activity' in serializer.validated_data:
             date_of_activity = serializer.validated_data['date_of_activity']
             week_starting = date_of_activity - timedelta(days=date_of_activity.weekday())
-            serializer.save(week_starting=week_starting)
+            updated_instance = serializer.save(week_starting=week_starting)
+            
+            # Log the update
+            log_section_b_update(self.request.user, updated_instance, old_data, self.request)
             
             # Update weekly summary
             self.update_weekly_summary(self.request.user, week_starting)
         else:
-            serializer.save()
+            updated_instance = serializer.save()
+            # Log the update
+            log_section_b_update(self.request.user, updated_instance, old_data, self.request)
     
     def perform_destroy(self, instance):
+        # Capture entry data before deletion
+        entry_data = {
+            'activity_type': instance.activity_type,
+            'date_of_activity': str(instance.date_of_activity) if instance.date_of_activity else None,
+            'duration_minutes': instance.duration_minutes,
+            'competencies_covered': instance.competencies_covered,
+        }
+        entry_id = instance.id
         week_starting = instance.week_starting
+        
+        # Perform deletion
         instance.delete()
+        
+        # Log the deletion
+        log_section_b_delete(self.request.user, entry_id, entry_data, self.request)
+        
         # Update weekly summary after deletion
         self.update_weekly_summary(self.request.user, week_starting)
     

@@ -2,9 +2,22 @@ import React from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import LoginForm from '@/components/LoginForm'
 import { Link } from 'react-router-dom'
-// Logo is served from public folder
+import { useAuth } from '@/contexts/AuthContext'
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 const LoginPage: React.FC = () => {
+  const { isAuthenticated } = useAuth()
+  const navigate = useNavigate()
+  
+  useEffect(() => {
+    // If user is already authenticated, redirect to dashboard
+    if (isAuthenticated) {
+      console.log('LoginPage: User already authenticated, redirecting to dashboard')
+      navigate('/')
+    }
+  }, [isAuthenticated, navigate])
+  
   return (
     <div className="min-h-screen bg-white">
       <Card className="h-full overflow-hidden border-0 shadow-none bg-transparent">

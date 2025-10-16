@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PsychPATH Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        input, button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success {
+            background: #d1fae5;
+            border: 1px solid #10b981;
+        }
+        .error {
+            background: #fee2e2;
+            border: 1px solid #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <h1>PsychPATH Login Test</h1>
+    <p>Test your login credentials here. This bypasses the React app to isolate the issue.</p>
+    
+    <input type="email" id="email" placeholder="Email" value="intern4.demo@cymp.com.au">
+    <input type="password" id="password" placeholder="Password" value="testpass123">
+    <button onclick="testLogin()">Test Login</button>
+    
+    <div id="result"></div>
+    
+    <script>
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('result');
+            
+            resultDiv.textContent = 'Testing login...';
+            resultDiv.className = '';
+            
+            try {
+                console.log('Attempting login with:', email);
+                
+                const response = await fetch('/api/auth/token/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: email,
+                        password: password
+                    })
+                });
+                
+                console.log('Response status:', response.status);
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Store tokens
+                    localStorage.setItem('accessToken', data.access);
+                    localStorage.setItem('refreshToken', data.refresh);
+                    
+                    resultDiv.className = 'success';
+                    resultDiv.textContent = '✅ LOGIN SUCCESSFUL!\n\n' +
+                        'Access Token: ' + data.access.substring(0, 50) + '...\n' +
+                        'Refresh Token: ' + data.refresh.substring(0, 50) + '...\n\n' +
+                        'Tokens saved to localStorage.\n' +
+                        'You can now go to http://localhost:5173 and you should be logged in!';
+                } else {
+                    resultDiv.className = 'error';
+                    resultDiv.textContent = '❌ LOGIN FAILED\n\n' +
+                        'Status: ' + response.status + '\n' +
+                        'Error: ' + JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = '❌ ERROR\n\n' + error.message + '\n\n' + error.stack;
+            }
+        }
+    </script>
+</body>
+</html>
+

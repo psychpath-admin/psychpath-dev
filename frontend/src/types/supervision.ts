@@ -12,6 +12,10 @@ export interface SupervisionEntry {
   locked?: boolean
   supervisor_comment?: string
   trainee_response?: string
+  // AHPRA compliance fields
+  supervision_mode?: 'DIRECT_PERSON' | 'DIRECT_VIDEO' | 'DIRECT_PHONE' | 'INDIRECT'
+  is_cultural_supervision?: boolean
+  supervisor_is_board_approved?: boolean
   created_at: string
   updated_at: string
 }

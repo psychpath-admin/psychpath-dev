@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch, updateSectionAEntry, updatePDEntry, updateSupervisionEntry } from '@/lib/api'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface LogbookEntry {
   id: number

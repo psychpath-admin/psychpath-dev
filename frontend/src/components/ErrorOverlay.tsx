@@ -223,14 +223,14 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Try Again
+                  Refresh Page
                 </Button>
               ) : (
                 <Button
                   onClick={handleDismiss}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  I Understand
+                  Got It
                 </Button>
               )}
               <Button
@@ -245,7 +245,7 @@ const ErrorOverlay: React.FC<ErrorOverlayProps> = ({
                 style={{ pointerEvents: 'auto' }}
               >
                 <HelpCircle className="w-4 h-4 mr-2" />
-                I Need More Help
+                Contact Support
               </Button>
             </div>
           </CardContent>

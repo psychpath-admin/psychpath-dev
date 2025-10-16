@@ -11,7 +11,7 @@ import {
   Users, 
   Clock, 
   User, 
-  Target, 
+  Target,
   ChevronDown, 
   ChevronUp, 
   ChevronLeft,
@@ -21,13 +21,15 @@ import {
   Eye,
   Edit,
   Trash2,
-  Calendar
+  Calendar,
+  CheckCircle
 } from 'lucide-react'
 import { 
   getSupervisionEntriesGroupedByWeek, 
   createSupervisionEntry, 
   updateSupervisionEntry, 
-  deleteSupervisionEntry
+  deleteSupervisionEntry,
+  apiFetch
 } from '@/lib/api'
 import type { SupervisionEntry, SupervisionWeeklyGroup } from '@/types/supervision'
 import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
@@ -43,6 +45,7 @@ const SectionC: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState<SupervisionEntry | null>(null)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
 
@@ -73,13 +76,16 @@ const SectionC: React.FC = () => {
   
   // Tooltip toggle
   const [showTooltips, setShowTooltips] = useState(true)
+  const [systemConfig, setSystemConfig] = useState<any>(null) // System configuration for AHPRA requirements - loads configurable supervision targets
+  const [userProfile, setUserProfile] = useState<any>(null) // User profile data for supervisor names
   const [formData, setFormData] = useState({
     date_of_supervision: new Date().toISOString().split('T')[0],
     supervisor_name: '',
     supervisor_type: 'PRINCIPAL' as 'PRINCIPAL' | 'SECONDARY',
     supervision_type: 'INDIVIDUAL' as 'INDIVIDUAL' | 'GROUP' | 'OTHER',
     duration_minutes: 60,
-    summary: ''
+    summary: '',
+    supervision_mode: 'DIRECT_PERSON' as 'DIRECT_PERSON' | 'DIRECT_VIDEO' | 'DIRECT_PHONE' | 'INDIRECT'
   })
 
   const supervisorTypes = [
@@ -361,7 +367,73 @@ const SectionC: React.FC = () => {
 
   useEffect(() => {
     loadData()
+    loadSystemConfiguration()
+    loadUserProfile()
   }, [])
+
+  // Auto-populate supervisor name when userProfile is loaded and form is for new entry
+  useEffect(() => {
+    if (userProfile && !editingEntry && showForm) {
+      setFormData(prev => ({
+        ...prev,
+        supervisor_name: prev.supervisor_type === 'PRINCIPAL' 
+          ? (userProfile.principal_supervisor || '')
+          : (userProfile.secondary_supervisor || '')
+      }))
+    }
+  }, [userProfile, editingEntry, showForm])
+
+  // Auto-hide success message after 4 seconds
+  useEffect(() => {
+    if (showSuccessMessage) {
+      const timer = setTimeout(() => {
+        setShowSuccessMessage(false)
+      }, 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [showSuccessMessage])
+
+  const loadUserProfile = async () => {
+    try {
+      const response = await apiFetch('/api/user-profile/')
+      if (response.ok) {
+        const profile = await response.json()
+        setUserProfile(profile)
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error)
+    }
+  }
+
+  const loadSystemConfiguration = async () => {
+    try {
+      // Fetch system configuration using apiFetch (handles token refresh)
+      const response = await apiFetch('/api/config/configurations/')
+      
+      if (response.ok) {
+        const configs = await response.json()
+        // Find the main configuration
+        const mainConfig = configs.find((config: any) => config.name === 'main')
+        if (mainConfig) {
+          setSystemConfig(mainConfig)
+        } else {
+          throw new Error('Main configuration not found')
+        }
+      } else {
+        throw new Error(`Failed to fetch configuration: ${response.statusText}`)
+      }
+    } catch (error) {
+      console.error('Error loading system configuration:', error)
+      // Set default values if config loading fails
+      setSystemConfig({
+        min_supervision_hours_total: 80,
+        min_individual_supervision_hours: 50,
+        max_group_supervision_hours: 30,
+        min_practice_hours_per_supervision: 17,
+        min_individual_supervision_percentage: 66.67
+      })
+    }
+  }
 
   const loadData = async () => {
     try {
@@ -381,11 +453,12 @@ const SectionC: React.FC = () => {
     setEditingEntry(null)
     setFormData({
       date_of_supervision: new Date().toISOString().split('T')[0],
-      supervisor_name: '',
+      supervisor_name: userProfile?.principal_supervisor || '',
       supervisor_type: 'PRINCIPAL',
       supervision_type: 'INDIVIDUAL',
       duration_minutes: 60,
-      summary: ''
+      summary: '',
+      supervision_mode: 'DIRECT_PERSON'
     })
     setShowForm(true)
   }
@@ -409,7 +482,8 @@ const SectionC: React.FC = () => {
       supervisor_type: entry.supervisor_type,
       supervision_type: entry.supervision_type,
       duration_minutes: entry.duration_minutes,
-      summary: entry.summary
+      summary: entry.summary,
+      supervision_mode: (entry as any).supervision_mode || 'DIRECT_PERSON'
     })
     setShowForm(true)
   }
@@ -417,15 +491,30 @@ const SectionC: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const isEditing = !!editingEntry
+      
       if (editingEntry) {
         await updateSupervisionEntry(editingEntry.id, formData)
       } else {
         await createSupervisionEntry(formData)
       }
+      
+      // Show success message
+      setShowSuccessMessage(true)
       setShowForm(false)
-      const returnTo = (location.state as any)?.returnTo as string | undefined
-      if (returnTo) navigate(returnTo)
+      setEditingEntry(null) // Clear editing state
+      
+      // Load updated data
       loadData()
+      
+      // Navigate back after showing success message
+      setTimeout(() => {
+        const returnTo = (location.state as any)?.returnTo as string | undefined
+        if (returnTo) {
+          navigate(returnTo)
+        }
+      }, 4000) // Show success message for 4 seconds
+      
     } catch (error) {
       console.error('Error saving supervision entry:', error)
     }
@@ -460,6 +549,23 @@ const SectionC: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bgSection">
+      {/* Success Message Overlay */}
+      {showSuccessMessage && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4 shadow-xl animate-in fade-in-0 zoom-in-95 duration-300">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="w-8 h-8 text-green-600 flex-shrink-0" />
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Success!</h3>
+                <p className="text-gray-600">
+                  Supervision entry saved successfully
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="container mx-auto px-4 py-4">
         {/* Hero Section - PsychPathway Brand */}
         <div className="mb-4">
@@ -467,7 +573,7 @@ const SectionC: React.FC = () => {
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <h1 className="text-3xl font-headings mb-1">Section C: Supervision</h1>
-                <p className="text-white/90 text-base font-body">Track your supervision sessions and professional development</p>
+                <p className="text-white/90 text-base font-body">Track your supervision requirements and compliance status</p>
                 <div className="flex gap-2 mt-3">
                   <Button
                     onClick={() => window.location.href = '/section-a'}
@@ -515,108 +621,8 @@ const SectionC: React.FC = () => {
           </div>
         </div>
 
-
-        {/* Summary Cards */}
+        {/* Compliance Dashboard Cards */}
         {(() => {
-          const totalEntries = weeklyGroups.reduce((sum, group) => sum + group.entries.length, 0)
-          const totalMinutes = weeklyGroups.reduce((sum, group) => 
-            sum + group.entries.reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
-          const individualMinutes = weeklyGroups.reduce((sum, group) => 
-            sum + group.entries.filter(entry => entry.supervision_type === 'INDIVIDUAL')
-              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
-          const groupMinutes = weeklyGroups.reduce((sum, group) => 
-            sum + group.entries.filter(entry => entry.supervision_type === 'GROUP')
-              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
-          const secondaryMinutes = weeklyGroups.reduce((sum, group) => 
-            sum + group.entries.filter(entry => entry.supervisor_type === 'SECONDARY')
-              .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
-
-          return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Total Sessions</p>
-                      <p className="text-3xl font-bold text-primary">{totalEntries}</p>
-                    </div>
-                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <Users className="h-6 w-6 text-primary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Total Hours</p>
-                      <p className="text-3xl font-bold text-secondary">{formatDurationWithUnit(totalMinutes)}</p>
-                    </div>
-                    <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
-                      <Clock className="h-6 w-6 text-secondary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Individual Hours</p>
-                      <p className="text-3xl font-bold text-accent">{formatDurationWithUnit(individualMinutes)}</p>
-                    </div>
-                    <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
-                      <User className="h-6 w-6 text-accent" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Group Hours</p>
-                      <p className="text-3xl font-bold text-primary">{formatDurationWithUnit(groupMinutes)}</p>
-                    </div>
-                    <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <Users className="h-6 w-6 text-primary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="brand-card hover:shadow-md transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="brand-label">Secondary Hours</p>
-                      <p className="text-3xl font-bold text-secondary">{formatDurationWithUnit(secondaryMinutes)}</p>
-                    </div>
-                    <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
-                      <User className="h-6 w-6 text-secondary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )
-        })()}
-
-        {/* AHPRA Supervision Compliance Dashboard */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-8 w-8 bg-accent rounded-full flex items-center justify-center">
-              <Target className="h-4 w-4 text-white" />
-            </div>
-            <h2 className="text-2xl font-headings text-textDark">AHPRA SUPERVISION COMPLIANCE</h2>
-          </div>
-          <p className="text-textLight mb-6 font-body">Track your supervision requirements and compliance status</p>
-          
-          {(() => {
             // Calculate all supervision metrics
             const totalSupervisionMinutes = totalMinutes
             const totalSupervisionHours = totalSupervisionMinutes / 60
@@ -624,32 +630,46 @@ const SectionC: React.FC = () => {
             const principalMinutes = weeklyGroups.reduce((sum, group) => 
               sum + group.entries.filter(entry => entry.supervisor_type === 'PRINCIPAL')
                 .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
-            const principalHours = principalMinutes / 60
+            const actualPrincipalHours = principalMinutes / 60
             
             const secondaryMinutes = weeklyGroups.reduce((sum, group) => 
               sum + group.entries.filter(entry => entry.supervisor_type === 'SECONDARY')
                 .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
-            const secondaryHours = secondaryMinutes / 60
+            const actualSecondaryHours = secondaryMinutes / 60
             
             const individualMinutes = weeklyGroups.reduce((sum, group) => 
-              sum + group.entries.filter(entry => entry.supervision_type === 'INDIVIDUAL')
+              sum + group.entries.filter(entry => entry.supervision_type === 'INDIVIDUAL' || entry.supervision_type === 'OTHER')
                 .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
             const individualHours = individualMinutes / 60
             
             const groupMinutes = weeklyGroups.reduce((sum, group) => 
               sum + group.entries.filter(entry => entry.supervision_type === 'GROUP')
                 .reduce((groupSum, entry) => groupSum + (entry.duration_minutes || 0), 0), 0)
-            const groupHours = groupMinutes / 60
+            const actualGroupHours = groupMinutes / 60
 
-            // AHPRA Requirements
+            // AHPRA Requirements from System Configuration
+            const getConfigValue = (key: string, defaultValue: number) => {
+              return systemConfig?.[key] ?? defaultValue
+            }
+            
+            const totalHours = getConfigValue('min_supervision_hours_total', 80)
+            const minIndividualHours = getConfigValue('min_individual_supervision_hours', 50)
+            const maxGroupHours = getConfigValue('max_group_supervision_hours', 30)
+            const supervisionRatio = getConfigValue('min_practice_hours_per_supervision', 17)
+            
+            // Calculate principal/secondary hours based on percentages
+            const principalPercentage = getConfigValue('min_individual_supervision_percentage', 66.67) / 100
+            const targetPrincipalHours = Math.round(totalHours * principalPercentage)
+            const targetSecondaryHours = totalHours - targetPrincipalHours
+            
             const requirements = {
-              totalHours: 80,
-              principalHours: 48, // ≥ 60%
-              secondaryHours: 32, // ≤ 40%
-              individualHours: 60,
-              groupHours: 20, // ≤ 20 hours
+              totalHours,
+              principalHours: targetPrincipalHours,
+              secondaryHours: targetSecondaryHours,
+              individualHours: minIndividualHours,
+              groupHours: maxGroupHours,
               frequencyHours: 1, // per week minimum
-              supervisionRatio: 1/17 // 1 hour supervision per 17 hours practice
+              supervisionRatio: 1/supervisionRatio // 1 hour supervision per X hours practice
             }
 
             // Calculate internship progress
@@ -725,16 +745,25 @@ const SectionC: React.FC = () => {
 
             // Calculate status considering internship progress
             const totalStatus = getRAGStatus(totalSupervisionHours, requirements.totalHours, false, true)
-            const principalStatus = getRAGStatus(principalHours, requirements.principalHours, false, true)
-            const secondaryStatus = getRAGStatus(secondaryHours, requirements.secondaryHours, true, true)
+            const principalStatus = getRAGStatus(actualPrincipalHours, requirements.principalHours, false, true)
+            const secondaryStatus = getRAGStatus(actualSecondaryHours, requirements.secondaryHours, true, true)
             const individualStatus = getRAGStatus(individualHours, requirements.individualHours, false, true)
-            const groupStatus = getRAGStatus(groupHours, requirements.groupHours, true, true)
+            const groupStatus = getRAGStatus(actualGroupHours, requirements.groupHours, true, true)
             // const ratioStatus = getSupervisionRatioStatus() // Future implementation
 
             return (
               <>
-                {/* Tooltip Toggle */}
-                <div className="flex justify-end mb-4">
+                {/* AHPRA Banner and Tooltip Toggle */}
+                <div className="flex items-center justify-between mb-4">
+                  {/* AHPRA SUPERVISION COMPLIANCE Banner */}
+                  <div className="flex items-center gap-3 bg-white rounded-lg px-4 py-2 shadow-sm border border-gray-200">
+                    <div className="h-8 w-8 bg-red-500 rounded-full flex items-center justify-center">
+                      <Target className="h-4 w-4 text-white" />
+                    </div>
+                    <h2 className="text-lg font-bold text-gray-800 uppercase">AHPRA SUPERVISION COMPLIANCE</h2>
+                  </div>
+                  
+                  {/* Tooltip Toggle */}
                   <div className="flex items-center space-x-2 bg-white/80 backdrop-blur-sm rounded-lg px-4 py-2 shadow-sm border border-gray-200">
                     <span className="text-sm text-gray-600 font-medium">Show Tooltips</span>
                     <button
@@ -753,18 +782,18 @@ const SectionC: React.FC = () => {
                 </div>
 
                 {/* Compliance Overview Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                   {/* Total Hours Compliance */}
                   <div className="relative group">
                     <Card className={`brand-card hover:shadow-md transition-all duration-300 ${totalStatus === 'red' ? 'ring-2 ring-red-200' : totalStatus === 'amber' ? 'ring-2 ring-amber-200' : ''}`}>
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
-                            <Users className="h-6 w-6 text-primary" />
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center">
+                            <Users className="h-5 w-5 text-primary" />
                           </div>
                           {getRAGBadge(totalStatus, totalStatus === 'green' ? 'Compliant' : totalStatus === 'amber' ? 'At Risk' : 'Non-Compliant')}
                         </div>
-                        <div className="text-2xl font-bold text-textDark mb-1">
+                        <div className="text-xl font-bold text-textDark mb-1">
                           {formatDurationWithUnit(totalSupervisionMinutes)}
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Total Supervision</div>
@@ -796,22 +825,22 @@ const SectionC: React.FC = () => {
                   {/* Principal Supervisor Compliance */}
                   <div className="relative group">
                     <Card className={`brand-card hover:shadow-md transition-all duration-300 ${principalStatus === 'red' ? 'ring-2 ring-red-200' : principalStatus === 'amber' ? 'ring-2 ring-amber-200' : ''}`}>
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
                           <div className="h-12 w-12 bg-secondary/10 rounded-full flex items-center justify-center">
                             <User className="h-6 w-6 text-secondary" />
                           </div>
                           {getRAGBadge(principalStatus, principalStatus === 'green' ? 'Compliant' : principalStatus === 'amber' ? 'At Risk' : 'Non-Compliant')}
                         </div>
-                        <div className="text-2xl font-bold text-textDark mb-1">
+                        <div className="text-xl font-bold text-textDark mb-1">
                           {formatDurationWithUnit(principalMinutes)}
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Principal Supervisor</div>
                         <div className="text-xs text-textLight mb-2">Target: ≥{requirements.principalHours}h (≥60% of total)</div>
                         <div className="text-xs text-textLight">
-                          {principalHours >= (requirements.principalHours * internshipProgress.progressPercentage) ? 
-                            `✓ On track (${((principalHours / totalSupervisionHours) * 100).toFixed(1)}% of total)` : 
-                            `${((requirements.principalHours * internshipProgress.progressPercentage) - principalHours).toFixed(1)}h behind schedule`}
+                          {actualPrincipalHours >= (requirements.principalHours * internshipProgress.progressPercentage) ? 
+                            `✓ On track (${((actualPrincipalHours / totalSupervisionHours) * 100).toFixed(1)}% of total)` : 
+                            `${((requirements.principalHours * internshipProgress.progressPercentage) - actualPrincipalHours).toFixed(1)}h behind schedule`}
                         </div>
                       </CardContent>
                     </Card>
@@ -822,7 +851,7 @@ const SectionC: React.FC = () => {
                       <div className="mb-2">Tracks supervision hours with your primary/principal supervisor. Must be at least 60% of total supervision.</div>
                       <div className="mb-2"><strong>Minimum Target:</strong> ≥{requirements.principalHours} hours (≥60% of total)</div>
                       <div className="mb-2"><strong>Current Hours:</strong> {formatDurationWithUnit(principalMinutes)} logged</div>
-                      <div className="mb-2"><strong>Percentage of Total:</strong> {totalSupervisionHours > 0 ? ((principalHours / totalSupervisionHours) * 100).toFixed(1) : 0}%</div>
+                      <div className="mb-2"><strong>Percentage of Total:</strong> {totalSupervisionHours > 0 ? ((actualPrincipalHours / totalSupervisionHours) * 100).toFixed(1) : 0}%</div>
                       <div className="mb-2"><strong>Status:</strong> {principalStatus === 'green' ? '✓ Compliant' : principalStatus === 'amber' ? '⚠ At Risk' : '⚠ Non-Compliant'}</div>
                       <div className="text-xs text-gray-300">
                         <strong>Requirement:</strong> Principal supervisor must provide majority of supervision hours
@@ -834,22 +863,22 @@ const SectionC: React.FC = () => {
                   {/* Secondary Supervisor Compliance */}
                   <div className="relative group">
                     <Card className={`brand-card hover:shadow-md transition-all duration-300 ${secondaryStatus === 'red' ? 'ring-2 ring-red-200' : secondaryStatus === 'amber' ? 'ring-2 ring-amber-200' : ''}`}>
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
                           <div className="h-12 w-12 bg-accent/10 rounded-full flex items-center justify-center">
                             <User className="h-6 w-6 text-accent" />
                           </div>
                           {getRAGBadge(secondaryStatus, secondaryStatus === 'green' ? 'Compliant' : secondaryStatus === 'amber' ? 'At Risk' : 'Non-Compliant')}
                         </div>
-                        <div className="text-2xl font-bold text-textDark mb-1">
+                        <div className="text-xl font-bold text-textDark mb-1">
                           {formatDurationWithUnit(secondaryMinutes)}
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Secondary Supervisor</div>
                         <div className="text-xs text-textLight mb-2">Target: ≤{requirements.secondaryHours}h (≤40% of total)</div>
                         <div className="text-xs text-textLight">
-                          {secondaryHours <= (requirements.secondaryHours * internshipProgress.progressPercentage) ? 
-                            `✓ Within limit (${((secondaryHours / totalSupervisionHours) * 100).toFixed(1)}% of total)` : 
-                            `${(secondaryHours - (requirements.secondaryHours * internshipProgress.progressPercentage)).toFixed(1)}h over progress limit`}
+                          {actualSecondaryHours <= (requirements.secondaryHours * internshipProgress.progressPercentage) ? 
+                            `✓ Within limit (${((actualSecondaryHours / totalSupervisionHours) * 100).toFixed(1)}% of total)` : 
+                            `${(actualSecondaryHours - (requirements.secondaryHours * internshipProgress.progressPercentage)).toFixed(1)}h over progress limit`}
                         </div>
                       </CardContent>
                     </Card>
@@ -860,7 +889,7 @@ const SectionC: React.FC = () => {
                       <div className="mb-2">Tracks supervision hours with secondary/additional supervisors. Must not exceed 40% of total supervision.</div>
                       <div className="mb-2"><strong>Maximum Target:</strong> ≤{requirements.secondaryHours} hours (≤40% of total)</div>
                       <div className="mb-2"><strong>Current Hours:</strong> {formatDurationWithUnit(secondaryMinutes)} logged</div>
-                      <div className="mb-2"><strong>Percentage of Total:</strong> {totalSupervisionHours > 0 ? ((secondaryHours / totalSupervisionHours) * 100).toFixed(1) : 0}%</div>
+                      <div className="mb-2"><strong>Percentage of Total:</strong> {totalSupervisionHours > 0 ? ((actualSecondaryHours / totalSupervisionHours) * 100).toFixed(1) : 0}%</div>
                       <div className="mb-2"><strong>Status:</strong> {secondaryStatus === 'green' ? '✓ Compliant' : secondaryStatus === 'amber' ? '⚠ At Risk' : '⚠ Non-Compliant'}</div>
                       <div className="text-xs text-gray-300">
                         <strong>Requirement:</strong> Secondary supervision must be supplementary, not primary
@@ -872,14 +901,14 @@ const SectionC: React.FC = () => {
                   {/* Individual Supervision Compliance */}
                   <div className="relative group">
                     <Card className={`brand-card hover:shadow-md transition-all duration-300 ${individualStatus === 'red' ? 'ring-2 ring-red-200' : individualStatus === 'amber' ? 'ring-2 ring-amber-200' : ''}`}>
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
                           <div className="h-12 w-12 bg-green-500/10 rounded-full flex items-center justify-center">
                             <User className="h-6 w-6 text-green-600" />
                           </div>
                           {getRAGBadge(individualStatus, individualStatus === 'green' ? 'Compliant' : individualStatus === 'amber' ? 'At Risk' : 'Non-Compliant')}
                         </div>
-                        <div className="text-2xl font-bold text-textDark mb-1">
+                        <div className="text-xl font-bold text-textDark mb-1">
                           {formatDurationWithUnit(individualMinutes)}
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Individual Supervision</div>
@@ -910,22 +939,22 @@ const SectionC: React.FC = () => {
                   {/* Group Supervision Compliance */}
                   <div className="relative group">
                     <Card className={`brand-card hover:shadow-md transition-all duration-300 ${groupStatus === 'red' ? 'ring-2 ring-red-200' : groupStatus === 'amber' ? 'ring-2 ring-amber-200' : ''}`}>
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
                           <div className="h-12 w-12 bg-blue-500/10 rounded-full flex items-center justify-center">
                             <Users className="h-6 w-6 text-blue-600" />
                           </div>
                           {getRAGBadge(groupStatus, groupStatus === 'green' ? 'Compliant' : groupStatus === 'amber' ? 'At Risk' : 'Non-Compliant')}
                         </div>
-                        <div className="text-2xl font-bold text-textDark mb-1">
+                        <div className="text-xl font-bold text-textDark mb-1">
                           {formatDurationWithUnit(groupMinutes)}
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Group Supervision</div>
                         <div className="text-xs text-textLight mb-2">Target: ≤{requirements.groupHours}h maximum</div>
                         <div className="text-xs text-textLight">
-                          {groupHours <= (requirements.groupHours * internshipProgress.progressPercentage) ? 
-                            `✓ Within limit (${((groupHours / totalSupervisionHours) * 100).toFixed(1)}% of total)` : 
-                            `${(groupHours - (requirements.groupHours * internshipProgress.progressPercentage)).toFixed(1)}h over progress limit`}
+                          {actualGroupHours <= (requirements.groupHours * internshipProgress.progressPercentage) ? 
+                            `✓ Within limit (${((actualGroupHours / totalSupervisionHours) * 100).toFixed(1)}% of total)` : 
+                            `${(actualGroupHours - (requirements.groupHours * internshipProgress.progressPercentage)).toFixed(1)}h over progress limit`}
                         </div>
                       </CardContent>
                     </Card>
@@ -936,7 +965,7 @@ const SectionC: React.FC = () => {
                       <div className="mb-2">Tracks group supervision sessions with multiple supervisees. Limited to supplement individual supervision.</div>
                       <div className="mb-2"><strong>Maximum Target:</strong> ≤{requirements.groupHours} hours for entire internship</div>
                       <div className="mb-2"><strong>Current Hours:</strong> {formatDurationWithUnit(groupMinutes)} logged</div>
-                      <div className="mb-2"><strong>Percentage of Total:</strong> {totalSupervisionHours > 0 ? ((groupHours / totalSupervisionHours) * 100).toFixed(1) : 0}%</div>
+                      <div className="mb-2"><strong>Percentage of Total:</strong> {totalSupervisionHours > 0 ? ((actualGroupHours / totalSupervisionHours) * 100).toFixed(1) : 0}%</div>
                       <div className="mb-2"><strong>Status:</strong> {groupStatus === 'green' ? '✓ Compliant' : groupStatus === 'amber' ? '⚠ At Risk' : '⚠ Non-Compliant'}</div>
                       <div className="text-xs text-gray-300">
                         <strong>Requirement:</strong> Group supervision is supplementary and must not exceed maximum limits
@@ -948,14 +977,14 @@ const SectionC: React.FC = () => {
                   {/* Internship Progress */}
                   <div className="relative group">
                     <Card className="brand-card hover:shadow-md transition-all duration-300">
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
                           <div className="h-12 w-12 bg-purple-500/10 rounded-full flex items-center justify-center">
                             <Calendar className="h-6 w-6 text-purple-600" />
                           </div>
                           {getRAGBadge('info', 'Progress')}
                         </div>
-                        <div className="text-2xl font-bold text-textDark mb-1">
+                        <div className="text-xl font-bold text-textDark mb-1">
                           {internshipProgress.weeksElapsed}w
                         </div>
                         <div className="text-xs font-semibold text-textDark mb-1 font-body">Internship Progress</div>
@@ -983,58 +1012,6 @@ const SectionC: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Compliance Summary */}
-                <div className="bg-bgCard p-6 rounded-lg border border-border">
-                  <h3 className="text-lg font-semibold text-textDark mb-4 font-headings">Compliance Summary</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${totalStatus === 'green' ? 'bg-green-500' : totalStatus === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                        <span className="font-medium">Total Hours: {formatDurationWithUnit(totalSupervisionMinutes)} / {requirements.totalHours}h</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${principalStatus === 'green' ? 'bg-green-500' : principalStatus === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                        <span className="font-medium">Principal: {formatDurationWithUnit(principalMinutes)} / ≥{requirements.principalHours}h</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${secondaryStatus === 'green' ? 'bg-green-500' : secondaryStatus === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                        <span className="font-medium">Secondary: {formatDurationWithUnit(secondaryMinutes)} / ≤{requirements.secondaryHours}h</span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${individualStatus === 'green' ? 'bg-green-500' : individualStatus === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                        <span className="font-medium">Individual: {formatDurationWithUnit(individualMinutes)} / ≥{requirements.individualHours}h</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${groupStatus === 'green' ? 'bg-green-500' : groupStatus === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                        <span className="font-medium">Group: {formatDurationWithUnit(groupMinutes)} / ≤{requirements.groupHours}h</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                        <span className="font-medium">Progress: {internshipProgress.weeksElapsed} weeks elapsed ({internshipProgress.progressPercentage.toFixed(1)}%)</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Legend */}
-                  <div className="mt-4 pt-4 border-t border-border">
-                    <div className="flex items-center gap-6 text-xs">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                        <span className="text-textLight">Compliant</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                        <span className="text-textLight">At Risk (80% threshold)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                        <span className="text-textLight">Non-Compliant</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </>
             )
           })()}
@@ -1706,6 +1683,7 @@ const SectionC: React.FC = () => {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Row 1: Date | Principal or Secondary | Supervisor Name */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -1718,20 +1696,20 @@ const SectionC: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Name</label>
-                    <Input
-                      type="text"
-                      value={formData.supervisor_name}
-                      onChange={(e) => setFormData({ ...formData, supervisor_name: e.target.value })}
-                      placeholder="Enter supervisor name"
-                      required
-                    />
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Principal or Secondary?</label>
                     <select
                       value={formData.supervisor_type}
-                      onChange={(e) => setFormData({ ...formData, supervisor_type: e.target.value as 'PRINCIPAL' | 'SECONDARY' })}
+                      onChange={(e) => {
+                        const newType = e.target.value as 'PRINCIPAL' | 'SECONDARY'
+                        setFormData({ 
+                          ...formData, 
+                          supervisor_type: newType,
+                          // Auto-populate supervisor name based on type
+                          supervisor_name: newType === 'PRINCIPAL' 
+                            ? (userProfile?.principal_supervisor || '')
+                            : (userProfile?.secondary_supervisor || '')
+                        })
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue"
                       required
                     >
@@ -1741,9 +1719,31 @@ const SectionC: React.FC = () => {
                     </select>
                     <p className="text-xs text-gray-500 mt-1">Principal, Secondary</p>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Name</label>
+                    <select
+                      value={formData.supervisor_name}
+                      onChange={(e) => setFormData({ ...formData, supervisor_name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue"
+                      required
+                    >
+                      <option value="">Select supervisor</option>
+                      {userProfile?.principal_supervisor && (
+                        <option value={userProfile.principal_supervisor}>
+                          {userProfile.principal_supervisor}
+                        </option>
+                      )}
+                      {userProfile?.secondary_supervisor && (
+                        <option value={userProfile.secondary_supervisor}>
+                          {userProfile.secondary_supervisor}
+                        </option>
+                      )}
+                    </select>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Row 2: Individual/Group/Other | Supervision Mode */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Individual/Group/Other</label>
                     <select
@@ -1759,37 +1759,55 @@ const SectionC: React.FC = () => {
                     <p className="text-xs text-gray-500 mt-1">Individual, Group, Other</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Minutes)</label>
-                    <Input
-                      type="number"
-                      value={formData.duration_minutes}
-                      onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 0 })}
-                      min="1"
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Supervision Mode</label>
+                    <select
+                      value={formData.supervision_mode}
+                      onChange={(e) => setFormData({ ...formData, supervision_mode: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue"
                       required
-                    />
-                    <div className="flex gap-1 mt-1">
-                      {durationQuickLinks.map(minutes => (
-                        <Button
-                          key={minutes}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setFormData({ ...formData, duration_minutes: minutes })}
-                          className="text-xs"
-                        >
-                          {minutes === 30 ? '30 Minutes' : 
-                           minutes === 60 ? '1 Hour' : 
-                           minutes === 90 ? '90 Minutes' : 
-                           minutes === 120 ? '2 Hours' : 
-                           `${minutes} min`}
-                        </Button>
-                      ))}
-                    </div>
+                    >
+                      <option value="DIRECT_PERSON">Direct - In Person</option>
+                      <option value="DIRECT_VIDEO">Direct - Video</option>
+                      <option value="DIRECT_PHONE">Direct - Phone</option>
+                      <option value="INDIRECT">Indirect</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row 3: Duration (full width) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Minutes)</label>
+                  <Input
+                    type="number"
+                    value={formData.duration_minutes}
+                    onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 0 })}
+                    min="1"
+                    required
+                  />
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {durationQuickLinks.map(minutes => (
+                      <button
+                        key={minutes}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, duration_minutes: minutes })}
+                        className={`px-3 py-1.5 text-xs rounded border ${
+                          formData.duration_minutes === minutes 
+                            ? 'bg-primaryBlue text-white border-primaryBlue' 
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {minutes === 30 ? '30m' : 
+                         minutes === 60 ? '1h' : 
+                         minutes === 90 ? '90m' : 
+                         minutes === 120 ? '2h' : 
+                         `${minutes}m`}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sup Summ</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supervision Summary</label>
                   <textarea
                     value={formData.summary}
                     onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
@@ -1822,7 +1840,6 @@ const SectionC: React.FC = () => {
           </Card>
         </div>
       )}
-      </div>
     </div>
   )
 }

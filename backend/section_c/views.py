@@ -3,11 +3,18 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.db.models import Sum
 from datetime import timedelta, datetime
-from .models import SupervisionEntry, SupervisionWeeklySummary
+from .models import SupervisionEntry, SupervisionWeeklySummary, SupervisionObservation, SupervisionComplianceReport
 from api.models import UserProfile
-from .serializers import SupervisionEntrySerializer, SupervisionWeeklySummarySerializer
+from .serializers import (
+    SupervisionEntrySerializer, 
+    SupervisionWeeklySummarySerializer,
+    SupervisionObservationSerializer,
+    SupervisionComplianceReportSerializer
+)
+from .compliance import SupervisionComplianceService
 from permissions import TenantPermissionMixin, RoleBasedPermission, DenyOrgAdmin
 from logging_utils import support_error_handler, audit_data_access, log_data_access
+from audit_utils import log_section_c_create, log_section_c_update, log_section_c_delete
 
 class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
     queryset = SupervisionEntry.objects.all()
@@ -57,7 +64,44 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
         date_of_supervision = serializer.validated_data['date_of_supervision']
         week_starting = date_of_supervision - timedelta(days=date_of_supervision.weekday())
         
-        serializer.save(trainee=self.request.user.profile, week_starting=week_starting)
+        instance = serializer.save(trainee=self.request.user.profile, week_starting=week_starting)
+        
+        # Log the creation
+        log_section_c_create(self.request.user, instance, self.request)
+    
+    def perform_update(self, serializer):
+        # Capture old data before update
+        instance = self.get_object()
+        old_data = {
+            'supervision_type': instance.supervision_type,
+            'supervisor_type': instance.supervisor_type,
+            'date_of_supervision': str(instance.date_of_supervision) if instance.date_of_supervision else None,
+            'duration_minutes': instance.duration_minutes,
+            'supervisor_name': instance.supervisor_name,
+        }
+        
+        # Perform update
+        updated_instance = serializer.save()
+        
+        # Log the update
+        log_section_c_update(self.request.user, updated_instance, old_data, self.request)
+    
+    def perform_destroy(self, instance):
+        # Capture entry data before deletion
+        entry_data = {
+            'supervision_type': instance.supervision_type,
+            'supervisor_type': instance.supervisor_type,
+            'date_of_supervision': str(instance.date_of_supervision) if instance.date_of_supervision else None,
+            'duration_minutes': instance.duration_minutes,
+            'supervisor_name': instance.supervisor_name,
+        }
+        entry_id = instance.id
+        
+        # Perform deletion
+        instance.delete()
+        
+        # Log the deletion
+        log_section_c_delete(self.request.user, entry_id, entry_data, self.request)
 
     @action(detail=False, methods=['get'], url_path='grouped-by-week', permission_classes=[permissions.IsAuthenticated])
     def grouped_by_week(self, request):
@@ -156,3 +200,135 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
             'current_week_supervision_minutes': current_week_supervision_minutes,
         }
         return Response(data)
+    
+    @action(detail=False, methods=['get'], url_path='compliance-summary', permission_classes=[permissions.IsAuthenticated])
+    def compliance_summary(self, request):
+        """Get AHPRA supervision compliance summary for the authenticated user"""
+        try:
+            user_profile = request.user.profile
+        except Exception:
+            return Response({'detail': 'User profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Calculate compliance
+        service = SupervisionComplianceService(user_profile)
+        summary = service.get_supervision_summary()
+        
+        return Response(summary)
+
+
+class SupervisionObservationViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for managing supervision observations"""
+    queryset = SupervisionObservation.objects.all()
+    serializer_class = SupervisionObservationSerializer
+    permission_classes = [RoleBasedPermission, DenyOrgAdmin]
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated and hasattr(user, 'profile'):
+            # Trainees can see their own observations
+            if user.profile.role in ['PROVISIONAL', 'REGISTRAR']:
+                queryset = SupervisionObservation.objects.filter(trainee=user.profile)
+            # Supervisors can see observations they conducted
+            elif user.profile.role == 'SUPERVISOR':
+                queryset = SupervisionObservation.objects.filter(supervisor=user.profile)
+            # Support admin can see all
+            elif user.profile.role == 'SUPPORT_ADMIN':
+                queryset = SupervisionObservation.objects.all()
+            else:
+                queryset = SupervisionObservation.objects.none()
+            
+            return queryset.order_by('-observation_date')
+        return SupervisionObservation.objects.none()
+    
+    def get_serializer_context(self):
+        """Add trainee to serializer context for validation"""
+        context = super().get_serializer_context()
+        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
+            context['trainee'] = self.request.user.profile
+        return context
+    
+    def perform_create(self, serializer):
+        """Create observation with proper trainee and supervisor assignment"""
+        if not hasattr(self.request.user, 'profile'):
+            raise serializers.ValidationError("User profile not found")
+        
+        user_profile = self.request.user.profile
+        
+        # If supervisor is creating, they set trainee via request data
+        # If trainee is creating (self-reporting), set trainee automatically
+        if user_profile.role == 'SUPERVISOR':
+            serializer.save(supervisor=user_profile)
+        elif user_profile.role in ['PROVISIONAL', 'REGISTRAR']:
+            # Trainee creating - must specify supervisor
+            serializer.save(trainee=user_profile)
+        else:
+            raise serializers.ValidationError("Only supervisors and trainees can create observations")
+
+
+class SupervisionComplianceViewSet(TenantPermissionMixin, viewsets.ReadOnlyModelViewSet):
+    """ViewSet for viewing supervision compliance reports"""
+    queryset = SupervisionComplianceReport.objects.all()
+    serializer_class = SupervisionComplianceReportSerializer
+    permission_classes = [RoleBasedPermission, DenyOrgAdmin]
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated and hasattr(user, 'profile'):
+            # Trainees can see their own compliance
+            if user.profile.role in ['PROVISIONAL', 'REGISTRAR']:
+                queryset = SupervisionComplianceReport.objects.filter(trainee=user.profile)
+            # Supervisors can see compliance of their supervisees
+            elif user.profile.role == 'SUPERVISOR':
+                trainee_ids = user.profile.supervising.values_list('id', flat=True)
+                queryset = SupervisionComplianceReport.objects.filter(trainee__id__in=trainee_ids)
+            # Support admin can see all
+            elif user.profile.role == 'SUPPORT_ADMIN':
+                queryset = SupervisionComplianceReport.objects.all()
+            else:
+                queryset = SupervisionComplianceReport.objects.none()
+            
+            return queryset
+        return SupervisionComplianceReport.objects.none()
+    
+    @action(detail=False, methods=['post'], url_path='recalculate', permission_classes=[permissions.IsAuthenticated])
+    def recalculate(self, request):
+        """Recalculate compliance for the authenticated user"""
+        try:
+            user_profile = request.user.profile
+        except Exception:
+            return Response({'detail': 'User profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Only allow trainees to recalculate their own compliance
+        if user_profile.role not in ['PROVISIONAL', 'REGISTRAR']:
+            return Response(
+                {'detail': 'Only trainees can recalculate their compliance'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        service = SupervisionComplianceService(user_profile)
+        report = service.calculate_compliance()
+        serializer = self.get_serializer(report)
+        
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'], url_path='recalculate-all', permission_classes=[permissions.IsAuthenticated])
+    def recalculate_all(self, request):
+        """Recalculate compliance for all trainees (support admin only)"""
+        try:
+            user_profile = request.user.profile
+        except Exception:
+            return Response({'detail': 'User profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Only support admin can recalculate all
+        if user_profile.role != 'SUPPORT_ADMIN':
+            return Response(
+                {'detail': 'Only support admins can recalculate all compliance reports'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        results = SupervisionComplianceService.recalculate_all_compliance()
+        
+        return Response({
+            'message': f'Recalculated compliance for {len(results)} trainees',
+            'results': results
+        })

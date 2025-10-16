@@ -1,4 +1,12 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { 
+  getStoredTokens, 
+  clearAuthData, 
+  storeAuthData, 
+  shouldRefreshToken
+} from './tokenUtils'
+
+// Use empty string in dev to use Vite proxy, or specified URL for production
+const API_URL = import.meta.env.VITE_API_URL || ''
 
 function getAccessToken() {
   return localStorage.getItem('accessToken')
@@ -9,43 +17,89 @@ function getRefreshToken() {
 }
 
 export function logout() {
-  localStorage.removeItem('accessToken')
-  localStorage.removeItem('refreshToken')
+  clearAuthData()
+  
+  // Redirect to login page if not already there
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login'
+  }
 }
 
-async function refreshToken() {
+async function refreshToken(): Promise<boolean> {
   const refresh = getRefreshToken()
-  if (!refresh) return false
-  const res = await fetch(`${API_URL}/api/auth/token/refresh/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh }),
-  })
-  if (!res.ok) {
+  if (!refresh) {
+    console.log('No refresh token available')
+    return false
+  }
+  
+  try {
+    console.log('Attempting token refresh...')
+    const res = await fetch(`${API_URL}/api/auth/token/refresh/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh }),
+    })
+    
+    if (!res.ok) {
+      console.log('Token refresh failed:', res.status)
+      logout()
+      return false
+    }
+    
+    const data = await res.json()
+    if (data?.access) {
+      storeAuthData(data.access, data.refresh || refresh)
+      console.log('Token refresh successful')
+      return true
+    }
+    
+    console.log('No access token in refresh response')
+    logout()
+    return false
+  } catch (error) {
+    console.error('Token refresh error:', error)
     logout()
     return false
   }
-  const data = await res.json()
-  if (data?.access) {
-    localStorage.setItem('accessToken', data.access)
-    return true
-  }
-  return false
 }
 
-export async function apiFetch(path: string, options: RequestInit = {}) {
-  const token = getAccessToken()
+interface ApiFetchOptions extends RequestInit {
+  _retryAttempted?: boolean
+}
+
+export async function apiFetch(path: string, options: ApiFetchOptions = {}) {
+  const { accessToken, refreshToken: storedRefreshToken, isValid } = getStoredTokens()
   const isFormData = options?.body instanceof FormData
   const baseHeaders: Record<string, string> = { ...(options.headers as any) }
+  
   // Only set Content-Type for non-FormData payloads; browser will set boundary for FormData
   if (!isFormData && !baseHeaders['Content-Type']) {
     baseHeaders['Content-Type'] = 'application/json'
   }
-  if (token) baseHeaders['Authorization'] = `Bearer ${token}`
+  
+  // Check if we need to refresh token before making the request
+  let currentToken = accessToken
+  if (accessToken && storedRefreshToken && shouldRefreshToken(accessToken, storedRefreshToken)) {
+    console.log('Token expiring soon, refreshing before request...')
+    const refreshSuccess = await refreshToken()
+    if (refreshSuccess) {
+      currentToken = getAccessToken()
+    } else {
+      console.log('Pre-request token refresh failed')
+      logout()
+      return new Response(null, { status: 401, statusText: 'Unauthorized' })
+    }
+  }
+  
+  if (currentToken) {
+    baseHeaders['Authorization'] = `Bearer ${currentToken}`
+  }
 
   let res = await fetch(`${API_URL}${path}`, { ...options, headers: baseHeaders })
   console.log('Initial response:', res.status, res.ok, path)
-  if (res.status === 401 && getRefreshToken()) {
+  
+  // Only attempt token refresh once per request to prevent infinite loops
+  if (res.status === 401 && storedRefreshToken && !options._retryAttempted) {
     console.log('401 error, attempting token refresh for:', path)
     const ok = await refreshToken()
     console.log('Token refresh result:', ok)
@@ -54,11 +108,15 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
       console.log('New token obtained:', !!newToken)
       const retryHeaders = { ...baseHeaders }
       if (newToken) retryHeaders['Authorization'] = `Bearer ${newToken}`
-      res = await fetch(`${API_URL}${path}`, { ...options, headers: retryHeaders })
+      // Mark this as a retry attempt to prevent further retries
+      const retryOptions = { ...options, _retryAttempted: true }
+      res = await fetch(`${API_URL}${path}`, { ...retryOptions, headers: retryHeaders })
       console.log('Retry response:', res.status, res.ok)
     } else {
       console.log('Token refresh failed, logging out')
       logout()
+      // Return the original 401 response to prevent further processing
+      return res
     }
   } else if (res.status === 401) {
     console.log('401 error but no refresh token available, logging out')
@@ -138,8 +196,10 @@ export async function login(email: string, password: string) {
   })
   if (!res.ok) throw new Error('Login failed')
   const data = await res.json()
-  localStorage.setItem('accessToken', data.access)
-  localStorage.setItem('refreshToken', data.refresh)
+  
+  // Use the new token management functions
+  storeAuthData(data.access, data.refresh)
+  
   return data
 }
 

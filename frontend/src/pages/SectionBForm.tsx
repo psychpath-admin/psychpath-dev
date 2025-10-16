@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { ArrowLeft } from 'lucide-react'
 import { createPDEntry, updatePDEntry, getPDEntry } from '@/lib/api'
+import SuccessMessage from '@/components/SuccessMessage'
 
 interface SectionBFormProps {
   onCancel: () => void
@@ -50,6 +51,7 @@ function SectionBForm({ onCancel, entryId }: SectionBFormProps) {
   })
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const isEditing = !!entryId
   
   // Get logbook week information from location state
@@ -115,7 +117,13 @@ function SectionBForm({ onCancel, entryId }: SectionBFormProps) {
         await createPDEntry(entryData)
       }
 
-      navigate('/section-b')
+      // Show success message
+      setShowSuccessMessage(true)
+
+      // Navigate back after showing success message
+      setTimeout(() => {
+        navigate('/section-b')
+      }, 4000)
     } catch (error) {
       console.error('Failed to save entry:', error)
     } finally {
@@ -125,17 +133,30 @@ function SectionBForm({ onCancel, entryId }: SectionBFormProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p>Loading entry...</p>
+      <>
+        <SuccessMessage 
+          show={showSuccessMessage}
+          message="Professional development entry saved successfully"
+          onClose={() => setShowSuccessMessage(false)}
+        />
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p>Loading entry...</p>
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <>
+      <SuccessMessage 
+        show={showSuccessMessage}
+        message="Professional development entry saved successfully"
+        onClose={() => setShowSuccessMessage(false)}
+      />
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -270,7 +291,8 @@ function SectionBForm({ onCancel, entryId }: SectionBFormProps) {
           </form>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </>
   )
 }
 

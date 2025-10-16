@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { toast } from 'sonner'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useErrorHandler } from '@/hooks/useErrorHandler'
 import ErrorOverlay from '@/components/ErrorOverlay'
 

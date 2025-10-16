@@ -5,6 +5,7 @@ from django.db.models import Q
 from .models import SectionAEntry, CustomSessionActivityType
 from .serializers import SectionAEntrySerializer, CustomSessionActivityTypeSerializer
 from permissions import DenyOrgAdmin
+from audit_utils import log_section_a_create, log_section_a_update, log_section_a_delete
 
 
 class SectionAEntryViewSet(viewsets.ModelViewSet):
@@ -44,8 +45,45 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
         return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
     
     def perform_create(self, serializer):
-        """Automatically set the trainee to the current user"""
-        serializer.save(trainee=self.request.user)
+        """Automatically set the trainee to the current user and log the action"""
+        instance = serializer.save(trainee=self.request.user)
+        # Log the creation
+        log_section_a_create(self.request.user, instance, self.request)
+    
+    def perform_update(self, serializer):
+        """Update entry and log the changes"""
+        # Capture old data before update
+        instance = self.get_object()
+        old_data = {
+            'entry_type': instance.entry_type,
+            'session_date': str(instance.session_date) if instance.session_date else None,
+            'duration_minutes': instance.duration_minutes,
+            'simulated': instance.simulated,
+        }
+        
+        # Perform update
+        updated_instance = serializer.save()
+        
+        # Log the update
+        log_section_a_update(self.request.user, updated_instance, old_data, self.request)
+    
+    def perform_destroy(self, instance):
+        """Delete entry and log the deletion"""
+        # Capture entry data before deletion
+        entry_data = {
+            'entry_type': instance.entry_type,
+            'session_date': str(instance.session_date) if instance.session_date else None,
+            'duration_minutes': instance.duration_minutes,
+            'client': instance.client_pseudonym if hasattr(instance, 'client_pseudonym') else instance.client_id,
+            'simulated': instance.simulated,
+        }
+        entry_id = instance.id
+        
+        # Perform deletion
+        instance.delete()
+        
+        # Log the deletion
+        log_section_a_delete(self.request.user, entry_id, entry_data, self.request)
     
     @action(detail=False, methods=['get'])
     def search(self, request):

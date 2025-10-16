@@ -107,6 +107,12 @@ class UserProfile(models.Model):
     profile_completed = models.BooleanField(default=False, help_text="Whether the user has completed their profile setup")
     first_login_completed = models.BooleanField(default=False, help_text="Whether the user has completed their first login")
     
+    # Indigenous identification (for AHPRA cultural supervision)
+    identifies_as_indigenous = models.BooleanField(
+        default=False,
+        help_text="Identifies as Aboriginal and/or Torres Strait Islander Australian"
+    )
+    
     # Supervisor-specific fields
     is_board_approved_supervisor = models.BooleanField(default=False, help_text="Whether the user is a board-approved supervisor")
     supervisor_registration_date = models.DateField(null=True, blank=True, help_text="Date when the user was approved as a supervisor by the Psychology Board")
