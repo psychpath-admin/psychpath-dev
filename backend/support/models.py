@@ -72,6 +72,38 @@ class UserActivity(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.activity_type} at {self.created_at}"
 
+class Release(models.Model):
+    """Release container that groups tickets and tracks a release checklist"""
+    STATUS_CHOICES = [
+        ('DRAFT', 'Draft'),
+        ('IN_QA', 'In QA'),
+        ('READY_FOR_PROD', 'Ready for Prod'),
+        ('RELEASED', 'Released'),
+    ]
+
+    version = models.CharField(max_length=50)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
+    release_date = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    checklist = models.JSONField(default=list, blank=True)
+    checklist_completed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Release {self.version} ({self.status})"
+
+    def recompute_checklist_completed(self):
+        try:
+            items = self.checklist or []
+            self.checklist_completed = bool(items) and all(bool(i.get('done')) for i in items)
+        except Exception:
+            self.checklist_completed = False
+
+
 class SupportTicket(models.Model):
     """Support tickets/requests from users"""
     TYPE_CHOICES = [
@@ -178,6 +210,16 @@ class SupportTicket(models.Model):
     
     # Context data captured when ticket was created
     context_data = models.JSONField(default=dict, blank=True, help_text="Technical context, form data, console errors, etc.")
+
+    # Release workflow
+    release = models.ForeignKey('Release', on_delete=models.SET_NULL, null=True, blank=True, related_name='release_tickets')
+    promoted_to_release = models.BooleanField(default=False)
+    qa_status = models.CharField(max_length=20, choices=[
+        ('NOT_TESTED', 'Not Tested'),
+        ('IN_QA', 'In QA'),
+        ('PASSED', 'Passed'),
+        ('REJECTED', 'Rejected'),
+    ], default='NOT_TESTED')
 
     class Meta:
         ordering = ['-created_at']

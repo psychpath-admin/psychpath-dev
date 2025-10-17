@@ -15,7 +15,7 @@ import psutil
 import signal
 from datetime import datetime, timedelta
 from api.models import UserProfile
-from .models import SupportUser, UserActivity, SupportTicket, SystemAlert, WeeklyStats, ChatSession, ChatMessage, SupportUserStatus
+from .models import SupportUser, UserActivity, SupportTicket, SystemAlert, WeeklyStats, ChatSession, ChatMessage, SupportUserStatus, Release
 from .emails import send_new_ticket_email, send_ticket_reply_email, send_ticket_update_email
 from section_b.models import ProfessionalDevelopmentEntry
 from section_c.models import SupervisionEntry
@@ -27,6 +27,87 @@ def support_dashboard(request):
     return render(request, 'support/dashboard.html', {
         'title': 'PsychPATH Support Dashboard'
     })
+
+
+@staff_member_required
+def testing_guide_view(request):
+    """Render the testing guide markdown content for admins"""
+    try:
+        docs_dir = os.path.join(settings.BASE_DIR, '..')
+        filepath = os.path.join(docs_dir, 'TESTING_GUIDE_2025-10-12.md')
+        content = 'File not found.'
+        if os.path.exists(filepath):
+            with open(filepath, 'r') as f:
+                content = f.read()
+        return render(request, 'support/docs.html', {
+            'title': 'Testing Guide',
+            'content': content
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+def testing_checklist_view(request):
+    """Render the logbook testing checklist markdown content for admins"""
+    try:
+        docs_dir = os.path.join(settings.BASE_DIR, '..')
+        filepath = os.path.join(docs_dir, 'LOGBOOK_TESTING_CHECKLIST.md')
+        content = 'File not found.'
+        if os.path.exists(filepath):
+            with open(filepath, 'r') as f:
+                content = f.read()
+        return render(request, 'support/docs.html', {
+            'title': 'Logbook Testing Checklist',
+            'content': content
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+def tests_list_view(request):
+    """List tickets that have a test plan (staff only)."""
+    try:
+        # Show recent tickets, even if they don't have a plan yet
+        tickets = SupportTicket.objects.all().order_by('-updated_at')[:200]
+        items = []
+        for t in tickets:
+            plan = t.test_plan or {}
+            items.append({
+                'id': t.id,
+                'subject': t.subject,
+                'status': t.status,
+                'qa_status': t.qa_status,
+                'testing_level': plan.get('testing_level', 'DEV') if plan else '—',
+                'has_plan': bool(plan and (plan.get('suites') or plan.get('testing_level'))),
+                'updated_at': t.updated_at.isoformat() if t.updated_at else None,
+            })
+        return render(request, 'support/tests_list.html', {
+            'title': 'Test Plans',
+            'tickets': items
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+def test_detail_view(request, ticket_id):
+    """Show a single ticket's test plan with simple checkable UI (staff only)."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        plan = ticket.test_plan or {'testing_level': 'DEV', 'suites': []}
+        return render(request, 'support/test_detail.html', {
+            'title': f"Test Plan for Ticket #{ticket.id}",
+            'ticket_id': ticket.id,
+            'subject': ticket.subject,
+            'testing_level': plan.get('testing_level', 'DEV'),
+            'plan_json': json.dumps(plan),
+        })
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 @staff_member_required
 @require_http_methods(["GET"])
@@ -716,6 +797,146 @@ def create_support_ticket(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_tickets(request):
@@ -747,6 +968,146 @@ def get_user_tickets(request):
         
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @api_view(['GET'])
@@ -818,6 +1179,146 @@ def get_ticket_detail(request, ticket_id):
         return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -893,6 +1394,146 @@ def send_ticket_message(request, ticket_id):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_support_online_status(request):
@@ -913,6 +1554,146 @@ def get_support_online_status(request):
         
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @api_view(['GET'])
@@ -951,6 +1732,146 @@ def check_ticket_changes(request, ticket_id):
         return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @staff_member_required
@@ -1081,6 +2002,8 @@ def get_all_tickets_dashboard(request):
                 'subject': ticket.subject,
                 'description': ticket.description,
                 'status': ticket.status,
+                'ticket_type': ticket.ticket_type,
+                'stage': ticket.stage,
                 'priority': ticket.priority,
                 'user': {
                     'email': ticket.user.email,
@@ -1130,6 +2053,8 @@ def get_all_tickets(request):
                 'subject': ticket.subject,
                 'description': ticket.description,
                 'status': ticket.status,
+                'ticket_type': ticket.ticket_type,
+                'stage': ticket.stage,
                 'priority': ticket.priority,
                 'user': {
                     'email': ticket.user.email,
@@ -1150,6 +2075,146 @@ def get_all_tickets(request):
         
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 @staff_member_required
 @require_http_methods(["GET"])
@@ -1295,6 +2360,146 @@ def get_admin_ticket_detail(request, ticket_id):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 @staff_member_required
 @require_http_methods(["POST"])
 @csrf_exempt
@@ -1322,7 +2527,38 @@ def update_ticket_status(request, ticket_id):
         if new_status in ['RESOLVED', 'CLOSED']:
             ticket.resolved_at = timezone.now()
         
+        # Persist status first
         ticket.save()
+
+        # Auto-update stage based on status transitions
+        try:
+            if new_status == 'IN_PROGRESS' and ticket.stage in ['IDEA', 'PLANNED']:
+                ticket.stage = 'IN_DEVELOPMENT'
+                ticket.save(update_fields=['stage'])
+            elif new_status == 'RESOLVED':
+                # When resolved, move item to TESTING for verification
+                ticket.stage = 'TESTING'
+                ticket.save(update_fields=['stage'])
+            elif new_status == 'CLOSED' and ticket.stage in ['TESTING', 'IN_DEVELOPMENT', 'PLANNED']:
+                # Closed implies work verified and deployed
+                ticket.stage = 'DEPLOYED'
+                ticket.completed_at = timezone.now()
+                ticket.save(update_fields=['stage', 'completed_at'])
+        except Exception:
+            # Stage updates are best-effort; do not block status change
+            pass
+
+        # Auto-bootstrap a test plan when policy warrants
+        try:
+            should_bootstrap = False
+            if ticket.ticket_type in ['FEATURE', 'TASK'] and new_status in ['PLANNED', 'IN_PROGRESS']:
+                should_bootstrap = True
+            if ticket.ticket_type == 'BUG' and new_status in ['RESOLVED']:
+                should_bootstrap = True
+            if should_bootstrap:
+                _bootstrap_test_plan_internal(ticket)
+        except Exception:
+            pass
         
         # Send email notification to user about status change
         if old_status != new_status:
@@ -1332,7 +2568,8 @@ def update_ticket_status(request, ticket_id):
             'id': ticket.id,
             'status': ticket.status,
             'assigned_to': ticket.assigned_to.email if ticket.assigned_to else None,
-            'message': 'Ticket status updated successfully'
+            'stage': ticket.stage,
+            'message': 'Ticket status and stage updated successfully'
         })
         
     except SupportTicket.DoesNotExist:
@@ -1389,6 +2626,146 @@ def promote_to_planned(request, ticket_id):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_roadmap(request):
@@ -1421,6 +2798,146 @@ def get_roadmap(request):
         
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @api_view(['GET'])
@@ -1481,6 +2998,146 @@ def get_planning_dashboard(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, IsAdminUser])
 def update_test_plan(request, ticket_id):
@@ -1504,11 +3161,3556 @@ def update_test_plan(request, ticket_id):
             'test_plan': ticket.test_plan,
             'message': 'Test plan updated successfully'
         })
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# --- Test Plan Builder Endpoints ---
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_test_plan(request, ticket_id):
+    """Get only the test_plan for a ticket (lightweight)."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        # Ensure dict shape with defaults
+        plan = ticket.test_plan or {}
+        if 'testing_level' not in plan:
+            plan['testing_level'] = plan.get('testing_level', 'DEV')
+        if 'suites' not in plan:
+            plan['suites'] = plan.get('suites', [])
+        return Response({'test_plan': plan})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def add_test_suite(request, ticket_id):
+    """Add a new suite to a ticket's test plan."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = request.data
+        title = data.get('title', '').strip() or 'Untitled Suite'
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        plan.setdefault('testing_level', 'DEV')
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return Response({'test_plan': ticket.test_plan, 'added': {'id': new_id, 'title': title}}, status=status.HTTP_201_CREATED)
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def add_test_case(request, ticket_id):
+    """Add a test to a suite in the ticket's plan."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = request.data
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or 'Untitled Test').strip()
+        initial_state = data.get('initial_state', '')
+        action = data.get('action', '')
+        expected = data.get('expected', '')
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'steps': [], 'last_result': 'NOT_TESTED'})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return Response({'test_plan': plan, 'added': {'id': new_id, 'title': title}}, status=status.HTTP_201_CREATED)
+        return Response({'error': 'Suite not found'}, status=status.HTTP_400_BAD_REQUEST)
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def add_test_step(request, ticket_id):
+    """Add a step to a test case in the ticket's plan."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = request.data
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return Response({'test_plan': plan, 'added': {'id': new_id}}, status=status.HTTP_201_CREATED)
+        return Response({'error': 'Suite/Test not found'}, status=status.HTTP_400_BAD_REQUEST)
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_test_step(request, ticket_id):
+    """Update a single step status/notes; server stamps tester and date."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = request.data
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status_value = data.get('status')  # NOT_TESTED|PASSED|FAILED
+        notes = data.get('notes', '')
+
+        if status_value not in ['NOT_TESTED', 'PASSED', 'FAILED']:
+            return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        found = False
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status_value
+                                step['notes'] = notes
+                                step['tester'] = request.user.email
+                                step['date_tested'] = timezone.now().isoformat()
+                                found = True
+                                break
+        if not found:
+            return Response({'error': 'Step not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+
+        # Audit
+        try:
+            UserActivity.objects.create(
+                user=request.user,
+                activity_type='LOGBOOK_UPDATE',
+                description=f"Updated test step {step_id} on ticket #{ticket.id} to {status_value}",
+                metadata={'ticket_id': ticket.id, 'suite_id': suite_id, 'test_id': test_id, 'step_id': step_id, 'status': status_value}
+            )
+        except Exception:
+            pass
+
+        return Response({'test_plan': plan})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def promote_testing_level(request, ticket_id):
+    """Promote a ticket's test plan level DEV→TEST→QA→PROD."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        plan = ticket.test_plan or {}
+        current = plan.get('testing_level', 'DEV')
+        order = ['DEV', 'TEST', 'QA', 'PROD']
+        try:
+            idx = order.index(current)
+        except ValueError:
+            idx = 0
+        new_level = order[min(idx + 1, len(order)-1)]
+        plan['testing_level'] = new_level
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return Response({'testing_level': new_level, 'test_plan': plan})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def _bootstrap_test_plan_internal(ticket):
+    """Create a basic test plan on a ticket if none exists."""
+    plan = ticket.test_plan or {}
+    if plan.get('suites'):
+        return plan
+    subject = (ticket.subject or 'Test Plan').strip()
+    suite_title = subject.split('–')[0].strip() if '–' in subject else subject
+    happy_title = f"Happy Path — {subject}"
+    plan = {
+        'testing_level': 'DEV',
+        'suites': [
+            {
+                'id': 'suite_1',
+                'title': suite_title,
+                'tests': [
+                    {
+                        'id': 'test_1',
+                        'title': happy_title,
+                        'initial_state': 'User is authenticated if required; environment is ready',
+                        'action': 'Follow the UI to perform the described action',
+                        'expected': 'Feature works end-to-end without errors',
+                        'last_result': 'NOT_TESTED',
+                        'steps': []
+                    }
+                ]
+            }
+        ]
+    }
+    if ticket.ticket_type == 'BUG':
+        plan['suites'][0]['tests'].append({
+            'id': 'test_2',
+            'title': f"Edge Cases — {subject}",
+            'initial_state': '',
+            'action': '',
+            'expected': '',
+            'last_result': 'NOT_TESTED',
+            'steps': [
+                {'id': 'edge_1', 'action': 'Reproduce original bug', 'expected': 'No longer reproducible', 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None},
+                {'id': 'edge_2', 'action': 'Try boundary/invalid inputs', 'expected': 'Graceful validation and handling', 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None}
+            ]
+        })
+    ticket.test_plan = plan
+    ticket.save(update_fields=['test_plan'])
+    return plan
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def bootstrap_test_plan(request, ticket_id):
+    """Manually create a starter plan for the ticket, if not present."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        plan = _bootstrap_test_plan_internal(ticket)
+        return Response({'test_plan': plan})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_suite_notes(request, ticket_id):
+    """Update notes for a suite within the test plan."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = request.data
+        suite_id = data.get('suiteId')
+        notes = data.get('notes', '')
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        found = False
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                suite['notes'] = notes
+                found = True
+                break
+        if not found:
+            return Response({'error': 'Suite not found'}, status=status.HTTP_400_BAD_REQUEST)
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return Response({'test_plan': plan})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_test_notes(request, ticket_id):
+    """Update notes for a single test case within a suite."""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = request.data
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        notes = data.get('notes', '')
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        found = False
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        test['notes'] = notes
+                        found = True
+                        break
+        if not found:
+            return Response({'error': 'Suite/Test not found'}, status=status.HTTP_400_BAD_REQUEST)
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return Response({'test_plan': plan})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def delete_suite(request, ticket_id):
+    """Delete a suite (and all its tests/steps) from a ticket's plan"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        suite_id = request.data.get('suiteId') or request.GET.get('suiteId')
+        if not suite_id:
+            return Response({'error': 'suiteId is required'}, status=status.HTTP_400_BAD_REQUEST)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        before = len(suites)
+        suites = [s for s in suites if s.get('id') != suite_id]
+        if len(suites) == before:
+            return Response({'error': 'Suite not found'}, status=status.HTTP_404_NOT_FOUND)
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return Response({'test_plan': plan})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def delete_test(request, ticket_id):
+    """Delete a single test from a suite"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        suite_id = request.data.get('suiteId') or request.GET.get('suiteId')
+        test_id = request.data.get('testId') or request.GET.get('testId')
+        if not suite_id or not test_id:
+            return Response({'error': 'suiteId and testId are required'}, status=status.HTTP_400_BAD_REQUEST)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        found = False
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                before = len(tests)
+                suite['tests'] = [t for t in tests if t.get('id') != test_id]
+                if len(suite['tests']) != before:
+                    found = True
+                break
+        if not found:
+            return Response({'error': 'Suite/Test not found'}, status=status.HTTP_404_NOT_FOUND)
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return Response({'test_plan': plan})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_step(request, ticket_id):
+    """Delete a single step from a test"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        suite_id = request.data.get('suiteId') or request.GET.get('suiteId')
+        test_id = request.data.get('testId') or request.GET.get('testId')
+        step_id = request.data.get('stepId') or request.GET.get('stepId')
+        if not suite_id or not test_id or not step_id:
+            return Response({'error': 'suiteId, testId and stepId are required'}, status=status.HTTP_400_BAD_REQUEST)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        found = False
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        before = len(steps)
+                        test['steps'] = [s for s in steps if s.get('id') != step_id]
+                        if len(test['steps']) != before:
+                            found = True
+                        break
+        if not found:
+            return Response({'error': 'Suite/Test/Step not found'}, status=status.HTTP_404_NOT_FOUND)
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return Response({'test_plan': plan})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def attach_default_test_plan(request, ticket_id):
+    """Admin: Attach the canonical test plan template to a ticket"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+
+        default_plan = {
+            "preconditions": "Servers running; test accounts available.",
+            "test_cases": [
+                {
+                    "description": "Draft → Submitted → Approved flow",
+                    "steps": [
+                        "Create draft logbook",
+                        "Submit for review",
+                        "Approve as supervisor"
+                    ],
+                    "expected_result": "Status becomes approved; entries locked",
+                    "actual_result": "",
+                    "status": "NOT_TESTED"
+                }
+            ]
+        }
+
+        ticket.test_plan = default_plan
+        ticket.save(update_fields=['test_plan'])
+
+        return Response({
+            'id': ticket.id,
+            'test_plan': ticket.test_plan,
+            'message': 'Default test plan attached'
+        })
+    
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def move_to_roadmap(request, ticket_id):
+    """Admin: Move a ticket into roadmap planning (stage=PLANNED, ensure type)"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+
+        ticket.ticket_type = ticket.ticket_type if ticket.ticket_type in ['FEATURE', 'TASK'] else 'TASK'
+        if ticket.stage in ['IDEA', 'ARCHIVED']:
+            ticket.stage = 'PLANNED'
+        # Ensure minimal planning fields exist
+        if not ticket.effort_estimate:
+            ticket.effort_estimate = 'S'
+        if not ticket.business_value:
+            ticket.business_value = 'MEDIUM'
+        ticket.save(update_fields=['ticket_type', 'stage', 'effort_estimate', 'business_value'])
+
+        return Response({
+            'id': ticket.id,
+            'stage': ticket.stage,
+            'ticket_type': ticket.ticket_type,
+            'message': 'Ticket moved to roadmap (PLANNED)'
+        })
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# --- Release Workflow ---
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def create_release(request):
+    """Create a new Release with default checklist"""
+    try:
+        data = request.data
+        version = (data.get('version') or '').strip() or 'v0.0.1'
+        notes = data.get('notes', '')
+        default_checklist = [
+            { 'item': 'All critical tests passed', 'done': False },
+            { 'item': 'UAT review completed', 'done': False },
+            { 'item': 'Documentation updated', 'done': False },
+            { 'item': 'Deployment plan reviewed', 'done': False },
+            { 'item': 'Rollback strategy prepared', 'done': False },
+            { 'item': 'Stakeholder approval given', 'done': False },
+        ]
+        release = Release.objects.create(version=version, notes=notes, checklist=default_checklist)
+        return Response({'id': release.id, 'version': release.version, 'status': release.status}, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def list_releases(request):
+    releases = Release.objects.all().order_by('-created_at')
+    data = []
+    for r in releases:
+        data.append({
+            'id': r.id,
+            'version': r.version,
+            'status': r.status,
+            'release_date': r.release_date.isoformat() if r.release_date else None,
+            'checklist_completed': r.checklist_completed,
+        })
+    return Response({'releases': data})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def release_detail(request, release_id):
+    try:
+        r = Release.objects.get(id=release_id)
+        tickets = r.release_tickets.select_related('user').all()
+        return Response({
+            'id': r.id,
+            'version': r.version,
+            'status': r.status,
+            'notes': r.notes,
+            'release_date': r.release_date.isoformat() if r.release_date else None,
+            'checklist': r.checklist,
+            'checklist_completed': r.checklist_completed,
+            'tickets': [
+                {
+                    'id': t.id,
+                    'subject': t.subject,
+                    'status': t.status,
+                    'qa_status': t.qa_status,
+                    'ticket_type': t.ticket_type,
+                } for t in tickets
+            ]
+        })
+    except Release.DoesNotExist:
+        return Response({'error': 'Release not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def update_release(request, release_id):
+    try:
+        r = Release.objects.get(id=release_id)
+        data = request.data
+        if 'status' in data:
+            new_status = data.get('status')
+            if new_status not in dict(Release.STATUS_CHOICES):
+                return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+            r.status = new_status
+            if new_status == 'RELEASED' and not r.release_date:
+                r.release_date = timezone.now()
+        if 'notes' in data:
+            r.notes = data.get('notes', r.notes)
+        if 'checklist' in data:
+            r.checklist = data.get('checklist') or []
+        r.recompute_checklist_completed()
+        r.save()
+        return Response({'id': r.id, 'status': r.status, 'checklist_completed': r.checklist_completed})
+    except Release.DoesNotExist:
+        return Response({'error': 'Release not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def release_add_ticket(request, release_id):
+    try:
+        r = Release.objects.get(id=release_id)
+        ticket_id = request.data.get('ticket_id')
+        t = SupportTicket.objects.get(id=ticket_id)
+        if t.ticket_type not in ['BUG', 'FEATURE', 'TASK']:
+            return Response({'error': 'Only BUG/FEATURE/TASK can be promoted'}, status=status.HTTP_400_BAD_REQUEST)
+        if t.status not in ['RESOLVED', 'CLOSED']:
+            return Response({'error': 'Ticket must be RESOLVED or CLOSED to promote'}, status=status.HTTP_400_BAD_REQUEST)
+        t.release = r
+        t.promoted_to_release = True
+        t.qa_status = 'NOT_TESTED'
+        t.save(update_fields=['release', 'promoted_to_release', 'qa_status'])
+        r.release_tickets.add(t)
+        return Response({'message': f'Ticket {t.id} added to release {r.version}'})
+    except Release.DoesNotExist:
+        return Response({'error': 'Release not found'}, status=status.HTTP_404_NOT_FOUND)
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def set_ticket_qa_status(request, ticket_id):
+    try:
+        t = SupportTicket.objects.get(id=ticket_id)
+        new_status = request.data.get('qa_status')
+        if new_status not in ['NOT_TESTED', 'IN_QA', 'PASSED', 'REJECTED']:
+            return Response({'error': 'Invalid qa_status'}, status=status.HTTP_400_BAD_REQUEST)
+        t.qa_status = new_status
+        t.save(update_fields=['qa_status'])
+        return Response({'id': t.id, 'qa_status': t.qa_status})
+    except SupportTicket.DoesNotExist:
+        return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
         
     except SupportTicket.DoesNotExist:
         return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @api_view(['PATCH'])
@@ -1545,3 +6747,169 @@ def update_ticket_stage(request, ticket_id):
         return Response({'error': 'Ticket not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Session-based views for Django admin template compatibility
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_step_session(request, ticket_id):
+    """Add a step to a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        steps = test.get('steps', [])
+                        new_id = f"step_{len(steps)+1}"
+                        steps.append({'id': new_id, 'action': action, 'expected': expected, 'status': 'NOT_TESTED', 'notes': '', 'date_tested': None, 'tester': None})
+                        test['steps'] = steps
+                        ticket.test_plan = plan
+                        ticket.save(update_fields=['test_plan'])
+                        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite/Test not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_suite_session(request, ticket_id):
+    """Add a test suite - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title is required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        new_id = f"suite_{len(suites)+1}"
+        suites.append({'id': new_id, 'title': title, 'tests': []})
+        plan['suites'] = suites
+        ticket.test_plan = plan
+        ticket.save(update_fields=['test_plan'])
+        return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def add_test_case_session(request, ticket_id):
+    """Add a test case - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        title = (data.get('title') or '').strip()
+        initial_state = (data.get('initial_state') or '').strip()
+        action = (data.get('action') or '').strip()
+        expected = (data.get('expected') or '').strip()
+        if not suite_id or not title:
+            return JsonResponse({'error': 'Suite ID and title are required'}, status=400)
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                tests = suite.get('tests', [])
+                new_id = f"test_{len(tests)+1}"
+                tests.append({'id': new_id, 'title': title, 'initial_state': initial_state, 'action': action, 'expected': expected, 'last_result': 'NOT_TESTED', 'steps': []})
+                suite['tests'] = tests
+                ticket.test_plan = plan
+                ticket.save(update_fields=['test_plan'])
+                return JsonResponse({'test_plan': plan, 'added': {'id': new_id}})
+        return JsonResponse({'error': 'Suite not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def update_test_step_session(request, ticket_id):
+    """Update test step status/notes - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        suite_id = data.get('suiteId')
+        test_id = data.get('testId')
+        step_id = data.get('stepId')
+        status = data.get('status')
+        notes = (data.get('notes') or '').strip()
+        plan = ticket.test_plan or {}
+        suites = plan.get('suites', [])
+        for suite in suites:
+            if suite.get('id') == suite_id:
+                for test in suite.get('tests', []):
+                    if test.get('id') == test_id:
+                        for step in test.get('steps', []):
+                            if step.get('id') == step_id:
+                                step['status'] = status
+                                step['notes'] = notes
+                                if status != 'NOT_TESTED':
+                                    step['date_tested'] = timezone.now().isoformat()
+                                    step['tester'] = request.user.email
+                                ticket.test_plan = plan
+                                ticket.save(update_fields=['test_plan'])
+                                return JsonResponse({'test_plan': plan})
+        return JsonResponse({'error': 'Step not found'}, status=400)
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def get_test_plan_session(request, ticket_id):
+    """Get test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return JsonResponse({'test_plan': ticket.test_plan or {}})
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+def save_test_plan_session(request, ticket_id):
+    """Save test plan - Django session auth version"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        data = json.loads(request.body)
+        test_plan = data.get('test_plan', {})
+        
+        # Validate test plan structure
+        if not isinstance(test_plan, dict):
+            return JsonResponse({'error': 'Test plan must be a valid object'}, status=400)
+        
+        ticket.test_plan = test_plan
+        ticket.save(update_fields=['test_plan'])
+        
+        return JsonResponse({
+            'test_plan': ticket.test_plan,
+            'message': 'Test plan saved successfully'
+        })
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

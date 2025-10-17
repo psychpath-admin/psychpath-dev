@@ -413,7 +413,13 @@
     <div class="container">
         <div class="header">
             <h1>{{ title }}</h1>
-            <button class="refresh-btn" onclick="refreshAll()">Refresh All Data</button>
+            <div>
+                <a href="/support/docs/testing-guide/" class="refresh-btn" style="background:#6b7280;">Testing Guide</a>
+                <a href="/support/docs/testing-checklist/" class="refresh-btn" style="background:#6b7280;">Testing Checklist</a>
+                <a href="/support/tests/" class="refresh-btn" style="background:#6b7280;">Test Plans</a>
+                <a href="http://localhost:5173/roadmap" target="_blank" rel="noopener" class="refresh-btn" style="background:#10b981;">Open Roadmap</a>
+                <button class="refresh-btn" onclick="refreshAll()">Refresh All Data</button>
+            </div>
         </div>
         
         <!-- Authentication Notice -->
@@ -1361,6 +1367,10 @@
                 const createdAt = new Date(ticket.created_at).toLocaleString();
                 const lastUpdate = ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : 'No updates';
                 
+                const eligible = (
+                  (ticket.ticket_type === 'FEATURE' || ticket.ticket_type === 'TASK') && (ticket.stage === 'PLANNED' || ticket.status === 'IN_PROGRESS')
+                ) || (ticket.ticket_type === 'BUG' && ticket.status === 'RESOLVED');
+
                 return `
                     <div class="ticket-item" onclick="openTicket(${ticket.id})">
                         <div class="ticket-header">
@@ -1378,6 +1388,10 @@
                         <p style="margin-top: 8px; color: #666; font-size: 14px;">
                             ${ticket.description.substring(0, 100)}${ticket.description.length > 100 ? '...' : ''}
                         </p>
+                        <div style="display:flex; gap:8px; margin-top:8px;">
+                          <button onclick="event.stopPropagation(); window.location='/support/tests/'+${ticket.id}+'/'" class="refresh-btn">Open Plan</button>
+                          ${eligible ? `<button onclick=\"event.stopPropagation(); bootstrapPlan(${ticket.id})\" class=\"refresh-btn\" style=\"background:#10b981;\">Move to Plan</button>` : ''}
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -1570,6 +1584,20 @@
                 console.error('Failed to update ticket status:', error);
                 alert('Error updating ticket status');
             });
+        }
+        
+        function bootstrapPlan(ticketId) {
+            fetch(`/support/api/tickets/${ticketId}/test-plan/bootstrap/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.error) { alert('Bootstrap failed: ' + data.error); return; }
+                alert('Test plan created/available. Opening now.');
+                window.location = `/support/tests/${ticketId}/`;
+            })
+            .catch(err => alert('Bootstrap failed: ' + err));
         }
         
         // Close modal when clicking outside

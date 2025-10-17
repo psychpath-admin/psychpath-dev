@@ -1,0 +1,497 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }} | PsychPATH{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1200px;">
+  <h1>{{ title }}</h1>
+  <p><strong>Ticket:</strong> #{{ ticket_id }} — {{ subject }}</p>
+  <p><strong>Testing Level:</strong> <span id="testingLevel">{{ testing_level }}</span>
+    <button id="promoteBtn" class="button">Promote</button>
+    <button id="saveBtn" class="button" style="background-color: #28a745; color: white;">Save Changes</button>
+    <a href="/support/tests/" class="button">Back</a>
+  </p>
+
+  <div style="background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:12px; margin:12px 0;">
+    <h3>Create</h3>
+    <div style="display:grid; grid-template-columns: 1fr; gap:12px;">
+      <div>
+        <strong>Add Suite</strong>
+        <div style="display:flex; gap:8px; margin-top:6px;">
+          <input id="newSuiteTitle" type="text" placeholder="Suite title" style="flex:1;">
+          <button id="addSuiteBtn">Add Suite</button>
+        </div>
+      </div>
+      <div>
+        <strong>Add Test</strong>
+        <div style="display:grid; gap:6px; margin-top:6px;">
+          <select id="testSuiteSel"></select>
+          <input id="newTestTitle" type="text" placeholder="Test title">
+          <input id="newTestInitial" type="text" placeholder="Initial state">
+          <input id="newTestAction" type="text" placeholder="Action">
+          <input id="newTestExpected" type="text" placeholder="Expected result">
+          <button id="addTestBtn">Add Test</button>
+        </div>
+      </div>
+      <div>
+        <strong>Add Step</strong>
+        <div style="display:grid; gap:6px; margin-top:6px;">
+          <select id="stepSuiteSel"></select>
+          <select id="stepTestSel"></select>
+          <input id="newStepAction" type="text" placeholder="Step action">
+          <input id="newStepExpected" type="text" placeholder="Step expected result">
+          <button id="addStepBtn">Add Step</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="plan"></div>
+</div>
+
+<!-- Step Notes Modal -->
+<div id="stepNotesModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+  <div class="modal-content" style="background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; border-radius: 8px; width: 80%; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <h3 id="modalStepTitle" style="margin: 0;">Edit Step Notes</h3>
+      <span class="close" onclick="closeStepNotesModal()" style="color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom: 15px;">
+        <label for="modalStepAction" style="display: block; margin-bottom: 5px; font-weight: bold;">Step Action:</label>
+        <div id="modalStepAction" style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-style: italic;"></div>
+      </div>
+      <div style="margin-bottom: 15px;">
+        <label for="modalStepExpected" style="display: block; margin-bottom: 5px; font-weight: bold;">Expected Result:</label>
+        <div id="modalStepExpected" style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-style: italic;"></div>
+      </div>
+      <div style="margin-bottom: 15px;">
+        <label for="modalStepNotes" style="display: block; margin-bottom: 5px; font-weight: bold;">Notes:</label>
+        <textarea id="modalStepNotes" rows="8" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; resize: vertical;" placeholder="Enter detailed notes about this test step..."></textarea>
+      </div>
+      <div style="margin-bottom: 15px;">
+        <label for="modalStepStatus" style="display: block; margin-bottom: 5px; font-weight: bold;">Status:</label>
+        <select id="modalStepStatus" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 200px;">
+          <option value="NOT_TESTED">Not Tested</option>
+          <option value="PASSED">Passed</option>
+          <option value="FAILED">Failed</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+      <button onclick="closeStepNotesModal()" style="padding: 10px 20px; border: 1px solid #ddd; background: #f5f5f5; border-radius: 4px; cursor: pointer;">Cancel</button>
+      <button onclick="saveStepNotes()" style="padding: 10px 20px; border: none; background: #007cba; color: white; border-radius: 4px; cursor: pointer;">Save Notes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ticketId = {{ ticket_id }};
+
+// CSRF Token helper function
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+// Parse JSON safely from server into a JS object
+let plan = JSON.parse('{{ plan_json|escapejs }}');
+
+function render() {
+  const root = document.getElementById('plan');
+  if (!plan || !plan.suites || plan.suites.length === 0) {
+    root.innerHTML = '<p>No suites. Use the API to add suites/tests/steps for now.</p>';
+    return;
+  }
+  const html = plan.suites.map(s => `
+    <div style="background:#fff; border:1px solid #e5e7eb; border-radius:8px; margin:12px 0;">
+      <div style="padding:12px; border-bottom:1px solid #e5e7eb;"><strong>Suite:</strong> ${s.title}
+        <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+          <input type="text" placeholder="Suite notes" value="${(s.notes||'').replace(/"/g,'&quot;')}" data-suite="${s.id}" class="suiteNotes" style="flex:1;"/>
+          <button class="suiteSave" data-suite="${s.id}">Save Notes</button>
+          <button class="suiteDelete" data-suite="${s.id}" style="background:#fee2e2; border:1px solid #dc2626;">Delete Suite</button>
+        </div>
+      </div>
+      <div style="padding:12px;">
+        ${(s.tests||[]).map(t => `
+          <div style="margin-bottom:16px;">
+            <div><strong>Test:</strong> ${t.title}
+              <button class="testDelete" data-suite="${s.id}" data-test="${t.id}" style="margin-left:8px; background:#fee2e2; border:1px solid #dc2626;">Delete Test</button>
+            </div>
+            <div style="margin:6px 0; display:flex; gap:8px; align-items:center;">
+              <input type="text" placeholder="Test notes" value="${(t.notes||'').replace(/"/g,'&quot;')}" data-suite="${s.id}" data-test="${t.id}" class="testNotes" style="flex:1;"/>
+              <button class="testSave" data-suite="${s.id}" data-test="${t.id}">Save Notes</button>
+            </div>
+            <div style="font-size:12px; color:#6b7280;">Initial: ${t.initial_state||''} · Action: ${t.action||''} · Expected: ${t.expected||''}</div>
+            <table style="width:100%; margin-top:8px; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th style="text-align:left; padding:6px; border-bottom:1px solid #e5e7eb;">Step</th>
+                  <th style="text-align:left; padding:6px; border-bottom:1px solid #e5e7eb;">Expected</th>
+                  <th style="text-align:left; padding:6px; border-bottom:1px solid #e5e7eb;">Status</th>
+                  <th style="text-align:left; padding:6px; border-bottom:1px solid #e5e7eb;">Notes</th>
+                  <th style="text-align:left; padding:6px; border-bottom:1px solid #e5e7eb;"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(t.steps||[]).map((st, index) => `
+                  <tr>
+                    <td style="padding:6px;"><strong>${index + 1}.</strong> ${st.action||''}</td>
+                    <td style="padding:6px;">${st.expected||''}</td>
+                    <td style="padding:6px;">
+                      <select data-suite="${s.id}" data-test="${t.id}" data-step="${st.id}" class="statusSel">
+                        ${['NOT_TESTED','PASSED','FAILED'].map(opt => `<option value="${opt}" ${st.status===opt?'selected':''}>${opt}</option>`).join('')}
+                      </select>
+                    </td>
+                    <td style="padding:6px;">
+                      <div class="notesClickable" data-suite="${s.id}" data-test="${t.id}" data-step="${st.id}" 
+                           style="padding:6px; background:#f8f9fa; border:1px solid #e5e7eb; border-radius:4px; cursor:pointer; min-height:20px;"
+                           onclick="openStepNotesModal('${s.id}', '${t.id}', '${st.id}')"
+                           title="Click to edit notes">
+                        ${st.notes ? (st.notes.length > 30 ? st.notes.substring(0, 30) + '...' : st.notes) : 'Click to add notes...'}
+                      </div>
+                    </td>
+                    <td style="padding:6px;">
+                      <button class="stepDelete" data-suite="${s.id}" data-test="${t.id}" data-step="${st.id}" style="background:#fee2e2; border:1px solid #dc2626;">Delete</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+  root.innerHTML = html;
+
+  // Status selectors now auto-save when changed
+  document.querySelectorAll('.statusSel').forEach(sel => {
+    sel.addEventListener('change', async (e) => {
+      const suiteId = sel.dataset.suite;
+      const testId = sel.dataset.test;
+      const stepId = sel.dataset.step;
+      const status = sel.value;
+      
+      // Find the step and get current notes
+      const step = plan.suites.find(s => s.id === suiteId)
+        ?.tests?.find(t => t.id === testId)
+        ?.steps?.find(st => st.id === stepId);
+      
+      if (step) {
+        const payload = { suiteId, testId, stepId, status, notes: step.notes || '' };
+        try {
+          const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/step/update/session/`, {
+            method: 'PATCH', 
+            headers: { 
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCookie('csrftoken')
+            }, 
+            body: JSON.stringify(payload)
+          });
+          if (!resp.ok) throw new Error(await resp.text());
+          plan = (await resp.json()).test_plan;
+          render();
+        } catch (err) {
+          alert('Failed to save status: ' + err);
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll('.suiteSave').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const suiteId = btn.dataset.suite;
+      const inp = document.querySelector(`input.suiteNotes[data-suite="${suiteId}"]`);
+      try {
+        const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/suite/notes/`, {
+          method: 'PATCH', 
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          }, 
+          body: JSON.stringify({ suiteId, notes: inp.value })
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        plan = (await resp.json()).test_plan; render();
+      } catch (e) { alert('Save suite notes failed: ' + e); }
+    });
+  });
+
+  document.querySelectorAll('.testSave').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const suiteId = btn.dataset.suite; const testId = btn.dataset.test;
+      const inp = document.querySelector(`input.testNotes[data-suite="${suiteId}"][data-test="${testId}"]`);
+      try {
+        const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/test/notes/`, {
+          method: 'PATCH', 
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          }, 
+          body: JSON.stringify({ suiteId, testId, notes: inp.value })
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        plan = (await resp.json()).test_plan; render();
+      } catch (e) { alert('Save test notes failed: ' + e); }
+    });
+  });
+
+  document.querySelectorAll('.suiteDelete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this suite and all its tests?')) return;
+      const suiteId = btn.dataset.suite;
+      try {
+        const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/suite/delete/?suiteId=${encodeURIComponent(suiteId)}`, {
+          method: 'DELETE',
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        plan = (await resp.json()).test_plan; render(); populateSelectors();
+      } catch (e) { alert('Delete suite failed: ' + e); }
+    });
+  });
+
+  document.querySelectorAll('.testDelete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this test?')) return;
+      const suiteId = btn.dataset.suite; const testId = btn.dataset.test;
+      try {
+        const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/test/delete/?suiteId=${encodeURIComponent(suiteId)}&testId=${encodeURIComponent(testId)}`, {
+          method: 'DELETE',
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        plan = (await resp.json()).test_plan; render(); populateSelectors();
+      } catch (e) { alert('Delete test failed: ' + e); }
+    });
+  });
+
+  document.querySelectorAll('.stepDelete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this step?')) return;
+      const suiteId = btn.dataset.suite; const testId = btn.dataset.test; const stepId = btn.dataset.step;
+      try {
+        const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/step/delete/?suiteId=${encodeURIComponent(suiteId)}&testId=${encodeURIComponent(testId)}&stepId=${encodeURIComponent(stepId)}`, {
+          method: 'DELETE',
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        plan = (await resp.json()).test_plan; render();
+      } catch (e) { alert('Delete step failed: ' + e); }
+    });
+  });
+}
+
+document.getElementById('promoteBtn').addEventListener('click', async () => {
+  try {
+    const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/promote/`, { 
+      method: 'PATCH',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken')
+      }
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    document.getElementById('testingLevel').textContent = data.testing_level;
+  } catch (e) { alert('Promote failed: ' + e); }
+});
+
+async function refreshPlan() {
+  const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/get/session/`);
+  if (!resp.ok) throw new Error(await resp.text());
+  plan = (await resp.json()).test_plan;
+  render();
+  populateSelectors();
+}
+
+function populateSelectors() {
+  const suiteSel1 = document.getElementById('testSuiteSel');
+  const suiteSel2 = document.getElementById('stepSuiteSel');
+  const testSel = document.getElementById('stepTestSel');
+  if (!suiteSel1 || !suiteSel2 || !testSel) return;
+  const suites = (plan.suites||[]);
+  const opts = suites.map(s => `<option value="${s.id}">${s.title}</option>`).join('');
+  suiteSel1.innerHTML = opts;
+  suiteSel2.innerHTML = opts;
+  const updateTestSelector = () => {
+    const sid = suiteSel2.value;
+    const suite = suites.find(x => x.id === sid);
+    testSel.innerHTML = (suite?.tests||[]).map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+  };
+  suiteSel2.removeEventListener('change', updateTestSelector);
+  suiteSel2.addEventListener('change', updateTestSelector);
+  updateTestSelector();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  render();
+  populateSelectors();
+
+  const addSuiteBtn = document.getElementById('addSuiteBtn');
+  addSuiteBtn?.addEventListener('click', async () => {
+    const title = document.getElementById('newSuiteTitle').value.trim();
+    if (!title) return alert('Please enter a suite title');
+    const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/suite/session/`, {
+      method: 'POST', 
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken')
+      }, 
+      body: JSON.stringify({ title })
+    });
+    if (!resp.ok) return alert('Add suite failed: ' + await resp.text());
+    await refreshPlan();
+  });
+
+  const addTestBtn = document.getElementById('addTestBtn');
+  addTestBtn?.addEventListener('click', async () => {
+    const suiteId = document.getElementById('testSuiteSel').value;
+    const title = document.getElementById('newTestTitle').value;
+    const initial_state = document.getElementById('newTestInitial').value;
+    const action = document.getElementById('newTestAction').value;
+    const expected = document.getElementById('newTestExpected').value;
+    if (!suiteId || !title) return alert('Suite and title are required');
+    const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/test/session/`, {
+      method: 'POST', 
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken')
+      },
+      body: JSON.stringify({ suiteId, title, initial_state, action, expected })
+    });
+    if (!resp.ok) return alert('Add test failed: ' + await resp.text());
+    await refreshPlan();
+  });
+
+  const addStepBtn = document.getElementById('addStepBtn');
+  addStepBtn?.addEventListener('click', async () => {
+    const suiteId = document.getElementById('stepSuiteSel').value;
+    const testId = document.getElementById('stepTestSel').value;
+    const action = document.getElementById('newStepAction').value;
+    const expected = document.getElementById('newStepExpected').value;
+    if (!suiteId || !testId || !action) return alert('Suite, test, and action are required');
+    const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/step/session/`, {
+      method: 'POST', 
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken')
+      },
+      body: JSON.stringify({ suiteId, testId, action, expected })
+    });
+    if (!resp.ok) return alert('Add step failed: ' + await resp.text());
+    await refreshPlan();
+  });
+});
+
+// Modal functions for step notes
+let currentStepData = null;
+
+function openStepNotesModal(suiteId, testId, stepId) {
+  // Find the step data
+  const suite = plan.suites.find(s => s.id === suiteId);
+  const test = suite?.tests?.find(t => t.id === testId);
+  const step = test?.steps?.find(st => st.id === stepId);
+  
+  if (!step) {
+    alert('Step not found');
+    return;
+  }
+  
+  currentStepData = { suiteId, testId, stepId };
+  
+  // Populate modal
+  document.getElementById('modalStepAction').textContent = step.action || '';
+  document.getElementById('modalStepExpected').textContent = step.expected || '';
+  document.getElementById('modalStepNotes').value = step.notes || '';
+  document.getElementById('modalStepStatus').value = step.status || 'NOT_TESTED';
+  
+  // Show modal
+  document.getElementById('stepNotesModal').style.display = 'block';
+}
+
+function closeStepNotesModal() {
+  document.getElementById('stepNotesModal').style.display = 'none';
+  currentStepData = null;
+}
+
+async function saveStepNotes() {
+  if (!currentStepData) return;
+  
+  const notes = document.getElementById('modalStepNotes').value.trim();
+  const status = document.getElementById('modalStepStatus').value;
+  
+  try {
+    const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/step/update/session/`, {
+      method: 'PATCH', 
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken')
+      }, 
+      body: JSON.stringify({
+        suiteId: currentStepData.suiteId,
+        testId: currentStepData.testId,
+        stepId: currentStepData.stepId,
+        status: status,
+        notes: notes
+      })
+    });
+    
+    if (!resp.ok) throw new Error(await resp.text());
+    
+    const data = await resp.json();
+    plan = data.test_plan;
+    render();
+    closeStepNotesModal();
+    
+  } catch (err) {
+    alert('Failed to save notes: ' + err);
+  }
+}
+
+// Save button functionality
+document.getElementById('saveBtn')?.addEventListener('click', async () => {
+  try {
+    // Use session-based save endpoint for Django admin compatibility
+    const resp = await fetch(`/support/api/tickets/${ticketId}/test-plan/save/session/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken')
+      },
+      body: JSON.stringify({
+        test_plan: plan
+      })
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    alert('Test plan saved successfully!');
+  } catch (e) {
+    alert('Save failed: ' + e);
+  }
+});
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+  const modal = document.getElementById('stepNotesModal');
+  if (event.target === modal) {
+    closeStepNotesModal();
+  }
+}
+</script>
+{% endblock %}
+
+

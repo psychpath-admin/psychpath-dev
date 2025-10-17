@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | PsychPATH{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 980px;">
+  <h1>{{ title }}</h1>
+  <pre style="white-space: pre-wrap; background: #fff; padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px;">{{ content }}</pre>
+  <p style="margin-top: 16px;">
+    <a href="/support/" class="button">Back to Support Dashboard</a>
+  </p>
+  <p style="margin-top: 8px;">
+    Frontend Roadmap: <a href="http://localhost:5173/roadmap" target="_blank" rel="noopener">Open Roadmap</a>
+  </p>
+{% endblock %}
+
+

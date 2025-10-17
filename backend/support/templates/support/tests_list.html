@@ -1,0 +1,41 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }} | PsychPATH{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1200px;">
+  <h1>{{ title }}</h1>
+  <div style="margin-bottom:12px;">
+    <a href="/support/" class="button">Back to Dashboard</a>
+    <span style="margin-left:8px; color:#6b7280;">Click a ticket to open or create its plan.</span>
+  </div>
+  <table class="table" style="width:100%; background:#fff; border-collapse: collapse;">
+    <thead>
+      <tr>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Ticket</th>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Status</th>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">QA</th>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Level</th>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Updated</th>
+        <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tickets %}
+      <tr>
+        <td style="padding:8px;">#{{ t.id }} — {{ t.subject }}</td>
+        <td style="padding:8px;">{{ t.status }}</td>
+        <td style="padding:8px;">{{ t.qa_status }}</td>
+        <td style="padding:8px;">{{ t.testing_level }}</td>
+        <td style="padding:8px;">{{ t.updated_at }}</td>
+        <td style="padding:8px;">
+          <a href="/support/tests/{{ t.id }}/" class="button">{{ t.has_plan|yesno:"Open,Create" }}</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" style="padding:12px;">No tickets with test plans yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="margin-top:16px;"><a href="/support/" class="button">Back to Support Dashboard</a></p>
+{% endblock %}
+
+
