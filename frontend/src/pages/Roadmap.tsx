@@ -68,7 +68,7 @@ export default function Roadmap() {
   const [filters, setFilters] = useState<RoadmapFilters>({
     stage: [],
     ticketType: [],
-    milestone: '',
+    milestone: 'ALL',
     priority: []
   })
 
@@ -112,7 +112,7 @@ export default function Roadmap() {
     }
     
     // Milestone filter
-    if (filters.milestone && item.target_milestone !== filters.milestone) {
+    if (filters.milestone !== 'ALL' && item.target_milestone !== filters.milestone) {
       return false
     }
     
@@ -273,7 +273,7 @@ export default function Roadmap() {
                     <SelectValue placeholder="All milestones" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All milestones</SelectItem>
+                    <SelectItem value="ALL">All milestones</SelectItem>
                     {milestones.map(milestone => (
                       <SelectItem key={milestone} value={milestone!}>
                         {milestone}

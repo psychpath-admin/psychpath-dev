@@ -24,9 +24,8 @@ interface PDFormProps {
     is_active_activity: boolean
     activity_details: string
     topics_covered: string
-    competencies_covered: string[]
-    reflection: string
-    reviewed_in_supervision: boolean
+  competencies_covered: string[]
+  reflection: string
   }
   setFormData: (data: any) => void
   competencies: PDCompetency[]
@@ -269,18 +268,6 @@ export default function PDForm({
               </div>
             )}
 
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="reviewedInSupervision"
-                checked={formData.reviewed_in_supervision}
-                onChange={(e) => setFormData({ ...formData, reviewed_in_supervision: e.target.checked })}
-                className="rounded"
-              />
-              <label htmlFor="reviewedInSupervision" className="text-sm font-medium">
-                Reviewed in Supervision?
-              </label>
-            </div>
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={onCancel}>

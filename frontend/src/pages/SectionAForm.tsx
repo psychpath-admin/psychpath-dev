@@ -532,12 +532,12 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
       </div>
       
       {/* Error Overlay with standard help system */}
-      {/* <ErrorOverlay
+      <ErrorOverlay
         isOpen={errorOverlay.isOpen}
         onClose={errorOverlay.onClose}
         onGetHelp={errorOverlay.onGetHelp}
         error={errorOverlay.error}
-      /> */}
+      />
     </>
   )
 }

@@ -6913,3 +6913,281 @@ def save_test_plan_session(request, ticket_id):
         return JsonResponse({'error': 'Ticket not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# Test Dashboard Views
+@staff_member_required
+def test_dashboard_overview(request):
+    """Test dashboard overview page"""
+    return render(request, 'support/test_dashboard.html', {
+        'title': 'Test Plans Dashboard'
+    })
+
+
+@staff_member_required
+def test_dashboard_suite_detail(request, ticket_id):
+    """Test suite detail page"""
+    try:
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        return render(request, 'support/test_suite_detail.html', {
+            'title': f'Test Suite: {ticket.subject}',
+            'ticket': ticket
+        })
+    except SupportTicket.DoesNotExist:
+        return render(request, 'support/test_suite_detail.html', {
+            'title': 'Test Suite Not Found',
+            'error': 'Test suite not found'
+        })
+
+
+# Test Dashboard API Views
+@staff_member_required
+@require_http_methods(["GET"])
+def test_dashboard_summary(request):
+    """Get overall test suite statistics"""
+    try:
+        from .utils.test_helpers import calculate_suite_summary
+        
+        # Get all test plan tickets
+        test_tickets = SupportTicket.objects.filter(
+            ticket_type='TESTING'
+        ).exclude(test_plan__isnull=True).exclude(test_plan={})
+        
+        total_suites = test_tickets.count()
+        total_tests = 0
+        total_passed = 0
+        total_failed = 0
+        total_blocked = 0
+        total_to_be_implemented = 0
+        by_status_counts = {
+            'NOT_TESTED': 0,
+            'IN_QA': 0,
+            'PASSED': 0,
+            'REJECTED': 0,
+            'BLOCKED': 0
+        }
+        
+        for ticket in test_tickets:
+            summary = calculate_suite_summary(ticket.test_plan)
+            total_tests += summary['total_tests']
+            total_passed += summary['passed']
+            total_failed += summary['failed']
+            total_blocked += summary['blocked']
+            total_to_be_implemented += summary['to_be_implemented']
+            
+            qa_status = ticket.qa_status or 'NOT_TESTED'
+            if qa_status in by_status_counts:
+                by_status_counts[qa_status] += 1
+        
+        # Calculate overall pass rate
+        executed_tests = total_passed + total_failed
+        overall_pass_rate = f"{(total_passed / executed_tests * 100):.1f}%" if executed_tests > 0 else "0%"
+        
+        return JsonResponse({
+            'total_suites': total_suites,
+            'total_tests': total_tests,
+            'total_passed': total_passed,
+            'total_failed': total_failed,
+            'total_blocked': total_blocked,
+            'total_to_be_implemented': total_to_be_implemented,
+            'overall_pass_rate': overall_pass_rate,
+            'by_status_counts': by_status_counts
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def test_dashboard_suites(request):
+    """Get all test suites with summary"""
+    try:
+        from .utils.test_helpers import calculate_suite_summary
+        
+        # Get filter parameters
+        status_filter = request.GET.get('status')
+        type_filter = request.GET.get('type')
+        
+        # Base queryset
+        test_tickets = SupportTicket.objects.filter(
+            ticket_type='TESTING'
+        ).exclude(test_plan__isnull=True).exclude(test_plan={})
+        
+        # Apply filters
+        if status_filter and status_filter != 'all':
+            test_tickets = test_tickets.filter(qa_status=status_filter)
+        
+        # TODO: Add type filter when we have type field in tickets
+        
+        suites = []
+        for ticket in test_tickets:
+            summary = calculate_suite_summary(ticket.test_plan)
+            
+            suite_data = {
+                'id': ticket.id,
+                'subject': ticket.subject,
+                'description': ticket.description,
+                'qa_status': ticket.qa_status or 'NOT_TESTED',
+                'priority': ticket.priority,
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat(),
+                'summary': summary
+            }
+            suites.append(suite_data)
+        
+        return JsonResponse({'suites': suites})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def test_dashboard_suite_detail_api(request, ticket_id):
+    """Get full test plan for a suite"""
+    try:
+        from .utils.test_helpers import calculate_suite_summary, group_test_cases_by_category
+        
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        if not ticket.test_plan:
+            return JsonResponse({'error': 'No test plan found'}, status=404)
+        
+        # Calculate summary
+        summary = calculate_suite_summary(ticket.test_plan)
+        
+        # Group test cases by category
+        grouped_cases = group_test_cases_by_category(ticket.test_plan)
+        
+        return JsonResponse({
+            'ticket': {
+                'id': ticket.id,
+                'subject': ticket.subject,
+                'description': ticket.description,
+                'qa_status': ticket.qa_status or 'NOT_TESTED',
+                'priority': ticket.priority,
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat()
+            },
+            'test_plan': ticket.test_plan,
+            'summary': summary,
+            'grouped_cases': grouped_cases
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["PATCH"])
+@csrf_exempt
+def test_dashboard_test_case_update(request, ticket_id, test_id):
+    """Update a single test case"""
+    try:
+        from .utils.test_helpers import update_test_case_status, determine_qa_status
+        
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        if not ticket.test_plan:
+            return JsonResponse({'error': 'No test plan found'}, status=404)
+        
+        # Parse request data
+        data = json.loads(request.body)
+        
+        # Update test case
+        updated_plan = update_test_case_status(
+            ticket.test_plan,
+            test_id,
+            data.get('status'),
+            tested_by=data.get('tested_by'),
+            actual_result=data.get('actual_result'),
+            failure_reason=data.get('failure_reason')
+        )
+        
+        # Save updated plan
+        ticket.test_plan = updated_plan
+        ticket.qa_status = determine_qa_status(updated_plan)
+        ticket.save(update_fields=['test_plan', 'qa_status'])
+        
+        return JsonResponse({
+            'test_plan': ticket.test_plan,
+            'qa_status': ticket.qa_status,
+            'message': 'Test case updated successfully'
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def test_dashboard_test_case_execute(request, ticket_id, test_id):
+    """Mark test case as in progress"""
+    try:
+        from .utils.test_helpers import update_test_case_status, determine_qa_status
+        from django.utils import timezone
+        
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        if not ticket.test_plan:
+            return JsonResponse({'error': 'No test plan found'}, status=404)
+        
+        # Mark test as in progress
+        updated_plan = update_test_case_status(
+            ticket.test_plan,
+            test_id,
+            'IN_PROGRESS',
+            tested_by=request.user.email if request.user.is_authenticated else 'system'
+        )
+        
+        # Save updated plan
+        ticket.test_plan = updated_plan
+        ticket.qa_status = determine_qa_status(updated_plan)
+        ticket.save(update_fields=['test_plan', 'qa_status'])
+        
+        return JsonResponse({
+            'test_plan': ticket.test_plan,
+            'qa_status': ticket.qa_status,
+            'message': 'Test case marked as in progress'
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+@csrf_exempt
+def test_dashboard_suite_recalculate(request, ticket_id):
+    """Force recalculation of suite summary stats"""
+    try:
+        from .utils.test_helpers import calculate_suite_summary, determine_qa_status
+        
+        ticket = SupportTicket.objects.get(id=ticket_id)
+        
+        if not ticket.test_plan:
+            return JsonResponse({'error': 'No test plan found'}, status=404)
+        
+        # Recalculate summary
+        ticket.test_plan['summary'] = calculate_suite_summary(ticket.test_plan)
+        ticket.qa_status = determine_qa_status(ticket.test_plan)
+        ticket.save(update_fields=['test_plan', 'qa_status'])
+        
+        return JsonResponse({
+            'test_plan': ticket.test_plan,
+            'qa_status': ticket.qa_status,
+            'message': 'Suite summary recalculated'
+        })
+        
+    except SupportTicket.DoesNotExist:
+        return JsonResponse({'error': 'Ticket not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

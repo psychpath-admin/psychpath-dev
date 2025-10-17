@@ -70,6 +70,18 @@ urlpatterns = [
     path('api/tickets/<int:ticket_id>/test-plan/get/session/', views.get_test_plan_session, name='get_test_plan_session'),
     path('api/tickets/<int:ticket_id>/test-plan/save/session/', views.save_test_plan_session, name='save_test_plan_session'),
     
+    # Test Dashboard URLs
+    path('test-dashboard/', views.test_dashboard_overview, name='test_dashboard_overview'),
+    path('test-dashboard/<int:ticket_id>/', views.test_dashboard_suite_detail, name='test_dashboard_suite_detail'),
+    
+    # Test Dashboard API URLs
+    path('api/test-dashboard/summary/', views.test_dashboard_summary, name='test_dashboard_summary'),
+    path('api/test-dashboard/suites/', views.test_dashboard_suites, name='test_dashboard_suites'),
+    path('api/test-dashboard/suite/<int:ticket_id>/', views.test_dashboard_suite_detail_api, name='test_dashboard_suite_detail_api'),
+    path('api/test-dashboard/test-case/<int:ticket_id>/<str:test_id>/', views.test_dashboard_test_case_update, name='test_dashboard_test_case_update'),
+    path('api/test-dashboard/test-case/<int:ticket_id>/<str:test_id>/execute/', views.test_dashboard_test_case_execute, name='test_dashboard_test_case_execute'),
+    path('api/test-dashboard/suite/<int:ticket_id>/recalculate/', views.test_dashboard_suite_recalculate, name='test_dashboard_suite_recalculate'),
+    
     # Release workflow
     path('api/releases/', views.create_release, name='create_release'),
     path('api/releases/list/', views.list_releases, name='list_releases'),

@@ -1,0 +1,280 @@
+{% extends "support/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">{{ title }}</h1>
+                <div>
+                    <button class="btn btn-outline-primary me-2" onclick="refreshDashboard()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <a href="{% url 'support_dashboard' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Support
+                    </a>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="row mb-4" id="summary-cards">
+                <div class="col-md-2">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h4 class="card-title" id="total-suites">-</h4>
+                            <p class="card-text">Test Suites</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h4 class="card-title" id="total-tests">-</h4>
+                            <p class="card-text">Test Cases</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h4 class="card-title" id="overall-pass-rate">-</h4>
+                            <p class="card-text">Pass Rate</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-warning text-white">
+                        <div class="card-body text-center">
+                            <h4 class="card-title" id="total-blocked">-</h4>
+                            <p class="card-text">Blocked</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-secondary text-white">
+                        <div class="card-body text-center">
+                            <h4 class="card-title" id="total-to-be-implemented">-</h4>
+                            <p class="card-text">To Be Implemented</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-danger text-white">
+                        <div class="card-body text-center">
+                            <h4 class="card-title" id="total-failed">-</h4>
+                            <p class="card-text">Failed</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <select class="form-select" id="status-filter" onchange="applyFilters()">
+                        <option value="all">All Statuses</option>
+                        <option value="NOT_TESTED">Not Tested</option>
+                        <option value="IN_QA">In QA</option>
+                        <option value="PASSED">Passed</option>
+                        <option value="REJECTED">Rejected</option>
+                        <option value="BLOCKED">Blocked</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="type-filter" onchange="applyFilters()">
+                        <option value="all">All Types</option>
+                        <option value="cross-cutting">Cross-Cutting</option>
+                        <option value="feature-specific">Feature-Specific</option>
+                        <option value="system-integrity">System Integrity</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <input type="text" class="form-control" id="search-filter" placeholder="Search test suites..." onkeyup="applyFilters()">
+                </div>
+            </div>
+
+            <!-- Test Suite Grid -->
+            <div class="row" id="test-suites-grid">
+                <!-- Test suite cards will be loaded here -->
+            </div>
+
+            <!-- Loading Spinner -->
+            <div class="text-center mt-4" id="loading-spinner" style="display: none;">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allSuites = [];
+
+// Load dashboard data on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboardData();
+});
+
+async function loadDashboardData() {
+    try {
+        showLoading(true);
+        
+        // Load summary data
+        const summaryResponse = await fetch('/support/api/test-dashboard/summary/');
+        const summaryData = await summaryResponse.json();
+        updateSummaryCards(summaryData);
+        
+        // Load suites data
+        const suitesResponse = await fetch('/support/api/test-dashboard/suites/');
+        const suitesData = await suitesResponse.json();
+        allSuites = suitesData.suites;
+        renderTestSuites(allSuites);
+        
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        showAlert('Error loading dashboard data', 'danger');
+    } finally {
+        showLoading(false);
+    }
+}
+
+function updateSummaryCards(summary) {
+    document.getElementById('total-suites').textContent = summary.total_suites || 0;
+    document.getElementById('total-tests').textContent = summary.total_tests || 0;
+    document.getElementById('overall-pass-rate').textContent = summary.overall_pass_rate || '0%';
+    document.getElementById('total-blocked').textContent = summary.total_blocked || 0;
+    document.getElementById('total-to-be-implemented').textContent = summary.total_to_be_implemented || 0;
+    document.getElementById('total-failed').textContent = summary.total_failed || 0;
+}
+
+function renderTestSuites(suites) {
+    const grid = document.getElementById('test-suites-grid');
+    
+    if (suites.length === 0) {
+        grid.innerHTML = '<div class="col-12"><div class="alert alert-info">No test suites found.</div></div>';
+        return;
+    }
+    
+    grid.innerHTML = suites.map(suite => createSuiteCard(suite)).join('');
+}
+
+function createSuiteCard(suite) {
+    const summary = suite.summary;
+    const completionPercentage = calculateCompletionPercentage(summary);
+    const statusColor = getStatusColor(suite.qa_status);
+    
+    return `
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 suite-card" onclick="openSuiteDetail(${suite.id})" style="cursor: pointer;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">${suite.subject}</h6>
+                    <span class="badge ${statusColor}">${suite.qa_status}</span>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">${summary.total_tests} tests</small>
+                        <div class="d-flex justify-content-between mt-1">
+                            <span class="text-success">${summary.passed} passed</span>
+                            <span class="text-danger">${summary.failed} failed</span>
+                        </div>
+                    </div>
+                    <div class="progress mb-2" style="height: 8px;">
+                        <div class="progress-bar" role="progressbar" style="width: ${completionPercentage}%" 
+                             aria-valuenow="${completionPercentage}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <small class="text-muted">${completionPercentage}% Complete</small>
+                    ${summary.blocked > 0 ? `<div class="mt-1"><small class="text-warning">${summary.blocked} blocked</small></div>` : ''}
+                    ${summary.to_be_implemented > 0 ? `<div class="mt-1"><small class="text-info">${summary.to_be_implemented} to be implemented</small></div>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function calculateCompletionPercentage(summary) {
+    const total = summary.total_tests;
+    const completed = summary.passed + summary.failed + summary.skipped;
+    return total > 0 ? Math.round((completed / total) * 100) : 0;
+}
+
+function getStatusColor(status) {
+    const colors = {
+        'PASSED': 'bg-success',
+        'IN_QA': 'bg-warning',
+        'REJECTED': 'bg-danger',
+        'NOT_TESTED': 'bg-secondary',
+        'BLOCKED': 'bg-info'
+    };
+    return colors[status] || 'bg-secondary';
+}
+
+function applyFilters() {
+    const statusFilter = document.getElementById('status-filter').value;
+    const typeFilter = document.getElementById('type-filter').value;
+    const searchFilter = document.getElementById('search-filter').value.toLowerCase();
+    
+    let filteredSuites = allSuites;
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+        filteredSuites = filteredSuites.filter(suite => suite.qa_status === statusFilter);
+    }
+    
+    // Apply type filter (placeholder - would need type field in data)
+    // if (typeFilter !== 'all') {
+    //     filteredSuites = filteredSuites.filter(suite => suite.type === typeFilter);
+    // }
+    
+    // Apply search filter
+    if (searchFilter) {
+        filteredSuites = filteredSuites.filter(suite => 
+            suite.subject.toLowerCase().includes(searchFilter) ||
+            suite.description.toLowerCase().includes(searchFilter)
+        );
+    }
+    
+    renderTestSuites(filteredSuites);
+}
+
+function openSuiteDetail(suiteId) {
+    window.location.href = `/support/test-dashboard/${suiteId}/`;
+}
+
+function refreshDashboard() {
+    loadDashboardData();
+}
+
+function showLoading(show) {
+    document.getElementById('loading-spinner').style.display = show ? 'block' : 'none';
+}
+
+function showAlert(message, type = 'info') {
+    // Simple alert implementation
+    alert(message);
+}
+</script>
+
+<style>
+.suite-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.suite-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.progress {
+    background-color: #e9ecef;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+</style>
+{% endblock %}

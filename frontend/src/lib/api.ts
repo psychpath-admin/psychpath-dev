@@ -455,7 +455,11 @@ export async function createPDEntry(entry: Partial<PDEntry>): Promise<PDEntry> {
     method: 'POST',
     body: JSON.stringify(entry)
   })
-  if (!res.ok) throw new Error('Failed to create PD entry')
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    console.error('PD Entry creation failed:', errorData)
+    throw new Error(`Failed to create PD entry: ${JSON.stringify(errorData)}`)
+  }
   return res.json()
 }
 
@@ -464,7 +468,11 @@ export async function updatePDEntry(id: number, entry: Partial<PDEntry>): Promis
     method: 'PUT',
     body: JSON.stringify(entry)
   })
-  if (!res.ok) throw new Error('Failed to update PD entry')
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    console.error('PD Entry update failed:', errorData)
+    throw new Error(`Failed to update PD entry: ${JSON.stringify(errorData)}`)
+  }
   return res.json()
 }
 

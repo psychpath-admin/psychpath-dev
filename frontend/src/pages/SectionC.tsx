@@ -33,13 +33,14 @@ import {
 } from '@/lib/api'
 import type { SupervisionEntry, SupervisionWeeklyGroup } from '@/types/supervision'
 import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
-import { useErrorHandler } from '@/lib/errors'
+import { useErrorHandler } from '@/hooks/useErrorHandler'
+import ErrorOverlay from '@/components/ErrorOverlay'
 import UserNameDisplay from '@/components/UserNameDisplay'
 
 const SectionC: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { showError } = useErrorHandler()
+  const { showError, showErrorOverlay, currentError, dismissError, retryAction, setRetryAction } = useErrorHandler()
   const [weeklyGroups, setWeeklyGroups] = useState<SupervisionWeeklyGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -1839,6 +1840,16 @@ const SectionC: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Error Overlay */}
+      {showErrorOverlay && currentError && (
+        <ErrorOverlay
+          isOpen={showErrorOverlay}
+          onClose={dismissError}
+          onRetry={retryAction || undefined}
+          error={currentError}
+        />
       )}
     </div>
   )

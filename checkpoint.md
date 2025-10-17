@@ -314,3 +314,31 @@ tar -xzf "~/OneDrive - CHANGE YOUR MIND PSYCHOLOGY PTY LTD/PsychPATH-Backups/202
 ```
 
 2025-10-13 21:48:26 - I stuffed up the section c modal
+
+### Checkpoint: 2025-10-16 20251016_183508
+
+- **Date**: 2025-10-16 at 18:35:37
+- **Git Commit**: `e884edf` on branch `feature/fix-logbook-submit-error`
+- **Filesystem Backup**: ` 80M` (local: `backups/fs_backup_20251016_183508.tar.gz`)
+- **Database Backup**: `332K` (PostgreSQL custom format + globals)
+- **OneDrive Location**: `~/OneDrive - CHANGE YOUR MIND PSYCHOLOGY PTY LTD/PsychPATH-Backups/20251016_183508/`
+- **Message**: Daily automated checkpoint
+
+**Artifacts:**
+- `fs_backup.tar.gz` - Full source code (excluding node_modules, venv, etc.)
+- `psychpath.dump` - PostgreSQL database (custom format)
+- `postgres_globals.sql` - PostgreSQL roles and permissions
+- `MANIFEST.env` - Backup metadata
+- `SHA256SUMS.txt` - File checksums
+
+**Recovery:**
+```bash
+# Restore database
+pg_restore --clean --create -h localhost -U psychpath -d postgres \
+  "~/OneDrive - CHANGE YOUR MIND PSYCHOLOGY PTY LTD/PsychPATH-Backups/20251016_183508/psychpath.dump"
+
+# Restore code
+tar -xzf "~/OneDrive - CHANGE YOUR MIND PSYCHOLOGY PTY LTD/PsychPATH-Backups/20251016_183508/fs_backup.tar.gz" \
+  -C "/Users/macdemac/Local Sites/PsychPATH"
+```
+

@@ -25,6 +25,8 @@ import CRAForm from '@/components/CRAForm'
 import UserNameDisplay from '@/components/UserNameDisplay'
 import { minutesToHoursMinutes, formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 import { useFilterPersistence, useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
+import { useErrorHandler } from '@/hooks/useErrorHandler'
+import ErrorOverlay from '@/components/ErrorOverlay'
 
 // Helper function to format dates in dd/mm/yyyy format
 const formatDateDDMMYYYY = (dateString: string) => {
@@ -50,7 +52,6 @@ interface DCCEntry {
   parent_dcc_entry?: number
   cra_entries: DCCEntry[]
   simulated: boolean
-  supervisor_reviewed?: boolean
   simulated_hours_info?: {
     total_hours: number
     remaining_hours: number
@@ -73,6 +74,7 @@ interface PaginationInfo {
 export default function SectionADashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { showError, showErrorOverlay, currentError, dismissError, retryAction, setRetryAction } = useErrorHandler()
   const [dccEntries, setDccEntries] = useState<DCCEntry[]>([])
   const [allEntries, setAllEntries] = useState<DCCEntry[]>([]) // Store unfiltered entries for cumulative totals
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -130,8 +132,7 @@ export default function SectionADashboard() {
     dcc_activity_types: [] as string[],
     description: '',
     duration: 50, // Default 50 minutes
-    simulated_client: false,
-    supervisor_reviewed: false
+    simulated_client: false
   })
   const [clientSuggestions, setClientSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -258,13 +259,7 @@ export default function SectionADashboard() {
         })
       }
 
-      // Supervisor review filter
-      if (reviewedFilter === 'reviewed') {
-        filteredEntries = filteredEntries.filter((entry: DCCEntry) => entry.supervisor_reviewed)
-      }
-      if (reviewedFilter === 'not_reviewed') {
-        filteredEntries = filteredEntries.filter((entry: DCCEntry) => !entry.supervisor_reviewed)
-      }
+      // Note: Supervisor review filtering removed as this field doesn't exist in the backend model
       
       // Apply sorting
       filteredEntries.sort((a: DCCEntry, b: DCCEntry) => {
@@ -463,7 +458,13 @@ export default function SectionADashboard() {
       loadDCCEntries()
     } catch (error) {
       console.error('Error submitting CRA form:', error)
-      toast.error('Failed to save CRA entry. Please try again.')
+      showError(new Error('Failed to save CRA entry'), {
+        title: 'Unable to Save CRA Entry',
+        summary: 'There was a problem saving your CRA entry.',
+        explanation: 'This could be due to validation errors, network issues, or server problems.',
+        userAction: 'Please check your entries and try again. If the problem persists, contact support.',
+        errorId: 'CRA_SAVE_ERROR'
+      })
     } finally {
       setLoading(false)
     }
@@ -526,7 +527,13 @@ export default function SectionADashboard() {
       loadDCCEntries()
     } catch (error) {
       console.error('Error submitting ICRA form:', error)
-      toast.error('Failed to save ICRA entry. Please try again.')
+      showError(new Error('Failed to save ICRA entry'), {
+        title: 'Unable to Save ICRA Entry',
+        summary: 'There was a problem saving your ICRA entry.',
+        explanation: 'This could be due to validation errors, network issues, or server problems.',
+        userAction: 'Please check your entries and try again. If the problem persists, contact support.',
+        errorId: 'ICRA_SAVE_ERROR'
+      })
     } finally {
       setLoading(false)
     }
@@ -565,7 +572,8 @@ export default function SectionADashboard() {
     }
     
     try {
-      const entries = await getSectionAEntries()
+      const entries = await getSectionAEntries({ include_locked: true })
+      console.log('Fetched entries for suggestions:', entries)
       const uniqueClients = [...new Set(
         entries
           .filter(entry => 
@@ -575,6 +583,7 @@ export default function SectionADashboard() {
           .map(entry => entry.client_pseudonym || entry.client_id)
       )].filter(Boolean) as string[]
       
+      console.log('Client suggestions:', uniqueClients)
       setClientSuggestions(uniqueClients.slice(0, 10))
     } catch (error) {
       console.error('Error fetching client suggestions:', error)
@@ -582,24 +591,36 @@ export default function SectionADashboard() {
   }
 
   const handleClientSelect = async (clientPseudonym: string) => {
+    console.log('handleClientSelect called with:', clientPseudonym)
     try {
-      const entries = await getSectionAEntries()
-      const lastEntry = entries
-        .filter(entry => (entry.client_pseudonym || entry.client_id) === clientPseudonym)
+      const entries = await getSectionAEntries({ include_locked: true })
+      // Filter for DCC entries only (client_contact type)
+      const lastDCCEntry = entries
+        .filter(entry => 
+          (entry.client_pseudonym || entry.client_id) === clientPseudonym &&
+          entry.entry_type === 'client_contact'
+        )
         .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())[0]
       
-      if (lastEntry) {
+      console.log('Found last DCC entry:', lastDCCEntry)
+      
+      if (lastDCCEntry) {
         setSmartFormData(prev => ({
           ...prev,
           client_pseudonym: clientPseudonym,
-          place_of_practice: lastEntry.place_of_practice || '',
-          presenting_issues: lastEntry.presenting_issues || ''
+          place_of_practice: lastDCCEntry.place_of_practice || '',
+          presenting_issues: lastDCCEntry.presenting_issues || ''
         }))
+        console.log('Updated form data with last DCC entry data:', {
+          place_of_practice: lastDCCEntry.place_of_practice,
+          presenting_issues: lastDCCEntry.presenting_issues
+        })
       } else {
         setSmartFormData(prev => ({
           ...prev,
           client_pseudonym: clientPseudonym
         }))
+        console.log('No previous DCC entry found, just setting client pseudonym')
       }
       setShowSuggestions(false)
     } catch (error) {
@@ -618,10 +639,7 @@ export default function SectionADashboard() {
     if (!smartFormData.description) errors.description = 'Activity description is required'
     if (smartFormData.duration <= 0) errors.duration = 'Duration must be greater than 0'
     
-    // Validation: DCC activities cannot be with simulated clients
-    if (smartFormData.simulated_client) {
-      errors.simulated_client = 'DCC activities cannot be with simulated clients'
-    }
+    // Note: Simulated DCC (SDCC) is a valid entry type - no validation needed here
     
     setFormErrors(errors)
     return Object.keys(errors).length === 0
@@ -629,7 +647,13 @@ export default function SectionADashboard() {
 
   const handleSmartFormSubmit = async () => {
     if (!validateSmartForm()) {
-      toast.error('Please fix the form errors before submitting')
+      showError(new Error('Form validation failed'), {
+        title: 'Form Errors Detected',
+        summary: 'Please fix the form errors before submitting.',
+        explanation: 'One or more fields have validation errors that need to be corrected.',
+        userAction: 'Review the highlighted fields and correct any errors before submitting.',
+        errorId: 'FORM_VALIDATION_ERROR'
+      })
       return
     }
 
@@ -644,7 +668,6 @@ export default function SectionADashboard() {
         duration_minutes: smartFormData.duration.toString(),
         reflections_on_experience: smartFormData.description,
         simulated: smartFormData.simulated_client,
-        supervisor_reviewed: smartFormData.supervisor_reviewed,
         entry_type: 'client_contact',
         week_starting: calculateWeekStarting(smartFormData.date)
       }
@@ -657,11 +680,10 @@ export default function SectionADashboard() {
         client_pseudonym: '',
         place_of_practice: '',
         presenting_issues: '',
-        activity_types: [],
+        dcc_activity_types: [],
         description: '',
         duration: 1.0,
-        simulated_client: false,
-        supervisor_reviewed: false
+        simulated_client: false
       })
       setFormErrors({})
       setShowSmartForm(false)
@@ -670,7 +692,13 @@ export default function SectionADashboard() {
       toast.success('Entry saved successfully. Consider logging supervision if applicable.')
     } catch (error) {
       console.error('Error saving entry:', error)
-      toast.error('Failed to save entry. Please try again.')
+      showError(new Error('Failed to save entry'), {
+        title: 'Unable to Save Entry',
+        summary: 'There was a problem saving your DCC entry.',
+        explanation: 'This could be due to validation errors, network issues, or server problems.',
+        userAction: 'Please check your entries and try again. If the problem persists, contact support.',
+        errorId: 'DCC_SAVE_ERROR'
+      })
     }
   }
 
@@ -895,9 +923,7 @@ export default function SectionADashboard() {
           const dccRAGStatus = getRAGStatus(dccProgressRatio)
           const craRAGStatus = getRAGStatus(craProgressRatio)
 
-          // Supervisor review tracking
-          const reviewedEntries = allEntries.filter(entry => entry.supervisor_reviewed).length
-          const reviewPercentage = allEntries.length > 0 ? (reviewedEntries / allEntries.length) * 100 : 0
+          // Note: Supervisor review tracking removed as this field doesn't exist in the backend model
 
           return (
             <>
@@ -1099,102 +1125,8 @@ export default function SectionADashboard() {
                   </div>
                 </div>
 
-                {/* Supervisor Reviews */}
-                <div className="relative group">
-                  <Card className="brand-card hover:shadow-md transition-all duration-300">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="h-12 w-12 bg-green-500/10 rounded-full flex items-center justify-center">
-                        <Eye className="h-6 w-6 text-green-600" />
-                      </div>
-                      <Badge variant="outline" className="text-green-600 border-green-600 text-xs font-semibold">
-                        {reviewPercentage.toFixed(0)}%
-                      </Badge>
-                    </div>
-                    <div className="text-2xl font-bold text-textDark mb-1">
-                      {reviewedEntries}/{allEntries.length}
-                    </div>
-                    <div className="text-xs font-semibold text-textDark mb-1 font-body">Supervisor Reviews</div>
-                    <div className="text-xs text-textLight mb-2">Target: ≥75% reviewed</div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-500 ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-                        style={{ width: `${Math.min(reviewPercentage, 100)}%` }}
-                      ></div>
-                    </div>
-                    <div className="text-xs text-textLight mt-1">
-                      {reviewPercentage >= 75 ? '✓ Target met' : `${(75 - reviewPercentage).toFixed(1)}% to target`}
-                    </div>
-                  </CardContent>
-                </Card>
-                  {/* Tooltip */}
-                  <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg transition-opacity duration-200 pointer-events-none z-50 w-80 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
-                    <div className="space-y-1">
-                      <p className="font-semibold">Supervisor Review Progress</p>
-                      <p>Tracks how many of your Section A entries have been reviewed by your supervisor.</p>
-                      <p>Target: At least 75% of entries should be reviewed. Current: {reviewPercentage.toFixed(1)}% reviewed ({reviewedEntries} of {allEntries.length} entries).</p>
-                    </div>
-                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                  </div>
-                </div>
-                </div>
 
-              {/* Compliance Summary */}
-              <div className="bg-bgCard p-4 rounded-lg border border-border mb-4">
-                <h3 className="text-lg font-semibold text-textDark mb-3 font-headings">Section A Compliance Summary</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${dccRAGStatus.status === 'green' ? 'bg-green-500' : dccRAGStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                      <span className="font-medium">DCC Hours: {formatDurationWithUnit(totalDccHours * 60)} / {internshipProgress.expectedDccHours.toFixed(0)}h expected</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${craRAGStatus.status === 'green' ? 'bg-green-500' : craRAGStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                      <span className="font-medium">CRA Hours: {formatDurationWithUnit(totalCRAHours * 60)} / {internshipProgress.expectedCRAHours.toFixed(0)}h expected</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                      <span className="font-medium">Supervisor Reviews: {reviewPercentage.toFixed(1)}% (Target: ≥75%)</span>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="font-medium">Internship Progress: {internshipProgress.weeksElapsed} weeks ({internshipProgress.progressPercentage.toFixed(0)}%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="font-medium">ICRA Activities: {formatDurationWithUnit(totalICRAHours * 60)} logged</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="font-medium">Simulated DCC: {formatDurationWithUnit(simulatedDccHours * 60)} of {formatDurationWithUnit(totalDccHours * 60)}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Legend */}
-                <div className="mt-4 pt-4 border-t border-border">
-                  <div className="flex items-center gap-6 text-xs">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      <span className="text-textLight">On Track / Compliant</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                      <span className="text-textLight">At Risk (75-99%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                      <span className="text-textLight">Non-Compliant (&lt;75%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="text-textLight">Informational</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            </div>
             </>
           )
         })()}
@@ -1670,11 +1602,6 @@ export default function SectionADashboard() {
                             Simulated
                           </Badge>
                         )}
-                        {entry.supervisor_reviewed && (
-                          <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-green-600 border-green-600">
-                            ✓ Reviewed
-                          </Badge>
-                        )}
                       </div>
                       
                       <div className="flex items-center gap-2">
@@ -2048,11 +1975,6 @@ export default function SectionADashboard() {
                                   {entry.simulated && (
                                     <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
                                       Simulated
-                                    </Badge>
-                                  )}
-                                  {entry.supervisor_reviewed && (
-                                    <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-green-600 border-green-600">
-                                      ✓ Reviewed
                                     </Badge>
                                   )}
                                 </div>
@@ -2553,6 +2475,7 @@ export default function SectionADashboard() {
                   type="text"
                   value={smartFormData.client_pseudonym}
                   onChange={(e) => {
+                    console.log('Input changed:', e.target.value)
                     setSmartFormData(prev => ({ ...prev, client_pseudonym: e.target.value }))
                     getClientSuggestions(e.target.value)
                     setShowSuggestions(true)
@@ -2562,13 +2485,22 @@ export default function SectionADashboard() {
                   placeholder="Type to search previous clients..."
                   className={formErrors.client_pseudonym ? 'border-red-500' : ''}
                 />
+                {/* Debug info */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Debug: showSuggestions={showSuggestions.toString()}, suggestions={clientSuggestions.length}
+                  </div>
+                )}
                 {showSuggestions && clientSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
                     {clientSuggestions.map((client, index) => (
                       <div
                         key={index}
                         className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                        onClick={() => handleClientSelect(client)}
+                        onClick={() => {
+                          console.log('Suggestion clicked:', client)
+                          handleClientSelect(client)
+                        }}
                       >
                         {client}
                       </div>
@@ -2701,18 +2633,6 @@ export default function SectionADashboard() {
                 {formErrors.simulated_client && <p className="text-red-500 text-xs mt-1">{formErrors.simulated_client}</p>}
               </div>
 
-              {/* Supervisor Reviewed */}
-              <div>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={smartFormData.supervisor_reviewed}
-                    onChange={(e) => setSmartFormData(prev => ({ ...prev, supervisor_reviewed: e.target.checked }))}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm text-gray-700">Reviewed by Supervisor?</span>
-                </label>
-              </div>
 
               {/* Submit Buttons */}
               <div className="flex justify-end space-x-3 pt-4 border-t">
@@ -2737,6 +2657,16 @@ export default function SectionADashboard() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Error Overlay */}
+      {showErrorOverlay && currentError && (
+        <ErrorOverlay
+          isOpen={showErrorOverlay}
+          onClose={dismissError}
+          onRetry={retryAction || undefined}
+          error={currentError}
+        />
       )}
     </div>
   )

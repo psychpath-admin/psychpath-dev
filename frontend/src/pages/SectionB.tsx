@@ -33,13 +33,14 @@ import {
 import type { PDEntry, PDCompetency, PDWeeklyGroup } from '@/types/pd'
 import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationUtils'
 import { useSimpleFilterPersistence } from '@/hooks/useFilterPersistence'
-import { useErrorHandler } from '@/lib/errors'
+import { useErrorHandler } from '@/hooks/useErrorHandler'
+import ErrorOverlay from '@/components/ErrorOverlay'
 import UserNameDisplay from '@/components/UserNameDisplay'
 
 const SectionB: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { showError } = useErrorHandler()
+  const { showError, showErrorOverlay, currentError, dismissError, retryAction, setRetryAction } = useErrorHandler()
   const [weeklyGroups, setWeeklyGroups] = useState<PDWeeklyGroup[]>([])
   const [competencies, setCompetencies] = useState<PDCompetency[]>([])
   const [loading, setLoading] = useState(true)
@@ -209,9 +210,7 @@ const SectionB: React.FC = () => {
       if (!hasMatchingCompetency) return false
     }
 
-    // Supervisor review filter
-    if (reviewedFilter === 'reviewed' && !entry.reviewed_in_supervision) return false
-    if (reviewedFilter === 'not_reviewed' && entry.reviewed_in_supervision) return false
+    // Supervisor review filter removed
 
     return true
   })
@@ -287,9 +286,9 @@ const SectionB: React.FC = () => {
     activity_details: '',
     topics_covered: '',
     competencies_covered: [] as string[],
-    reflection: '',
-    reviewed_in_supervision: false
+    reflection: ''
   })
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({})
 
   const activityTypes = [
     'WORKSHOP', 'WEBINAR', 'LECTURE', 'PRESENTATION', 
@@ -522,9 +521,9 @@ const SectionB: React.FC = () => {
       activity_details: '',
       topics_covered: '',
       competencies_covered: [],
-      reflection: '',
-      reviewed_in_supervision: false
+      reflection: ''
     })
+    setFieldErrors({})
     setEditingEntry(null)
     setShowForm(true)
   }
@@ -549,15 +548,16 @@ const SectionB: React.FC = () => {
       activity_details: entry.activity_details,
       topics_covered: entry.topics_covered,
       competencies_covered: entry.competencies_covered,
-      reflection: entry.reflection || '',
-      reviewed_in_supervision: entry.reviewed_in_supervision || false
+      reflection: entry.reflection || ''
     })
+    setFieldErrors({})
     setEditingEntry(entry)
     setShowForm(true)
   }
 
   const handleSave = async () => {
     try {
+      console.log('Saving PD entry with data:', formData)
       if (editingEntry) {
         await updatePDEntry(editingEntry.id, formData)
       } else {
@@ -570,6 +570,56 @@ const SectionB: React.FC = () => {
       loadData()
     } catch (error) {
       console.error('Error saving entry:', error)
+      
+      // Parse validation errors from backend
+      const errorMessage = error.message || 'Failed to save entry'
+      let validationDetails = ''
+      
+      // Extract validation errors from the error message
+      // Error message format: "Failed to create/update PD entry: {"field":["error message"]}"
+      const jsonMatch = errorMessage.match(/\{.*\}/)
+      
+      if (jsonMatch) {
+        try {
+          const validationErrors = JSON.parse(jsonMatch[0])
+          const errorMessages = []
+          
+          for (const [field, messages] of Object.entries(validationErrors)) {
+            const fieldName = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            const messageList = Array.isArray(messages) ? messages : [messages]
+            errorMessages.push(`${fieldName}: ${messageList.join(', ')}`)
+          }
+          
+          validationDetails = errorMessages.join('\n')
+        } catch (e) {
+          console.error('Failed to parse validation errors:', e)
+        }
+      }
+      
+      // Set field errors for highlighting
+      const errors: Record<string, boolean> = {}
+      if (jsonMatch) {
+        try {
+          const validationErrors = JSON.parse(jsonMatch[0])
+          for (const field of Object.keys(validationErrors)) {
+            errors[field] = true
+          }
+        } catch (e) {
+          console.error('Failed to parse validation errors for highlighting:', e)
+        }
+      }
+      setFieldErrors(errors)
+      
+      // Show error using the error overlay system
+      showError(new Error(errorMessage), {
+        title: 'Unable to Save Entry',
+        summary: validationDetails || 'There was a problem saving your professional development entry.',
+        explanation: 'The information you entered doesn\'t meet the validation requirements. Please review the error message and correct the highlighted issues.',
+        userAction: validationDetails 
+          ? 'Please correct the following issues and try again:\n\n' + validationDetails
+          : 'Please check your entries and try again. If the problem persists, contact support.',
+        errorId: 'PD_VALIDATION_ERROR'
+      })
     }
   }
 
@@ -718,9 +768,7 @@ const SectionB: React.FC = () => {
 
           const ragStatus = getRAGStatus(progressRatio)
 
-          // Supervisor review tracking
-          const reviewedEntries = allEntries.filter(entry => entry.reviewed_in_supervision).length
-          const reviewPercentage = totalEntries > 0 ? (reviewedEntries / totalEntries) * 100 : 0
+          // Supervisor review tracking removed
 
           return (
             <>
@@ -906,49 +954,6 @@ const SectionB: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Supervisor Reviews */}
-                <div className="relative group">
-                  <Card className="brand-card hover:shadow-md transition-all duration-300">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="h-12 w-12 bg-blue-500/10 rounded-full flex items-center justify-center">
-                          <Eye className="h-6 w-6 text-blue-600" />
-                        </div>
-                        <Badge variant="outline" className="text-blue-600 border-blue-600 text-xs font-semibold">
-                          {reviewPercentage.toFixed(0)}%
-                        </Badge>
-                      </div>
-                      <div className="text-2xl font-bold text-textDark mb-1">
-                        {reviewedEntries}/{totalEntries}
-                      </div>
-                      <div className="text-xs font-semibold text-textDark mb-1 font-body">Supervisor Reviews</div>
-                      <div className="text-xs text-textLight mb-2">Target: ≥75% reviewed</div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all duration-500 ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-                          style={{ width: `${Math.min(reviewPercentage, 100)}%` }}
-                        ></div>
-                      </div>
-                      <div className="text-xs text-textLight mt-1">
-                        {reviewPercentage >= 75 ? '✓ Target met' : `${(75 - reviewPercentage).toFixed(1)}% to target`}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Tooltip */}
-                    <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
-                    <div className="font-semibold mb-2">Supervisor Reviews</div>
-                    <div className="mb-2">Tracks how many of your PD entries have been reviewed and discussed with your supervisor.</div>
-                    <div className="mb-2"><strong>Reviewed Entries:</strong> {reviewedEntries} out of {totalEntries} total</div>
-                    <div className="mb-2"><strong>Review Percentage:</strong> {reviewPercentage.toFixed(1)}%</div>
-                    <div className="mb-2"><strong>Target:</strong> ≥75% of entries reviewed</div>
-                    <div className="mb-2"><strong>Status:</strong> {reviewPercentage >= 75 ? '✓ Target met' : `${(75 - reviewPercentage).toFixed(1)}% to target`}</div>
-                    <div className="text-xs text-gray-300">
-                      <strong>Importance:</strong> Supervisor review ensures quality and learning from PD activities
-                    </div>
-                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                  </div>
-                </div>
 
                 {/* Active Learning */}
                 <div className="relative group">
@@ -1425,11 +1430,6 @@ const SectionB: React.FC = () => {
                               <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
                                 {entry.is_active_activity ? 'Active' : 'Passive'}
                               </Badge>
-                              {entry.reviewed_in_supervision && (
-                                <Badge variant="outline" className="text-xs text-green-600 border-green-600">
-                                  ✓ Reviewed
-                                </Badge>
-                              )}
                             </div>
                             
                             {/* Row 2: Activity Type */}
@@ -1453,7 +1453,6 @@ const SectionB: React.FC = () => {
                                     <div><span className="font-medium">Duration:</span> {formatDurationDisplay(entry.duration_minutes)}</div>
                                     <div><span className="font-medium">Type:</span> {entry.activity_type}</div>
                                     <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
-                                    <div><span className="font-medium">Reviewed:</span> {entry.reviewed_in_supervision ? 'Yes' : 'No'}</div>
                                     {entry.activity_details && (
                                       <div><span className="font-medium">Details:</span> {entry.activity_details}</div>
                                     )}
@@ -1531,11 +1530,6 @@ const SectionB: React.FC = () => {
                       <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
                         {entry.is_active_activity ? 'Active' : 'Passive'}
                       </Badge>
-                      {entry.reviewed_in_supervision && (
-                        <Badge variant="outline" className="text-xs text-green-600 border-green-600">
-                          ✓ Reviewed
-                        </Badge>
-                      )}
                     </div>
                     
                     {/* Row 2: Activity Type */}
@@ -1559,7 +1553,6 @@ const SectionB: React.FC = () => {
                             <div><span className="font-medium">Duration:</span> {formatDurationDisplay(entry.duration_minutes)}</div>
                             <div><span className="font-medium">Type:</span> {entry.activity_type}</div>
                             <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
-                            <div><span className="font-medium">Reviewed:</span> {entry.reviewed_in_supervision ? 'Yes' : 'No'}</div>
                             {entry.activity_details && (
                               <div><span className="font-medium">Details:</span> {entry.activity_details}</div>
                             )}
@@ -1729,6 +1722,7 @@ const SectionB: React.FC = () => {
                     type="number"
                     value={formData.duration_minutes}
                     onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: parseInt(e.target.value) || 0 }))}
+                    className={fieldErrors.duration_minutes ? 'border-red-500' : ''}
                   />
                   <div className="mt-2 flex flex-wrap gap-2">
                     {durationQuickLinks.map(minutes => (
@@ -1760,7 +1754,7 @@ const SectionB: React.FC = () => {
                 <textarea
                   value={formData.activity_details}
                   onChange={(e) => setFormData(prev => ({ ...prev, activity_details: e.target.value }))}
-                  className="w-full p-2 border rounded h-20"
+                  className={`w-full p-2 border rounded h-20 ${fieldErrors.activity_details ? 'border-red-500' : ''}`}
                   placeholder="E.g. name of course, presenter, institution etc"
                 />
               </div>
@@ -1770,7 +1764,7 @@ const SectionB: React.FC = () => {
                 <textarea
                   value={formData.topics_covered}
                   onChange={(e) => setFormData(prev => ({ ...prev, topics_covered: e.target.value }))}
-                  className="w-full p-2 border rounded h-20"
+                  className={`w-full p-2 border rounded h-20 ${fieldErrors.topics_covered ? 'border-red-500' : ''}`}
                   placeholder="E.g. behavioural interventions for ADHD in adolescents"
                 />
               </div>
@@ -1823,7 +1817,7 @@ const SectionB: React.FC = () => {
                   </div>
                   <div>
                     <h4 className="font-medium mb-3 text-gray-700">Selected Competencies</h4>
-                    <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 p-3 rounded-lg bg-blue-50">
+                    <div className={`space-y-2 max-h-48 overflow-y-auto border p-3 rounded-lg bg-blue-50 ${fieldErrors.competencies_covered ? 'border-red-500' : 'border-gray-200'}`}>
                       {formData.competencies_covered.length === 0 ? (
                         <div className="text-gray-500 text-sm text-center py-4">
                           No competencies selected yet
@@ -1857,23 +1851,11 @@ const SectionB: React.FC = () => {
                 <textarea
                   value={formData.reflection}
                   onChange={(e) => setFormData(prev => ({ ...prev, reflection: e.target.value }))}
-                  className="w-full p-2 border rounded h-24"
+                  className={`w-full p-2 border rounded h-24 ${fieldErrors.reflection ? 'border-red-500' : ''}`}
                   placeholder="Reflect on how this activity contributed to your professional development..."
                 />
               </div>
 
-              <div>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.reviewed_in_supervision}
-                    onChange={(e) => setFormData(prev => ({ ...prev, reviewed_in_supervision: e.target.checked }))}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm font-medium">Reviewed with Supervisor</span>
-                </label>
-                <p className="text-xs text-gray-500 mt-1">Mark this if you've discussed this PD activity with your supervisor</p>
-              </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 mt-6 px-6 pb-6">
@@ -1898,6 +1880,16 @@ const SectionB: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Error Overlay */}
+      {showErrorOverlay && currentError && (
+        <ErrorOverlay
+          isOpen={showErrorOverlay}
+          onClose={dismissError}
+          onRetry={retryAction || undefined}
+          error={currentError}
+        />
       )}
       </div>
     </div>

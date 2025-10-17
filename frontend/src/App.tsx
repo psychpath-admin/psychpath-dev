@@ -44,8 +44,6 @@ function CRAFormWrapper() {
   const [customActivityTypes, setCustomActivityTypes] = useState<string[]>([])
   const [newCustomActivityType, setNewCustomActivityType] = useState('')
   const [clientSuggestions] = useState<string[]>([])
-  
-  const parentDccId = (location.state as any)?.parentDccId
   const entryId = (location.state as any)?.entryId
   const isEditing = !!entryId
   
@@ -77,20 +75,11 @@ function CRAFormWrapper() {
     }
   }
   
-  const handleActivityTypeToggle = (type: string) => {
-    setEntryForm(prev => ({
-      ...prev,
-      session_activity_types: prev.session_activity_types.includes(type)
-        ? prev.session_activity_types.filter((t: string) => t !== type)
-        : [...prev.session_activity_types, type]
-    }))
-  }
   
   const handleAddCustomActivityType = () => {
     if (newCustomActivityType.trim()) {
       setCustomActivityTypes(prev => [...prev, newCustomActivityType.trim()])
       setNewCustomActivityType('')
-      setShowCustomInput(false)
     }
   }
   
@@ -116,7 +105,6 @@ function CRAFormWrapper() {
       saving={saving}
       entryForm={entryForm}
       setEntryForm={setEntryForm}
-      handleActivityTypeToggle={handleActivityTypeToggle}
       handleAddCustomActivityType={handleAddCustomActivityType}
       newCustomActivityType={newCustomActivityType}
       setNewCustomActivityType={setNewCustomActivityType}
@@ -128,7 +116,6 @@ function CRAFormWrapper() {
       onClientIdChange={handleClientIdChange}
       clientSuggestions={clientSuggestions}
       isEditing={isEditing}
-      entryId={entryId}
     />
   )
 }

@@ -1,0 +1,504 @@
+{% extends "support/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-0">{{ title }}</h1>
+                    {% if ticket %}
+                    <p class="text-muted mb-0">{{ ticket.description }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <button class="btn btn-outline-primary me-2" onclick="refreshSuiteData()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <a href="{% url 'test_dashboard_overview' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+            {% else %}
+            
+            <!-- Suite Header -->
+            <div class="card mb-4" id="suite-header">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5 class="card-title">{{ ticket.subject }}</h5>
+                            <p class="card-text text-muted">{{ ticket.description }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex justify-content-end align-items-center">
+                                <div class="me-3">
+                                    <span class="badge bg-primary me-1" id="qa-status-badge">Loading...</span>
+                                    <span class="badge bg-secondary me-1" id="priority-badge">Loading...</span>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted d-block">Updated: <span id="updated-at">-</span></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="progress mb-2" style="height: 10px;">
+                                <div class="progress-bar" id="overall-progress" role="progressbar" style="width: 0%" 
+                                     aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted" id="progress-text">Loading...</small>
+                                <small class="text-muted" id="pass-rate-text">Loading...</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Cases by Category -->
+            <div id="test-categories">
+                <!-- Categories will be loaded here -->
+            </div>
+
+            <!-- Loading Spinner -->
+            <div class="text-center mt-4" id="loading-spinner" style="display: none;">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Test Case Detail Modal -->
+<div class="modal fade" id="testCaseModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Test Case Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Test case details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="saveTestCase()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentSuiteData = null;
+let currentTestCase = null;
+
+// Load suite data on page load
+document.addEventListener('DOMContentLoaded', function() {
+    {% if ticket %}
+    loadSuiteData({{ ticket.id }});
+    {% endif %}
+});
+
+async function loadSuiteData(suiteId) {
+    try {
+        showLoading(true);
+        
+        const response = await fetch(`/support/api/test-dashboard/suite/${suiteId}/`);
+        const data = await response.json();
+        
+        if (data.error) {
+            showAlert(data.error, 'danger');
+            return;
+        }
+        
+        currentSuiteData = data;
+        updateSuiteHeader(data);
+        renderTestCategories(data);
+        
+    } catch (error) {
+        console.error('Error loading suite data:', error);
+        showAlert('Error loading suite data', 'danger');
+    } finally {
+        showLoading(false);
+    }
+}
+
+function updateSuiteHeader(data) {
+    const ticket = data.ticket;
+    const summary = data.summary;
+    
+    // Update badges
+    document.getElementById('qa-status-badge').textContent = ticket.qa_status;
+    document.getElementById('qa-status-badge').className = `badge ${getStatusColor(ticket.qa_status)} me-1`;
+    document.getElementById('priority-badge').textContent = ticket.priority;
+    
+    // Update timestamps
+    document.getElementById('updated-at').textContent = new Date(ticket.updated_at).toLocaleString();
+    
+    // Update progress
+    const completionPercentage = calculateCompletionPercentage(summary);
+    document.getElementById('overall-progress').style.width = `${completionPercentage}%`;
+    document.getElementById('overall-progress').setAttribute('aria-valuenow', completionPercentage);
+    
+    // Update progress text
+    document.getElementById('progress-text').textContent = 
+        `${summary.passed + summary.failed + summary.skipped} of ${summary.total_tests} tests executed`;
+    document.getElementById('pass-rate-text').textContent = `Pass Rate: ${summary.pass_rate}`;
+}
+
+function renderTestCategories(data) {
+    const categoriesContainer = document.getElementById('test-categories');
+    const groupedCases = data.grouped_cases;
+    
+    if (Object.keys(groupedCases).length === 0) {
+        categoriesContainer.innerHTML = '<div class="alert alert-info">No test cases found.</div>';
+        return;
+    }
+    
+    let html = '';
+    
+    for (const [category, testCases] of Object.entries(groupedCases)) {
+        html += createCategorySection(category, testCases);
+    }
+    
+    categoriesContainer.innerHTML = html;
+}
+
+function createCategorySection(category, testCases) {
+    const categorySummary = calculateCategorySummary(testCases);
+    
+    return `
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">${category}</h6>
+                <div class="d-flex align-items-center">
+                    <small class="text-muted me-3">${testCases.length} tests</small>
+                    <div class="progress me-3" style="width: 100px; height: 6px;">
+                        <div class="progress-bar" role="progressbar" style="width: ${categorySummary.completionPercentage}%" 
+                             aria-valuenow="${categorySummary.completionPercentage}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <small class="text-muted">${categorySummary.passRate}</small>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px;">ID</th>
+                                <th>Description</th>
+                                <th style="width: 100px;">Priority</th>
+                                <th style="width: 120px;">Status</th>
+                                <th style="width: 150px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${testCases.map(testCase => createTestCaseRow(testCase)).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function createTestCaseRow(testCase) {
+    const statusColor = getTestCaseStatusColor(testCase.status);
+    const priorityColor = getPriorityColor(testCase.priority);
+    
+    return `
+        <tr>
+            <td><code>${testCase.id}</code></td>
+            <td>
+                <div class="fw-bold">${testCase.description}</div>
+                ${testCase.failure_reason ? `<small class="text-danger">${testCase.failure_reason}</small>` : ''}
+            </td>
+            <td><span class="badge ${priorityColor}">${testCase.priority}</span></td>
+            <td><span class="badge ${statusColor}">${testCase.status}</span></td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="viewTestCase('${testCase.id}')">
+                    <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-success me-1" onclick="markAsPassed('${testCase.id}')">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger me-1" onclick="markAsFailed('${testCase.id}')">
+                    <i class="fas fa-times"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-warning" onclick="markAsBlocked('${testCase.id}')">
+                    <i class="fas fa-ban"></i>
+                </button>
+            </td>
+        </tr>
+    `;
+}
+
+function viewTestCase(testId) {
+    const testCase = findTestCaseById(testId);
+    if (!testCase) return;
+    
+    currentTestCase = testCase;
+    
+    document.getElementById('modalTitle').textContent = `Test Case: ${testCase.id}`;
+    
+    const modalBody = document.getElementById('modalBody');
+    modalBody.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Test Details</h6>
+                <p><strong>ID:</strong> ${testCase.id}</p>
+                <p><strong>Category:</strong> ${testCase.category}</p>
+                <p><strong>Priority:</strong> <span class="badge ${getPriorityColor(testCase.priority)}">${testCase.priority}</span></p>
+                <p><strong>Status:</strong> <span class="badge ${getTestCaseStatusColor(testCase.status)}">${testCase.status}</span></p>
+                
+                <h6 class="mt-3">Steps</h6>
+                <ol>
+                    ${testCase.steps.map(step => `<li>${step}</li>`).join('')}
+                </ol>
+                
+                <h6 class="mt-3">Expected Result</h6>
+                <p class="text-muted">${testCase.expected_result}</p>
+            </div>
+            <div class="col-md-6">
+                <h6>Test Execution</h6>
+                <div class="mb-3">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" id="testStatus">
+                        <option value="NOT_TESTED" ${testCase.status === 'NOT_TESTED' ? 'selected' : ''}>Not Tested</option>
+                        <option value="IN_PROGRESS" ${testCase.status === 'IN_PROGRESS' ? 'selected' : ''}>In Progress</option>
+                        <option value="PASSED" ${testCase.status === 'PASSED' ? 'selected' : ''}>Passed</option>
+                        <option value="FAILED" ${testCase.status === 'FAILED' ? 'selected' : ''}>Failed</option>
+                        <option value="BLOCKED" ${testCase.status === 'BLOCKED' ? 'selected' : ''}>Blocked</option>
+                        <option value="TO_BE_IMPLEMENTED" ${testCase.status === 'TO_BE_IMPLEMENTED' ? 'selected' : ''}>To Be Implemented</option>
+                        <option value="SKIPPED" ${testCase.status === 'SKIPPED' ? 'selected' : ''}>Skipped</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Actual Result</label>
+                    <textarea class="form-control" id="actualResult" rows="3">${testCase.actual_result || ''}</textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Failure Reason (if applicable)</label>
+                    <textarea class="form-control" id="failureReason" rows="2">${testCase.failure_reason || ''}</textarea>
+                </div>
+                
+                ${testCase.tested_by ? `
+                <div class="mb-3">
+                    <small class="text-muted">
+                        <strong>Tested by:</strong> ${testCase.tested_by}<br>
+                        <strong>Tested at:</strong> ${testCase.tested_at ? new Date(testCase.tested_at).toLocaleString() : 'N/A'}
+                    </small>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    
+    const modal = new bootstrap.Modal(document.getElementById('testCaseModal'));
+    modal.show();
+}
+
+async function markAsPassed(testId) {
+    await updateTestCaseStatus(testId, 'PASSED');
+}
+
+async function markAsFailed(testId) {
+    await updateTestCaseStatus(testId, 'FAILED');
+}
+
+async function markAsBlocked(testId) {
+    await updateTestCaseStatus(testId, 'BLOCKED');
+}
+
+async function updateTestCaseStatus(testId, status) {
+    try {
+        const response = await fetch(`/support/api/test-dashboard/test-case/${currentSuiteData.ticket.id}/${testId}/`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                status: status,
+                tested_by: '{{ user.email }}'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            showAlert(data.error, 'danger');
+            return;
+        }
+        
+        // Reload suite data
+        await loadSuiteData(currentSuiteData.ticket.id);
+        showAlert('Test case updated successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error updating test case:', error);
+        showAlert('Error updating test case', 'danger');
+    }
+}
+
+async function saveTestCase() {
+    if (!currentTestCase) return;
+    
+    try {
+        const status = document.getElementById('testStatus').value;
+        const actualResult = document.getElementById('actualResult').value;
+        const failureReason = document.getElementById('failureReason').value;
+        
+        const response = await fetch(`/support/api/test-dashboard/test-case/${currentSuiteData.ticket.id}/${currentTestCase.id}/`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                status: status,
+                actual_result: actualResult,
+                failure_reason: failureReason,
+                tested_by: '{{ user.email }}'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            showAlert(data.error, 'danger');
+            return;
+        }
+        
+        // Close modal and reload data
+        bootstrap.Modal.getInstance(document.getElementById('testCaseModal')).hide();
+        await loadSuiteData(currentSuiteData.ticket.id);
+        showAlert('Test case updated successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error saving test case:', error);
+        showAlert('Error saving test case', 'danger');
+    }
+}
+
+function findTestCaseById(testId) {
+    if (!currentSuiteData || !currentSuiteData.test_plan.test_cases) return null;
+    return currentSuiteData.test_plan.test_cases.find(tc => tc.id === testId);
+}
+
+function calculateCategorySummary(testCases) {
+    const total = testCases.length;
+    const passed = testCases.filter(tc => tc.status === 'PASSED').length;
+    const failed = testCases.filter(tc => tc.status === 'FAILED').length;
+    const executed = passed + failed;
+    
+    const completionPercentage = total > 0 ? Math.round(((executed + testCases.filter(tc => tc.status === 'SKIPPED').length) / total) * 100) : 0;
+    const passRate = executed > 0 ? `${Math.round((passed / executed) * 100)}%` : 'N/A';
+    
+    return { completionPercentage, passRate };
+}
+
+function calculateCompletionPercentage(summary) {
+    const total = summary.total_tests;
+    const completed = summary.passed + summary.failed + summary.skipped;
+    return total > 0 ? Math.round((completed / total) * 100) : 0;
+}
+
+function getStatusColor(status) {
+    const colors = {
+        'PASSED': 'bg-success',
+        'IN_QA': 'bg-warning',
+        'REJECTED': 'bg-danger',
+        'NOT_TESTED': 'bg-secondary',
+        'BLOCKED': 'bg-info'
+    };
+    return colors[status] || 'bg-secondary';
+}
+
+function getTestCaseStatusColor(status) {
+    const colors = {
+        'PASSED': 'bg-success',
+        'FAILED': 'bg-danger',
+        'IN_PROGRESS': 'bg-warning',
+        'BLOCKED': 'bg-info',
+        'NOT_TESTED': 'bg-secondary',
+        'TO_BE_IMPLEMENTED': 'bg-primary',
+        'SKIPPED': 'bg-light text-dark'
+    };
+    return colors[status] || 'bg-secondary';
+}
+
+function getPriorityColor(priority) {
+    const colors = {
+        'HIGH': 'bg-danger',
+        'MEDIUM': 'bg-warning',
+        'LOW': 'bg-success'
+    };
+    return colors[priority] || 'bg-secondary';
+}
+
+function refreshSuiteData() {
+    {% if ticket %}
+    loadSuiteData({{ ticket.id }});
+    {% endif %}
+}
+
+function showLoading(show) {
+    document.getElementById('loading-spinner').style.display = show ? 'block' : 'none';
+}
+
+function showAlert(message, type = 'info') {
+    // Simple alert implementation
+    alert(message);
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+
+<style>
+.table th {
+    border-top: none;
+    font-weight: 600;
+}
+
+.progress {
+    background-color: #e9ecef;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+</style>
+{% endblock %}

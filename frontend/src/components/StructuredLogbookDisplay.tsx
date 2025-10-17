@@ -141,8 +141,7 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
     activity_details: '',
     topics_covered: '',
     competencies_covered: [] as string[],
-    reflection: '',
-    reviewed_in_supervision: false
+    reflection: ''
   })
   
   const [cFormData, setCFormData] = useState({
@@ -555,9 +554,8 @@ export default function StructuredLogbookDisplay({ logbook, onClose, onRegenerat
         is_active_activity: entry.is_active_activity !== false,
         activity_details: entry.activity_details || entry.presenter || '',
         topics_covered: entry.topics_covered || entry.specific_topics || '',
-        competencies_covered: entry.competencies_covered || [],
-        reflection: entry.reflection || '',
-        reviewed_in_supervision: entry.reviewed_in_supervision || false
+      competencies_covered: entry.competencies_covered || [],
+      reflection: entry.reflection || ''
       })
       setShowBEditModal(true)
     }
