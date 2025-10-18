@@ -149,3 +149,9 @@ temp/
 # Local development
 local/
 locals/
+
+# Large backup files (use OneDrive instead)
+backups/*.tar.gz
+backups/*/
+backend/backups/
+*.dump
