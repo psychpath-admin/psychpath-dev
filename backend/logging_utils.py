@@ -224,3 +224,76 @@ def log_sdcc_violation(user, current_hours, attempted_hours, details=None):
     }
     
     audit_logger.warning(f'SDCC limit violation attempted', extra=context)
+
+
+def validation_error_handler(view_func):
+    """
+    Decorator to handle AHPRA validation errors with help system integration
+    
+    This decorator:
+    1. Catches AHPRAValidationError and MultipleValidationErrors
+    2. Logs validation failures for audit
+    3. Returns properly formatted error responses with help text
+    
+    Usage:
+        @validation_error_handler
+        @api_view(['POST'])
+        def my_view(request):
+            # ... validation logic ...
+            if not valid:
+                raise AHPRAValidationError('INSUFFICIENT_TOTAL_HOURS', details={...})
+    """
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        try:
+            return view_func(request, *args, **kwargs)
+        except Exception as e:
+            # Import here to avoid circular imports
+            from api.exceptions import AHPRAValidationError, MultipleValidationErrors
+            from rest_framework.response import Response
+            from rest_framework import status
+            
+            # Handle AHPRA validation errors
+            if isinstance(e, (AHPRAValidationError, MultipleValidationErrors)):
+                # Log validation failure for audit
+                log_data_access(
+                    user=request.user,
+                    action='VALIDATION_FAILED',
+                    resource=view_func.__name__,
+                    result='FAILED',
+                    details={
+                        'error_code': getattr(e, 'error_code', 'MULTIPLE_ERRORS'),
+                        'details': getattr(e, 'details_data', {}),
+                    }
+                )
+                
+                # Return properly formatted error response
+                return Response(e.detail, status=e.status_code)
+            
+            # Re-raise other exceptions (let support_error_handler handle them)
+            raise
+    
+    return wrapper
+
+
+def log_validation_error(user, error_code, details=None):
+    """
+    Log AHPRA validation errors for audit purposes
+    
+    Args:
+        user: User who triggered the validation error
+        error_code: AHPRA error code (e.g., 'INSUFFICIENT_TOTAL_HOURS')
+        details: Additional context about the error
+    """
+    audit_logger = get_audit_logger()
+    
+    context = {
+        'user': user.email if user else 'Anonymous',
+        'action': 'VALIDATION_ERROR',
+        'resource': 'AHPRA_COMPLIANCE',
+        'error_code': error_code,
+        'timestamp': datetime.now().isoformat(),
+        'details': details or {}
+    }
+    
+    audit_logger.info(f'AHPRA validation error: {error_code}', extra=context)

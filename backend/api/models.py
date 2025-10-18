@@ -95,10 +95,107 @@ class UserProfile(models.Model):
     qualification_level = models.CharField(max_length=50, choices=QUALIFICATION_LEVEL_CHOICES, blank=True, null=True)
     
     # Shared program fields
-    program_type = models.CharField(max_length=50, blank=True, null=True) # '5+1' or 'registrar'
+    program_type = models.CharField(max_length=50, blank=True, null=True) # '5+1' or 'REGISTRAR'
     start_date = models.DateField(null=True, blank=True) # Program start date
     target_weeks = models.IntegerField(null=True, blank=True) # For planning, not strict enforcement
     weekly_commitment = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True) # For estimated pace
+    
+    # Registrar track (for REGISTRAR program_type)
+    REGISTRAR_TRACK_CHOICES = [
+        ('SIXTH_YEAR', 'Track 1 - Sixth-year (MPsych/bridging)'),
+        ('SIXTH_PHD', 'Track 2 - Sixth + Doctoral'),
+        ('SEVENTH_YEAR', 'Track 3 - Seventh-year (DPsych/PsyD)'),
+    ]
+    registrar_track = models.CharField(
+        max_length=20, 
+        choices=REGISTRAR_TRACK_CHOICES, 
+        blank=True, 
+        null=True,
+        help_text="Registrar program track (SIXTH_YEAR, SIXTH_PHD, SEVENTH_YEAR)"
+    )
+    
+    # Additional registrar fields
+    aope_area = models.CharField(
+        max_length=100, 
+        blank=True, 
+        null=True,
+        help_text="Area of Practice Endorsement area"
+    )
+    postgrad_qualification = models.CharField(
+        max_length=200, 
+        blank=True, 
+        null=True,
+        help_text="Postgraduate qualification details"
+    )
+    general_registration_number = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True,
+        help_text="AHPRA general registration number (for registrars)"
+    )
+    
+    # Board variations
+    board_variation_enabled = models.BooleanField(
+        default=False,
+        help_text="Whether board has approved variations to standard requirements"
+    )
+    board_variation_document = models.FileField(
+        upload_to='board_variations/', 
+        null=True, 
+        blank=True,
+        help_text="Uploaded board approval document for variations"
+    )
+    direct_contact_requirement = models.IntegerField(
+        default=176,
+        help_text="Annual direct contact hours requirement (default 176 for registrars)"
+    )
+    
+    # Cultural identity (for provisional)
+    INDIGENOUS_IDENTITY_CHOICES = [
+        ('ABORIGINAL', 'Aboriginal'),
+        ('TORRES_STRAIT', 'Torres Strait Islander'),
+        ('BOTH', 'Both Aboriginal and Torres Strait Islander'),
+        ('NEITHER', 'Neither'),
+        ('PREFER_NOT', 'Prefer not to say'),
+    ]
+    indigenous_identity = models.CharField(
+        max_length=30,
+        choices=INDIGENOUS_IDENTITY_CHOICES,
+        default='NEITHER',
+        help_text="Cultural identity for cultural supervision eligibility"
+    )
+    
+    # FTE and leave tracking (both programs)
+    fte_percentage = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=100.00,
+        help_text="Full-time equivalent percentage (100 = full-time)"
+    )
+    leave_parental_weeks = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0,
+        help_text="Parental leave taken (in weeks)"
+    )
+    leave_sick_weeks = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0,
+        help_text="Sick leave taken (in weeks)"
+    )
+    leave_carer_weeks = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0,
+        help_text="Carer leave taken (in weeks)"
+    )
+    leave_lifestyle_weeks = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0,
+        help_text="Lifestyle leave taken (in weeks)"
+    )
     
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
@@ -154,6 +251,57 @@ class UserProfile(models.Model):
             return [registrar_profile.aope]
         
         return []
+    
+    # ════════════════════════════════════════════════════════════════
+    # COMPUTED PROPERTIES FOR AHPRA COMPLIANCE
+    # ════════════════════════════════════════════════════════════════
+    
+    @property
+    def is_provisional(self):
+        """Check if user is in Provisional (5+1) program"""
+        return self.program_type == '5+1'
+    
+    @property
+    def is_registrar(self):
+        """Check if user is in Registrar program"""
+        return self.program_type == 'REGISTRAR'
+    
+    @property
+    def cultural_supervision_enabled(self):
+        """Check if user is eligible for cultural supervision"""
+        return self.is_provisional and self.indigenous_identity in ['ABORIGINAL', 'TORRES_STRAIT', 'BOTH']
+    
+    @property
+    def required_hours(self):
+        """Get AHPRA requirements for user's program"""
+        from api.ahpra_requirements import AHPRARequirements
+        return AHPRARequirements.get_program_requirements(
+            self.program_type, 
+            self.registrar_track if self.is_registrar else None
+        )
+    
+    @property
+    def total_leave_weeks(self):
+        """Calculate total leave taken across all types"""
+        return (
+            (self.leave_parental_weeks or 0) +
+            (self.leave_sick_weeks or 0) +
+            (self.leave_carer_weeks or 0) +
+            (self.leave_lifestyle_weeks or 0)
+        )
+    
+    @property
+    def weeks_fte_adjusted(self):
+        """Calculate FTE-adjusted weeks accounting for leave and part-time"""
+        if not self.start_date:
+            return 0
+        
+        from datetime import date
+        weeks_elapsed = (date.today() - self.start_date).days / 7
+        weeks_active = weeks_elapsed - float(self.total_leave_weeks)
+        fte_factor = float(self.fte_percentage) / 100.0
+        
+        return weeks_active * fte_factor
 
 
 class EPA(models.Model):

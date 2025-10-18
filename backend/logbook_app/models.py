@@ -56,6 +56,63 @@ class WeeklyLogbook(models.Model):
     total_sup_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     total_weekly_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     
+    # ════════════════════════════════════════════════════════════════
+    # AHPRA COMPLIANCE FIELDS (Provisional 5+1)
+    # ════════════════════════════════════════════════════════════════
+    
+    # Practice type tracking (for Provisional)
+    PRACTICE_TYPE_CHOICES = [
+        ('DIRECT_REAL', 'Direct Real Client Contact'),
+        ('DIRECT_SIMULATED', 'Direct Simulated Client Contact'),
+        ('CLIENT_RELATED', 'Client-Related Activities'),
+        ('INDEPENDENT_CLIENT_RELATED', 'Independent Client-Related Activities'),
+    ]
+    practice_type = models.CharField(
+        max_length=30,
+        choices=PRACTICE_TYPE_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Primary practice type for this week (Provisional 5+1 program)"
+    )
+    
+    # Competencies (C1-C8) - stores list of competency codes referenced this week
+    competencies_referenced = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of competency codes (C1-C8) referenced in this week's activities"
+    )
+    
+    # Reflection field for practice (Section A)
+    reflection_text = models.TextField(
+        blank=True,
+        help_text="Mandatory reflection for direct_real and direct_simulated practice types"
+    )
+    
+    # Supervisor approval for practice hours
+    practice_supervisor_approved = models.BooleanField(
+        default=False,
+        help_text="Whether supervisor has approved the practice hours for this week"
+    )
+    practice_approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When supervisor approved the practice hours"
+    )
+    
+    # Simulated hours tracking (for 60-hour limit)
+    simulated_hours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="Simulated skills training hours for this week (max 60 total for 5+1 program)"
+    )
+    cumulative_simulated_hours = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+        help_text="Cumulative simulated hours to date"
+    )
+    
     class Meta:
         ordering = ['-week_start_date']
         unique_together = ['trainee', 'week_start_date']
