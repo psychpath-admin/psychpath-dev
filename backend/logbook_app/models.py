@@ -10,17 +10,21 @@ class WeeklyLogbook(models.Model):
     """Weekly logbook for trainees"""
     
     STATUS_CHOICES = [
-        ('ready', 'Ready'),
+        ('draft', 'Draft'),
+        ('ready', 'Ready for Submission'),
         ('submitted', 'Submitted'),
+        ('returned_for_edits', 'Returned for Edits'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
+        ('unlocked_for_edits', 'Unlocked for Editing'),
+        ('locked', 'Locked'),
     ]
     
     trainee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='logbooks')
     week_start_date = models.DateField()
     week_end_date = models.DateField()
     week_number = models.PositiveIntegerField(default=1)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ready')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     section_a_entry_ids = models.JSONField(default=list, help_text="List of Section A entry IDs")
     section_b_entry_ids = models.JSONField(default=list, help_text="List of Section B entry IDs")
     section_c_entry_ids = models.JSONField(default=list, help_text="List of Section C entry IDs")
@@ -29,6 +33,12 @@ class WeeklyLogbook(models.Model):
     reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_logbooks')
     reviewed_at = models.DateTimeField(null=True, blank=True)
     supervisor_comments = models.TextField(blank=True)
+    
+    # Workflow timestamps for review process
+    review_started_at = models.DateTimeField(null=True, blank=True, help_text="When supervisor started reviewing this logbook")
+    review_completed_at = models.DateTimeField(null=True, blank=True, help_text="When supervisor completed review of this logbook")
+    supervisor_decision_at = models.DateTimeField(null=True, blank=True, help_text="When supervisor made final decision (approve/reject)")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -585,3 +595,68 @@ class Notification(models.Model):
                     pass
         
         return notification
+
+
+class LogbookReviewRequest(models.Model):
+    """Model for tracking logbook review requests"""
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+    
+    logbook = models.ForeignKey(WeeklyLogbook, on_delete=models.CASCADE, related_name='review_requests')
+    requested_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='requested_reviews')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    review_started_at = models.DateTimeField(null=True, blank=True)
+    review_completed_at = models.DateTimeField(null=True, blank=True)
+    supervisor_notes = models.TextField(blank=True, help_text="Internal notes for supervisor")
+    
+    class Meta:
+        ordering = ['-requested_at']
+    
+    def __str__(self):
+        return f"Review request for {self.logbook} by {self.requested_by.email}"
+
+
+class UnlockRequest(models.Model):
+    """Model for tracking unlock requests for logbooks"""
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('EXPIRED', 'Expired'),
+    ]
+    
+    logbook = models.ForeignKey(WeeklyLogbook, on_delete=models.CASCADE, related_name='unlock_requests')
+    requester = models.ForeignKey(User, on_delete=models.CASCADE, related_name='unlock_requests')
+    reason = models.TextField(help_text="Reason for requesting unlock")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_unlock_requests')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    unlock_expires_at = models.DateTimeField(null=True, blank=True, help_text="When the unlock expires (if approved)")
+    manually_relocked = models.BooleanField(default=False, help_text="Whether the logbook was manually relocked before expiration")
+    supervisor_response = models.TextField(blank=True, help_text="Supervisor's response to the unlock request")
+    
+    class Meta:
+        ordering = ['-requested_at']
+    
+    def __str__(self):
+        return f"Unlock request for {self.logbook} by {self.requester.email}"
+    
+    @property
+    def is_expired(self):
+        """Check if the unlock request has expired"""
+        if not self.unlock_expires_at:
+            return False
+        from django.utils import timezone
+        return timezone.now() > self.unlock_expires_at
+    
+    def can_be_approved(self):
+        """Check if this unlock request can be approved"""
+        return self.status == 'PENDING' and not self.logbook.status == 'locked'

@@ -8,29 +8,44 @@ export default {
   theme: {
   	extend: {
   		colors: {
-  			// PsychPathway Brand Colors - Enhanced for better contrast
-  			primary: '#2563EB',        // Brighter Deep Blue
-  			primaryLight: '#3B82F6',   // Lighter Blue
-  			secondary: '#F59E0B',      // Brighter Amber
-  			secondaryLight: '#FBBF24', // Lighter Amber
-  			accent: '#DC2626',         // Brighter Red-Orange
-  			accentLight: '#EF4444',    // Lighter Red
-  			textDark: '#111827',       // Darker Charcoal
-  			textLight: '#4B5563',      // Darker Grey for better contrast
-  			bgCard: '#FFFFFF',         // White
-  			bgSection: '#F9FAFB',      // Very Light Grey
-  			border: '#D1D5DB',         // Darker border for visibility
-  			
+  			// PsychPATH Brand System - Official Colors
+  			brand: {
+				DEFAULT: '#004C9A',      // Primary Blue
+				accent: '#33B0E5',       // Accent Blue
+				dark: '#003366',         // Dark Blue
+				light: '#E6F2FF',        // Light Blue
+			},
+			
+			// Semantic Colors
+			background: '#F7FAFC',       // Background
+			surface: '#FFFFFF',          // Surface/Card
+			text: '#1E293B',             // Primary Text
+			textLight: '#64748B',        // Secondary Text
+			success: '#0FA958',          // Success Green
+			warning: '#FACC15',          // Warning Yellow
+			error: '#EF4444',            // Error Red
+			
+			// Legacy compatibility
+			primary: '#004C9A',
+			primaryLight: '#33B0E5',
+			secondary: '#F59E0B',
+			secondaryLight: '#FBBF24',
+			accent: '#DC2626',
+			accentLight: '#EF4444',
+			textDark: '#1E293B',
+			bgCard: '#FFFFFF',
+			bgSection: '#F7FAFC',
+			border: '#E2E8F0',
+			
 			// Legacy color mappings for compatibility
-			primaryBlue: '#3F72AF',
+			primaryBlue: '#004C9A',
 			secondaryAmber: '#F9AB55',
 			accentOrange: '#B26734',
 			backgroundCard: '#FFFFFF',
-			backgroundSection: '#EEEEEE',
-			borderLight: '#E9ECEF',
+			backgroundSection: '#F7FAFC',
+			borderLight: '#E2E8F0',
 			
-			// Shadcn/ui compatibility (using our brand colors)
-			background: 'hsl(var(--background))',
+			// Shadcn/ui compatibility
 			foreground: 'hsl(var(--foreground))',
 			card: {
 				DEFAULT: 'hsl(var(--card))',
@@ -40,7 +55,6 @@ export default {
 				DEFAULT: 'hsl(var(--popover))',
 				foreground: 'hsl(var(--popover-foreground))'
 			},
-			// Note: primary, secondary, accent are defined above as our brand colors
 			muted: {
 				DEFAULT: 'hsl(var(--muted))',
 				foreground: 'hsl(var(--muted-foreground))'
@@ -49,7 +63,6 @@ export default {
 				DEFAULT: 'hsl(var(--destructive))',
 				foreground: 'hsl(var(--destructive-foreground))'
 			},
-			border: 'hsl(var(--border))',
 			input: 'hsl(var(--input))',
 			ring: 'hsl(var(--ring))',
 			chart: {
@@ -62,7 +75,7 @@ export default {
   		},
   		fontFamily: {
   			headings: [
-  				'Bebas Neue',
+  				'Lexend',
   				'sans-serif'
   			],
   			body: [
@@ -71,21 +84,24 @@ export default {
   				'sans-serif'
   			],
   			labels: [
-  				'Lexend Deca',
+  				'Lexend',
   				'sans-serif'
   			]
   		},
   		borderRadius: {
-  			card: '16px',
+  			card: '1rem',               // 16px
+  			xl: '1.5rem',               // 24px for cards
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
   		},
 		boxShadow: {
-			psychpath: '0 1px 2px 0 rgba(0,0,0,0.05)'
+			psychpath: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+			'psychpath-lg': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+			'psychpath-xl': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
 		},
   		spacing: {
-  			section: '24px'
+  			section: '1.5rem'           // 24px
   		}
   	}
   },

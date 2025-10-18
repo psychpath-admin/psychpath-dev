@@ -4,8 +4,8 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest
-from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer, MeetingSerializer, MeetingCreateSerializer, MeetingInviteSerializer, MeetingInviteResponseSerializer, DisconnectionRequestSerializer, DisconnectionRequestCreateSerializer, DisconnectionRequestResponseSerializer
+from .models import UserProfile, EmailVerificationCode, UserRole, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, Supervision, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest, AuditLog
+from .serializers import UserProfileSerializer, MessageSerializer, SupervisorRequestSerializer, SupervisorInvitationSerializer, SupervisorEndorsementSerializer, SupervisionSerializer, SupervisionNotificationSerializer, SupervisionInviteSerializer, SupervisionResponseSerializer, SupervisionAssignmentSerializer, SupervisionAssignmentCreateSerializer, MeetingSerializer, MeetingCreateSerializer, MeetingInviteSerializer, MeetingInviteResponseSerializer, DisconnectionRequestSerializer, DisconnectionRequestCreateSerializer, DisconnectionRequestResponseSerializer, AuditLogSerializer
 from .email_service import send_supervision_invite_email, send_supervision_response_email, send_supervision_reminder_email, send_supervision_expired_email, send_disconnection_request_email, send_disconnection_response_email
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 import base64
@@ -2489,3 +2489,109 @@ def disconnection_request_cancel(request, request_id):
 
 
 # Create your views here.
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def audit_logs_list(request):
+    """Get audit logs for the current user (if they have permission)"""
+    try:
+        # Check if user has permission to view audit logs
+        if not hasattr(request.user, 'profile'):
+            return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+        
+        user_role = request.user.profile.role
+        
+        # Only allow supervisors and org admins to view audit logs
+        if user_role not in ['SUPERVISOR', 'ORG_ADMIN']:
+            return Response({'error': 'Access denied. Only supervisors and administrators can view audit logs.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get query parameters
+        action = request.GET.get('action')
+        resource_type = request.GET.get('resource_type')
+        result = request.GET.get('result')
+        user_id = request.GET.get('user_id')
+        days = request.GET.get('days', 30)  # Default to last 30 days
+        
+        # Build query
+        query = AuditLog.objects.all()
+        
+        # Filter by date range
+        from datetime import timedelta
+        start_date = timezone.now() - timedelta(days=int(days))
+        query = query.filter(created_at__gte=start_date)
+        
+        # Apply filters
+        if action:
+            query = query.filter(action=action)
+        if resource_type:
+            query = query.filter(resource_type=resource_type)
+        if result:
+            query = query.filter(result=result)
+        if user_id:
+            query = query.filter(user_id=user_id)
+        
+        # Order by most recent first
+        audit_logs = query.order_by('-created_at')[:1000]  # Limit to 1000 records
+        
+        serializer = AuditLogSerializer(audit_logs, many=True)
+        
+        return Response({
+            'audit_logs': serializer.data,
+            'total_count': query.count(),
+            'filtered_count': len(serializer.data),
+            'filters_applied': {
+                'action': action,
+                'resource_type': resource_type,
+                'result': result,
+                'user_id': user_id,
+                'days': days
+            }
+        })
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def audit_logs_stats(request):
+    """Get audit log statistics"""
+    try:
+        # Check permissions
+        if not hasattr(request.user, 'profile') or request.user.profile.role not in ['SUPERVISOR', 'ORG_ADMIN']:
+            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        from datetime import timedelta
+        
+        # Get stats for last 30 days
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        
+        stats = {
+            'total_actions': AuditLog.objects.filter(created_at__gte=thirty_days_ago).count(),
+            'successful_actions': AuditLog.objects.filter(created_at__gte=thirty_days_ago, result='SUCCESS').count(),
+            'failed_actions': AuditLog.objects.filter(created_at__gte=thirty_days_ago, result='FAILED').count(),
+            'actions_by_type': {},
+            'actions_by_resource': {},
+            'actions_by_result': {},
+            'unique_users': AuditLog.objects.filter(created_at__gte=thirty_days_ago).values('user').distinct().count(),
+        }
+        
+        # Get action type breakdown
+        action_counts = AuditLog.objects.filter(created_at__gte=thirty_days_ago).values('action').annotate(count=models.Count('action'))
+        stats['actions_by_type'] = {item['action']: item['count'] for item in action_counts}
+        
+        # Get resource type breakdown
+        resource_counts = AuditLog.objects.filter(created_at__gte=thirty_days_ago).values('resource_type').annotate(count=models.Count('resource_type'))
+        stats['actions_by_resource'] = {item['resource_type']: item['count'] for item in resource_counts}
+        
+        # Get result breakdown
+        result_counts = AuditLog.objects.filter(created_at__gte=thirty_days_ago).values('result').annotate(count=models.Count('result'))
+        stats['actions_by_result'] = {item['result']: item['count'] for item in result_counts}
+        
+        return Response(stats)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

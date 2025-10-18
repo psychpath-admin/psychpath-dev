@@ -9,7 +9,10 @@ from .views import (
     review_unlock_request, force_relock_unlock_request,
     user_notifications, notification_stats, mark_notification_read,
     mark_all_notifications_read, create_notification,
-    logbook_html_report
+    logbook_html_report,
+    # Review workflow endpoints
+    create_review_request, review_requests_list, update_review_request,
+    create_unlock_request, unlock_requests_list, update_unlock_request
 )
 
 urlpatterns = [
@@ -53,5 +56,12 @@ urlpatterns = [
     path('notifications/<int:notification_id>/read/', mark_notification_read, name='mark-notification-read'),
     path('notifications/read-all/', mark_all_notifications_read, name='mark-all-notifications-read'),
     path('notifications/create/', create_notification, name='create-notification'),
+    
+    # Review workflow endpoints
+    path('review-requests/', review_requests_list, name='review-requests-list'),
+    path('review-requests/create/', create_review_request, name='create-review-request'),
+    path('review-requests/<int:request_id>/', update_review_request, name='update-review-request'),
+    path('unlock-requests/', unlock_requests_list, name='unlock-requests-list'),
+    path('unlock-requests/<int:request_id>/', update_unlock_request, name='update-unlock-request'),
 ]
 

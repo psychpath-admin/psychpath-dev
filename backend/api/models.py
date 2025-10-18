@@ -687,3 +687,96 @@ class DisconnectionRequest(models.Model):
 
 
 # Create your models here.
+
+
+class AuditLog(models.Model):
+    """Comprehensive audit log for all system actions"""
+    
+    ACTION_TYPES = [
+        ('CREATE', 'Create'),
+        ('READ', 'Read'),
+        ('UPDATE', 'Update'),
+        ('DELETE', 'Delete'),
+        ('LOGIN', 'Login'),
+        ('LOGOUT', 'Logout'),
+        ('INVITE', 'Invite'),
+        ('ACCEPT', 'Accept'),
+        ('REJECT', 'Reject'),
+        ('SUBMIT', 'Submit'),
+        ('APPROVE', 'Approve'),
+        ('REJECT', 'Reject'),
+        ('UNLOCK', 'Unlock'),
+        ('LOCK', 'Lock'),
+        ('EXPORT', 'Export'),
+        ('IMPORT', 'Import'),
+        ('OTHER', 'Other'),
+    ]
+    
+    RESOURCE_TYPES = [
+        ('USER_PROFILE', 'User Profile'),
+        ('WEEKLY_LOGBOOK', 'Weekly Logbook'),
+        ('SECTION_A_ENTRY', 'Section A Entry'),
+        ('SECTION_B_ENTRY', 'Section B Entry'),
+        ('SECTION_C_ENTRY', 'Section C Entry'),
+        ('SUPERVISION', 'Supervision'),
+        ('SUPERVISION_REQUEST', 'Supervision Request'),
+        ('SUPERVISION_INVITATION', 'Supervision Invitation'),
+        ('MEETING', 'Meeting'),
+        ('MESSAGE', 'Message'),
+        ('NOTIFICATION', 'Notification'),
+        ('UNLOCK_REQUEST', 'Unlock Request'),
+        ('REVIEW_REQUEST', 'Review Request'),
+        ('AUDIT_LOG', 'Audit Log'),
+        ('SYSTEM', 'System'),
+        ('OTHER', 'Other'),
+    ]
+    
+    RESULT_TYPES = [
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+        ('PARTIAL', 'Partial'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    action = models.CharField(max_length=20, choices=ACTION_TYPES)
+    resource_type = models.CharField(max_length=30, choices=RESOURCE_TYPES)
+    resource_id = models.CharField(max_length=100, null=True, blank=True, help_text="ID of the affected resource")
+    result = models.CharField(max_length=20, choices=RESULT_TYPES)
+    details = models.JSONField(default=dict, help_text="Additional context and data")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(null=True, blank=True)
+    session_id = models.CharField(max_length=100, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['action', 'created_at']),
+            models.Index(fields=['resource_type', 'created_at']),
+            models.Index(fields=['result', 'created_at']),
+            models.Index(fields=['ip_address', 'created_at']),
+        ]
+    
+    def __str__(self):
+        user_info = self.user.email if self.user else 'Anonymous'
+        return f"{user_info} - {self.action} {self.resource_type} ({self.result})"
+    
+    @classmethod
+    def log_action(cls, user, action, resource_type, result='SUCCESS', resource_id=None, 
+                   details=None, ip_address=None, user_agent=None, session_id=None):
+        """
+        Create a new audit log entry
+        """
+        return cls.objects.create(
+            user=user,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            result=result,
+            details=details or {},
+            ip_address=ip_address,
+            user_agent=user_agent,
+            session_id=session_id
+        )

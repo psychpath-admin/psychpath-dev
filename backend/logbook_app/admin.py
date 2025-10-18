@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification
+from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, LogbookReviewRequest, UnlockRequest, Notification
 
 
 @admin.register(WeeklyLogbook)
@@ -51,12 +51,20 @@ class CommentMessageAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'updated_at', 'seen_by']
 
 
+@admin.register(LogbookReviewRequest)
+class LogbookReviewRequestAdmin(admin.ModelAdmin):
+    list_display = ['logbook', 'requested_by', 'status', 'requested_at', 'review_started_at']
+    list_filter = ['status', 'requested_at', 'review_started_at']
+    search_fields = ['logbook__trainee__email', 'supervisor_notes']
+    readonly_fields = ['requested_at']
+
+
 @admin.register(UnlockRequest)
 class UnlockRequestAdmin(admin.ModelAdmin):
-    list_display = ['logbook', 'requester', 'status', 'duration_minutes', 'created_at']
-    list_filter = ['status', 'requester_role', 'reviewer_role', 'created_at']
-    search_fields = ['logbook__trainee__email', 'reason', 'admin_comment']
-    readonly_fields = ['created_at']
+    list_display = ['logbook', 'requester', 'status', 'requested_at', 'reviewed_at']
+    list_filter = ['status', 'requested_at', 'reviewed_at']
+    search_fields = ['logbook__trainee__email', 'reason', 'supervisor_response']
+    readonly_fields = ['requested_at']
 
 
 @admin.register(Notification)

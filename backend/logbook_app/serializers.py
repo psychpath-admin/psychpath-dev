@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification
+from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, LogbookReviewRequest, UnlockRequest, Notification
 from django.contrib.auth.models import User
 
 
@@ -364,3 +364,59 @@ class NotificationSerializer(serializers.ModelSerializer):
             if remaining_hours > 0:
                 return f"{days}d {remaining_hours}h"
             return f"{days} days"
+
+
+class LogbookReviewRequestSerializer(serializers.ModelSerializer):
+    """Serializer for LogbookReviewRequest model"""
+    
+    requested_by_name = serializers.SerializerMethodField()
+    logbook_week_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = LogbookReviewRequest
+        fields = [
+            'id', 'logbook', 'logbook_week_display', 'requested_by', 'requested_by_name',
+            'requested_at', 'status', 'review_started_at', 'review_completed_at', 'supervisor_notes'
+        ]
+        read_only_fields = ['id', 'requested_by', 'requested_at', 'review_started_at', 'review_completed_at']
+    
+    def get_requested_by_name(self, obj):
+        if obj.requested_by and hasattr(obj.requested_by, 'profile'):
+            return f"{obj.requested_by.profile.first_name} {obj.requested_by.profile.last_name}".strip() or obj.requested_by.email
+        return obj.requested_by.email if obj.requested_by else None
+    
+    def get_logbook_week_display(self, obj):
+        return f"Week {obj.logbook.week_number} ({obj.logbook.week_start_date})"
+
+
+class UnlockRequestSerializer(serializers.ModelSerializer):
+    """Serializer for UnlockRequest model"""
+    
+    requester_name = serializers.SerializerMethodField()
+    reviewed_by_name = serializers.SerializerMethodField()
+    logbook_week_display = serializers.SerializerMethodField()
+    is_expired = serializers.ReadOnlyField()
+    can_be_approved = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = UnlockRequest
+        fields = [
+            'id', 'logbook', 'logbook_week_display', 'requester', 'requester_name',
+            'reason', 'status', 'requested_at', 'reviewed_by', 'reviewed_by_name',
+            'reviewed_at', 'unlock_expires_at', 'manually_relocked', 'supervisor_response',
+            'is_expired', 'can_be_approved'
+        ]
+        read_only_fields = ['id', 'requester', 'requested_at', 'reviewed_at', 'is_expired', 'can_be_approved']
+    
+    def get_requester_name(self, obj):
+        if obj.requester and hasattr(obj.requester, 'profile'):
+            return f"{obj.requester.profile.first_name} {obj.requester.profile.last_name}".strip() or obj.requester.email
+        return obj.requester.email if obj.requester else None
+    
+    def get_reviewed_by_name(self, obj):
+        if obj.reviewed_by and hasattr(obj.reviewed_by, 'profile'):
+            return f"{obj.reviewed_by.profile.first_name} {obj.reviewed_by.profile.last_name}".strip() or obj.reviewed_by.email
+        return None
+    
+    def get_logbook_week_display(self, obj):
+        return f"Week {obj.logbook.week_number} ({obj.logbook.week_start_date})"

@@ -7,13 +7,13 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction
 from django.shortcuts import render
-from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, UnlockRequest, Notification
+from .models import WeeklyLogbook, LogbookAuditLog, LogbookMessage, CommentThread, CommentMessage, LogbookReviewRequest, UnlockRequest, Notification
 from api.models import Supervision
 from .serializers import (
     LogbookSerializer, LogbookDraftSerializer, EligibleWeekSerializer, 
     LogbookSubmissionSerializer, LogbookAuditLogSerializer,
-    CommentThreadSerializer, CommentMessageSerializer, UnlockRequestSerializer,
-    NotificationSerializer
+    CommentThreadSerializer, CommentMessageSerializer, LogbookReviewRequestSerializer,
+    UnlockRequestSerializer, NotificationSerializer
 )
 from logging_utils import support_error_handler
 from rest_framework.parsers import JSONParser
@@ -2014,3 +2014,282 @@ def logbook_html_report(request, logbook_id):
     }
     
     return render(request, 'logbook_report.html', context)
+
+
+# Review Workflow API Endpoints
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def create_review_request(request):
+    """Create a new review request for a logbook"""
+    try:
+        logbook_id = request.data.get('logbook_id')
+        if not logbook_id:
+            return Response({'error': 'logbook_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            logbook = WeeklyLogbook.objects.get(id=logbook_id)
+        except WeeklyLogbook.DoesNotExist:
+            return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if user can request review
+        if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
+            return Response({'error': 'Only trainees can request reviews'}, status=status.HTTP_403_FORBIDDEN)
+        
+        if logbook.trainee != request.user:
+            return Response({'error': 'You can only request reviews for your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if logbook is in a state that allows review requests
+        if logbook.status not in ['ready', 'submitted']:
+            return Response({'error': f'Cannot request review for logbook in {logbook.status} status'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create review request
+        review_request = LogbookReviewRequest.objects.create(
+            logbook=logbook,
+            requested_by=request.user,
+            status='PENDING'
+        )
+        
+        serializer = LogbookReviewRequestSerializer(review_request)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def review_requests_list(request):
+    """Get review requests for the current user"""
+    try:
+        if not hasattr(request.user, 'profile'):
+            return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+        
+        user_role = request.user.profile.role
+        
+        if user_role in ['PROVISIONAL', 'REGISTRAR']:
+            # Trainees see their own review requests
+            review_requests = LogbookReviewRequest.objects.filter(
+                requested_by=request.user
+            ).order_by('-requested_at')
+        elif user_role == 'SUPERVISOR':
+            # Supervisors see review requests for logbooks they supervise
+            review_requests = LogbookReviewRequest.objects.filter(
+                logbook__supervisor=request.user
+            ).order_by('-requested_at')
+        else:
+            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = LogbookReviewRequestSerializer(review_requests, many=True)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def update_review_request(request, request_id):
+    """Update a review request (start, complete, cancel)"""
+    try:
+        try:
+            review_request = LogbookReviewRequest.objects.get(id=request_id)
+        except LogbookReviewRequest.DoesNotExist:
+            return Response({'error': 'Review request not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check permissions
+        if not hasattr(request.user, 'profile'):
+            return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+        
+        user_role = request.user.profile.role
+        action = request.data.get('action')
+        
+        if user_role in ['PROVISIONAL', 'REGISTRAR']:
+            # Trainees can only cancel their own requests
+            if review_request.requested_by != request.user:
+                return Response({'error': 'You can only modify your own review requests'}, status=status.HTTP_403_FORBIDDEN)
+            
+            if action == 'cancel':
+                review_request.status = 'CANCELLED'
+                review_request.save()
+            else:
+                return Response({'error': 'Trainees can only cancel review requests'}, status=status.HTTP_400_BAD_REQUEST)
+                
+        elif user_role == 'SUPERVISOR':
+            # Supervisors can start and complete reviews
+            if review_request.logbook.supervisor != request.user:
+                return Response({'error': 'You can only modify review requests for logbooks you supervise'}, status=status.HTTP_403_FORBIDDEN)
+            
+            if action == 'start':
+                if review_request.status == 'PENDING':
+                    review_request.status = 'IN_PROGRESS'
+                    review_request.review_started_at = timezone.now()
+                    review_request.save()
+                else:
+                    return Response({'error': 'Can only start pending review requests'}, status=status.HTTP_400_BAD_REQUEST)
+                    
+            elif action == 'complete':
+                if review_request.status == 'IN_PROGRESS':
+                    review_request.status = 'COMPLETED'
+                    review_request.review_completed_at = timezone.now()
+                    review_request.supervisor_notes = request.data.get('supervisor_notes', '')
+                    review_request.save()
+                else:
+                    return Response({'error': 'Can only complete in-progress review requests'}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({'error': 'Invalid action for supervisor'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = LogbookReviewRequestSerializer(review_request)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def create_unlock_request(request):
+    """Create a new unlock request for a logbook"""
+    try:
+        logbook_id = request.data.get('logbook_id')
+        reason = request.data.get('reason', '')
+        
+        if not logbook_id:
+            return Response({'error': 'logbook_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not reason.strip():
+            return Response({'error': 'reason is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            logbook = WeeklyLogbook.objects.get(id=logbook_id)
+        except WeeklyLogbook.DoesNotExist:
+            return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if user can request unlock
+        if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
+            return Response({'error': 'Only trainees can request unlocks'}, status=status.HTTP_403_FORBIDDEN)
+        
+        if logbook.trainee != request.user:
+            return Response({'error': 'You can only request unlocks for your own logbooks'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if logbook is in a state that allows unlock requests
+        if logbook.status not in ['approved', 'locked']:
+            return Response({'error': f'Cannot request unlock for logbook in {logbook.status} status'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if there's already a pending unlock request
+        existing_request = UnlockRequest.objects.filter(
+            logbook=logbook,
+            status='PENDING'
+        ).first()
+        
+        if existing_request:
+            return Response({'error': 'There is already a pending unlock request for this logbook'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create unlock request
+        unlock_request = UnlockRequest.objects.create(
+            logbook=logbook,
+            requester=request.user,
+            reason=reason,
+            status='PENDING'
+        )
+        
+        serializer = UnlockRequestSerializer(unlock_request)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def unlock_requests_list(request):
+    """Get unlock requests for the current user"""
+    try:
+        if not hasattr(request.user, 'profile'):
+            return Response({'error': 'User profile not found'}, status=status.HTTP_403_FORBIDDEN)
+        
+        user_role = request.user.profile.role
+        
+        if user_role in ['PROVISIONAL', 'REGISTRAR']:
+            # Trainees see their own unlock requests
+            unlock_requests = UnlockRequest.objects.filter(
+                requester=request.user
+            ).order_by('-requested_at')
+        elif user_role == 'SUPERVISOR':
+            # Supervisors see unlock requests for logbooks they supervise
+            unlock_requests = UnlockRequest.objects.filter(
+                logbook__supervisor=request.user
+            ).order_by('-requested_at')
+        else:
+            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = UnlockRequestSerializer(unlock_requests, many=True)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def update_unlock_request(request, request_id):
+    """Update an unlock request (approve, reject)"""
+    try:
+        try:
+            unlock_request = UnlockRequest.objects.get(id=request_id)
+        except UnlockRequest.DoesNotExist:
+            return Response({'error': 'Unlock request not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check permissions - only supervisors can approve/reject
+        if not hasattr(request.user, 'profile') or request.user.profile.role != 'SUPERVISOR':
+            return Response({'error': 'Only supervisors can approve or reject unlock requests'}, status=status.HTTP_403_FORBIDDEN)
+        
+        if unlock_request.logbook.supervisor != request.user:
+            return Response({'error': 'You can only modify unlock requests for logbooks you supervise'}, status=status.HTTP_403_FORBIDDEN)
+        
+        action = request.data.get('action')
+        supervisor_response = request.data.get('supervisor_response', '')
+        
+        if action == 'approve':
+            if unlock_request.status == 'PENDING':
+                unlock_request.status = 'APPROVED'
+                unlock_request.reviewed_by = request.user
+                unlock_request.reviewed_at = timezone.now()
+                unlock_request.supervisor_response = supervisor_response
+                
+                # Set unlock expiration (e.g., 7 days from now)
+                unlock_request.unlock_expires_at = timezone.now() + timedelta(days=7)
+                
+                # Update logbook status
+                unlock_request.logbook.status = 'unlocked_for_edits'
+                unlock_request.logbook.save()
+                
+                unlock_request.save()
+            else:
+                return Response({'error': 'Can only approve pending unlock requests'}, status=status.HTTP_400_BAD_REQUEST)
+                
+        elif action == 'reject':
+            if unlock_request.status == 'PENDING':
+                unlock_request.status = 'REJECTED'
+                unlock_request.reviewed_by = request.user
+                unlock_request.reviewed_at = timezone.now()
+                unlock_request.supervisor_response = supervisor_response
+                unlock_request.save()
+            else:
+                return Response({'error': 'Can only reject pending unlock requests'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({'error': 'Invalid action. Use "approve" or "reject"'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = UnlockRequestSerializer(unlock_request)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

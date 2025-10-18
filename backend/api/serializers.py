@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest
+from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest, AuditLog
 
 class UserProfileSerializer(serializers.ModelSerializer):
     # Ensure prior_hours always a dict
@@ -672,3 +672,34 @@ class DisconnectionRequestResponseSerializer(serializers.ModelSerializer):
     def validate(self, data):
         # The action (approve/decline) will be handled in the view
         return data
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    """Serializer for AuditLog model"""
+    
+    user_email = serializers.SerializerMethodField()
+    action_display = serializers.SerializerMethodField()
+    resource_type_display = serializers.SerializerMethodField()
+    result_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AuditLog
+        fields = [
+            'id', 'user', 'user_email', 'action', 'action_display',
+            'resource_type', 'resource_type_display', 'resource_id',
+            'result', 'result_display', 'details', 'ip_address',
+            'user_agent', 'session_id', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+    
+    def get_user_email(self, obj):
+        return obj.user.email if obj.user else 'Anonymous'
+    
+    def get_action_display(self, obj):
+        return obj.get_action_display()
+    
+    def get_resource_type_display(self, obj):
+        return obj.get_resource_type_display()
+    
+    def get_result_display(self, obj):
+        return obj.get_result_display()

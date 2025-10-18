@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import UserProfile, EPA, Milestone, Reflection, SupervisionAssignment
+from .models import UserProfile, EPA, Milestone, Reflection, SupervisionAssignment, AuditLog
 
 
 @admin.register(UserProfile)
@@ -34,5 +34,23 @@ class SupervisionAssignmentAdmin(admin.ModelAdmin):
     search_fields = ("provisional__username", "supervisor_name", "supervisor_email")
     list_filter = ("role", "status", "created_at")
     readonly_fields = ("created_at",)
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ("user", "action", "resource_type", "result", "ip_address", "created_at")
+    list_filter = ("action", "resource_type", "result", "created_at")
+    search_fields = ("user__email", "resource_id", "ip_address")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    
+    def has_add_permission(self, request):
+        return False  # Audit logs should only be created programmatically
+    
+    def has_change_permission(self, request, obj=None):
+        return False  # Audit logs should not be modified
+    
+    def has_delete_permission(self, request, obj=None):
+        return False  # Audit logs should not be deleted
 
 # Register your models here.

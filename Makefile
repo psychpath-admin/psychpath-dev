@@ -16,6 +16,9 @@ help:
 	@echo "  dev-stop          - Stop development servers"
 	@echo "  dev-status        - Check status of development servers"
 	@echo "  dev-logs          - Show development server logs"
+	@echo "  backend-health    - Check backend server health"
+	@echo "  backend-restart   - Restart backend server with monitoring"
+	@echo "  restart-all       - Restart both backend and frontend servers"
 	@echo "  db-backup         - Create timestamped SQLite backup"
 	@echo "  db-restore        - Restore SQLite from SNAPSHOT=path/to/file"
 	@echo "  db-reset          - Backup, reset DB, run migrations"
@@ -145,5 +148,22 @@ check:
 .PHONY: eod
 eod:
 	@bash $(BACKEND_DIR)/scripts/eod.sh "$(MSG)"
+
+.PHONY: backend-health
+backend-health:
+	@cd $(BACKEND_DIR) && ./health_check.sh
+
+.PHONY: backend-restart
+backend-restart:
+	@echo "Stopping backend server..."
+	@cd $(BACKEND_DIR) && pkill -f "manage.py runserver" 2>/dev/null || true
+	@sleep 2
+	@echo "Starting backend server with monitoring..."
+	@cd $(BACKEND_DIR) && ./start_server.sh &
+	@echo "Backend server restarted. Check status with: make backend-health"
+
+.PHONY: restart-all
+restart-all:
+	@./restart_all.sh
 
 

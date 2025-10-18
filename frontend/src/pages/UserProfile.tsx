@@ -733,12 +733,13 @@ const UserProfile: React.FC = () => {
         },
         body: JSON.stringify({ 
           first_login_completed: true,
-          provisional_registration_date: profile.provisional_registration_date || '2025-07-01',
-          internship_start_date: profile.internship_start_date || '2025-09-01',
-          program_type: profile.program_type || '5+1',
-          estimated_completion_weeks: profile.estimated_completion_weeks || profile.target_weeks || 44,
-          weekly_commitment_hours: profile.weekly_commitment_hours || profile.weekly_commitment || 17.5,
-          is_full_time: profile.is_full_time !== undefined ? profile.is_full_time : true
+          // Only set defaults if the fields are actually empty/null, preserve existing values
+          ...(profile.provisional_registration_date && { provisional_registration_date: profile.provisional_registration_date }),
+          ...(profile.internship_start_date && { internship_start_date: profile.internship_start_date }),
+          ...(profile.program_type && { program_type: profile.program_type }),
+          ...(profile.estimated_completion_weeks && { estimated_completion_weeks: profile.estimated_completion_weeks }),
+          ...(profile.weekly_commitment_hours && { weekly_commitment_hours: profile.weekly_commitment_hours }),
+          ...(profile.is_full_time !== undefined && { is_full_time: profile.is_full_time })
         })
       })
 
