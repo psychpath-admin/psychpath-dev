@@ -106,6 +106,40 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
             return SectionAEntry.get_simulated_hours_total(obj.trainee)
         return None
     
+    def to_internal_value(self, data):
+        """Transform frontend data before validation"""
+        # Make a copy of the data to avoid modifying the original
+        data = data.copy()
+        
+        # Handle client_age conversion
+        if 'client_age' in data and isinstance(data['client_age'], str):
+            age_mapping = {
+                'child': 10,
+                'adolescent': 16,
+                'adult': 35,
+                'older adult': 65,
+                'elderly': 75,
+            }
+            data['client_age'] = age_mapping.get(data['client_age'].lower(), 35)
+        
+        # Handle session_activity_type conversion
+        if 'session_activity_type' in data and isinstance(data['session_activity_type'], str):
+            activity_mapping = {
+                'psychological assessment': 'assessment',
+                'assessment': 'assessment',
+                'psychological intervention': 'intervention',
+                'intervention': 'intervention',
+                'therapy': 'intervention',
+                'counselling': 'intervention',
+                'evaluation': 'evaluation',
+                'consultation': 'consultation',
+                'supervision': 'supervision',
+                'other': 'other',
+            }
+            data['session_activity_type'] = activity_mapping.get(data['session_activity_type'].lower(), 'other')
+        
+        return super().to_internal_value(data)
+    
     def create(self, validated_data):
         # Automatically set the trainee to the current user
         validated_data['trainee'] = self.context['request'].user
