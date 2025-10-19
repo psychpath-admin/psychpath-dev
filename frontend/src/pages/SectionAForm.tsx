@@ -18,6 +18,7 @@ interface EntryForm {
   client_id: string
   session_date: string
   place_of_practice: string
+  client_age: string
   presenting_issues: string
   session_activity_types: string[]
   duration_minutes: string
@@ -37,6 +38,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
     client_id: '',
     session_date: new Date().toISOString().split('T')[0],
     place_of_practice: '',
+    client_age: '',
     presenting_issues: '',
     session_activity_types: [],
     duration_minutes: '50',
@@ -57,6 +59,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
             client_id: entry.client_id || '',
             session_date: entry.session_date || new Date().toISOString().split('T')[0],
             place_of_practice: entry.place_of_practice || '',
+            client_age: entry.client_age?.toString() || '',
             presenting_issues: entry.presenting_issues || '',
             session_activity_types: entry.session_activity_types || [],
             duration_minutes: entry.duration_minutes?.toString() || '50',
@@ -206,6 +209,24 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   onChange={(e) => setFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
                   placeholder="e.g., Virtual Clinic, Office, Community Center"
                 />
+              </div>
+
+              {/* Client Age */}
+              <div>
+                <label className="block text-sm font-semibold text-brand mb-3">
+                  Client Age
+                </label>
+                <Input
+                  type="number"
+                  value={formData.client_age}
+                  onChange={(e) => setFormData(prev => ({ ...prev, client_age: e.target.value }))}
+                  placeholder="e.g., 25"
+                  min="0"
+                  max="120"
+                />
+                <p className="text-xs text-textLight mt-1">
+                  Age in years - helps track practice across the lifespan
+                </p>
               </div>
 
               <div>

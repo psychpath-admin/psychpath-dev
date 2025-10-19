@@ -39,6 +39,7 @@ interface DCCEntry {
   session_date: string
   week_starting: string
   place_of_practice: string
+  client_age?: number
   presenting_issues: string
   session_activity_types: string[]
   duration_minutes: string
@@ -123,6 +124,7 @@ export default function SectionADashboard() {
     date: new Date().toISOString().split('T')[0],
     client_pseudonym: '',
     place_of_practice: '',
+    client_age: '',
     presenting_issues: '',
     dcc_activity_types: [] as string[],
     description: '',
@@ -599,6 +601,7 @@ export default function SectionADashboard() {
         client_pseudonym: smartFormData.client_pseudonym,
         session_date: smartFormData.date,
         place_of_practice: smartFormData.place_of_practice,
+        client_age: smartFormData.client_age ? parseInt(smartFormData.client_age) : null,
         presenting_issues: smartFormData.presenting_issues,
         session_activity_types: smartFormData.dcc_activity_types,
         duration_minutes: smartFormData.duration.toString(),
@@ -616,10 +619,11 @@ export default function SectionADashboard() {
         date: new Date().toISOString().split('T')[0],
         client_pseudonym: '',
         place_of_practice: '',
+        client_age: '',
         presenting_issues: '',
-        activity_types: [],
+        dcc_activity_types: [],
         description: '',
-        duration: 1.0,
+        duration: 50,
         simulated_client: false,
         supervisor_reviewed: false
       })
@@ -1635,6 +1639,11 @@ export default function SectionADashboard() {
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
                         <span className="font-semibold text-gray-900 break-words">{entry.client_id}</span>
+                        {entry.client_age && (
+                          <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-blue-600 border-blue-600">
+                            Age: {entry.client_age}
+                          </Badge>
+                        )}
                         {entry.simulated && (
                           <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
                             Simulated
@@ -1697,6 +1706,9 @@ export default function SectionADashboard() {
                               <div><span className="font-medium">Client ID:</span> {entry.client_id}</div>
                               {entry.client_pseudonym && (
                                 <div><span className="font-medium">Pseudonym:</span> {entry.client_pseudonym}</div>
+                              )}
+                              {entry.client_age && (
+                                <div><span className="font-medium">Age:</span> {entry.client_age} years</div>
                               )}
                               {entry.presenting_issues && (
                                 <div><span className="font-medium">Presenting Issues:</span> {entry.presenting_issues}</div>
@@ -2480,6 +2492,26 @@ export default function SectionADashboard() {
                   className={formErrors.place_of_practice ? 'border-red-500' : ''}
                 />
                 {formErrors.place_of_practice && <p className="text-red-500 text-xs mt-1">{formErrors.place_of_practice}</p>}
+              </div>
+
+              {/* Client Age */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Client Age
+                </label>
+                <Input
+                  type="number"
+                  value={smartFormData.client_age}
+                  onChange={(e) => setSmartFormData(prev => ({ ...prev, client_age: e.target.value }))}
+                  placeholder="e.g., 25"
+                  min="0"
+                  max="120"
+                  className={formErrors.client_age ? 'border-red-500' : ''}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Age in years - helps track practice across the lifespan
+                </p>
+                {formErrors.client_age && <p className="text-red-500 text-xs mt-1">{formErrors.client_age}</p>}
               </div>
 
               {/* Presenting Issues */}
