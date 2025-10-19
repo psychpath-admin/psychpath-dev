@@ -172,7 +172,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
               {/* Client Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="block text-sm font-semibold text-brand mb-3">
                     Client Pseudonym *
                   </label>
                   <Input
@@ -184,7 +184,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="block text-sm font-semibold text-brand mb-3">
                     Session Date *
                   </label>
                   <Input
@@ -198,7 +198,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
 
               {/* Session Details */}
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-semibold text-brand mb-3">
                   Place of Practice
                 </label>
                 <Input
@@ -209,7 +209,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-semibold text-brand mb-3">
                   Presenting Issues
                 </label>
                 <Textarea
@@ -222,7 +222,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
 
               {/* Session Activity Types */}
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-semibold text-brand mb-3">
                   Session Activity Types *
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -235,7 +235,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                           handleActivityTypeChange(type, checked as boolean)
                         }
                       />
-                      <label htmlFor={type} className="text-sm">
+                      <label htmlFor={type} className="text-sm font-medium text-text">
                         {formatActivityType(type)}
                       </label>
                     </div>
@@ -246,7 +246,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
               {/* Duration and Simulated */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="block text-sm font-semibold text-brand mb-3">
                     Duration (minutes) *
                   </label>
                   <Input
@@ -267,7 +267,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                       setFormData(prev => ({ ...prev, simulated: checked as boolean }))
                     }
                   />
-                  <label htmlFor="simulated" className="text-sm">
+                  <label htmlFor="simulated" className="text-sm font-medium text-text">
                     Simulated Client Contact
                   </label>
                 </div>
@@ -275,7 +275,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
 
               {/* Reflections */}
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-semibold text-brand mb-3">
                   Reflections on Experience
                 </label>
                 <Textarea

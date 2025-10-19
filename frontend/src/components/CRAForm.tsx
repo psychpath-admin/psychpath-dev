@@ -272,7 +272,7 @@ export default function CRAForm({
             {/* Reflections - conditional based on checkbox */}
             {showReflections && (
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-semibold text-brand mb-3">
                   Reflections <span className="text-red-500">*</span>
                 </label>
                 <Textarea

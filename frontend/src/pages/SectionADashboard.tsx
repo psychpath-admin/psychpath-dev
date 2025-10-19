@@ -2484,11 +2484,11 @@ export default function SectionADashboard() {
 
               {/* Presenting Issues */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-brand mb-3">
                   Presenting Issues <span className="text-red-500">*</span>
                 </label>
                 <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical min-h-[80px]"
+                  className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[80px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
                   value={smartFormData.presenting_issues}
                   onChange={(e) => setSmartFormData(prev => ({ ...prev, presenting_issues: e.target.value }))}
                   placeholder="Describe the client's presenting issues..."
@@ -2498,7 +2498,7 @@ export default function SectionADashboard() {
 
               {/* DCC Activity Types */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-brand mb-3">
                   DCC Activity Type(s) <span className="text-red-500">*</span>
                 </label>
                 <div className="space-y-2">
@@ -2529,11 +2529,11 @@ export default function SectionADashboard() {
 
               {/* Activity Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-brand mb-3">
                   Activity Description <span className="text-red-500">*</span>
                 </label>
                 <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical min-h-[100px]"
+                  className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[100px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
                   value={smartFormData.description}
                   onChange={(e) => setSmartFormData(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
