@@ -103,7 +103,14 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
 
   // Autocomplete handlers
   const handleClientPseudonymChange = async (value: string) => {
-    setFormData(prev => ({ ...prev, client_id: value }))
+    // Clear auto-filled fields when user manually types
+    setFormData(prev => ({ 
+      ...prev, 
+      client_id: value,
+      place_of_practice: '',
+      client_age: '',
+      presenting_issues: ''
+    }))
     
     if (value.length >= 2) {
       try {
@@ -363,7 +370,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                               key={idx}
                               type="button"
                               onClick={() => {
-                                setFormData(prev => ({ ...prev, client_id: suggestion }))
+                                handleClientSelect(suggestion)
                                 setDuplicateWarning({ show: false, suggestions: [] })
                               }}
                               className="px-2 py-1 bg-white border border-yellow-300 rounded text-xs hover:bg-yellow-50"

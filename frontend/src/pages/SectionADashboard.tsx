@@ -584,6 +584,21 @@ export default function SectionADashboard() {
     }
   }
 
+  const handleClientPseudonymManualChange = async (value: string) => {
+    // Clear auto-filled fields when user manually types
+    setSmartFormData(prev => ({ 
+      ...prev, 
+      client_pseudonym: value,
+      place_of_practice: '',
+      client_age: '',
+      presenting_issues: ''
+    }))
+    
+    getClientSuggestions(value)
+    setShowSuggestions(true)
+    checkPseudonymDuplicate(value, smartFormData.date)
+  }
+
   const handlePlaceChange = async (value: string) => {
     setSmartFormData(prev => ({ ...prev, place_of_practice: value }))
     
@@ -2533,10 +2548,7 @@ export default function SectionADashboard() {
                         type="text"
                         value={smartFormData.client_pseudonym}
                         onChange={(e) => {
-                          setSmartFormData(prev => ({ ...prev, client_pseudonym: e.target.value }))
-                          getClientSuggestions(e.target.value)
-                          setShowSuggestions(true)
-                          checkPseudonymDuplicate(e.target.value, smartFormData.date)
+                          handleClientPseudonymManualChange(e.target.value)
                         }}
                         onFocus={() => setShowSuggestions(true)}
                         onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
@@ -2572,7 +2584,7 @@ export default function SectionADashboard() {
                               key={idx}
                               type="button"
                               onClick={() => {
-                                setSmartFormData(prev => ({ ...prev, client_pseudonym: suggestion }))
+                                handleClientSelect(suggestion)
                                 setDuplicateWarning({ show: false, suggestions: [] })
                               }}
                               className="px-2 py-1 bg-white border border-yellow-300 rounded text-xs hover:bg-yellow-50"
