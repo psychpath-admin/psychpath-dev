@@ -128,6 +128,7 @@ export default function SectionADashboard() {
     presenting_issues: '',
     dcc_activity_types: [] as string[],
     description: '',
+    additional_comments: '',
     duration: 50, // Default 50 minutes
     simulated_client: false
   })
@@ -605,6 +606,7 @@ export default function SectionADashboard() {
         session_activity_types: smartFormData.dcc_activity_types,
         duration_minutes: smartFormData.duration.toString(),
         reflections_on_experience: smartFormData.description,
+        additional_comments: smartFormData.additional_comments,
         simulated: smartFormData.simulated_client,
         entry_type: 'client_contact',
         week_starting: calculateWeekStarting(smartFormData.date)
@@ -621,6 +623,7 @@ export default function SectionADashboard() {
         presenting_issues: '',
         dcc_activity_types: [],
         description: '',
+        additional_comments: '',
         duration: 50,
         simulated_client: false
       })
@@ -2431,7 +2434,9 @@ export default function SectionADashboard() {
             <form onSubmit={(e) => { e.preventDefault(); handleSmartFormSubmit(); }} className="space-y-6">
               {/* SESSION INFO GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Session Information</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  📅 Session Information
+                </h3>
                 
                 {/* Date (half width) */}
                 <div className="grid grid-cols-2 gap-4">
@@ -2452,7 +2457,9 @@ export default function SectionADashboard() {
 
               {/* CLIENT INFO GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Client Information</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  👤 Client Information
+                </h3>
                 
                 {/* Client Pseudonym, Age, Simulated on same row */}
                 <div className="grid grid-cols-12 gap-4">
@@ -2536,7 +2543,9 @@ export default function SectionADashboard() {
 
               {/* LOCATION & DURATION GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Session Details</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  🏢 Session Details
+                </h3>
                 
                 {/* Place of Practice and Duration */}
                 <div className="grid grid-cols-3 gap-4">
@@ -2555,16 +2564,25 @@ export default function SectionADashboard() {
                   
                   <div>
                     <label className="block text-sm font-semibold text-brand mb-3">
-                      Duration (min) <span className="text-red-500">*</span>
+                      Duration <span className="text-red-500">*</span>
                     </label>
-                    <Input
-                      type="number"
-                      min="5"
-                      step="5"
-                      value={smartFormData.duration}
-                      onChange={(e) => setSmartFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                      className={formErrors.duration ? 'border-red-500' : ''}
-                    />
+                    <div className="space-y-2">
+                      <Input
+                        type="number"
+                        min="5"
+                        step="5"
+                        value={smartFormData.duration}
+                        onChange={(e) => setSmartFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                        className={formErrors.duration ? 'border-red-500' : ''}
+                      />
+                      
+                      <p className="text-xs text-textLight">
+                        {smartFormData.duration ? 
+                          `${Math.floor(smartFormData.duration / 60)}h ${smartFormData.duration % 60}m` : 
+                          'Enter minutes'
+                        }
+                      </p>
+                    </div>
                     
                     {/* Quick Duration Options */}
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -2592,21 +2610,23 @@ export default function SectionADashboard() {
 
               {/* CLINICAL DETAILS GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Clinical Details</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  🧠 Clinical Details
+                </h3>
                 
                 {/* DCC Activity Types */}
                 <div>
                   <label className="block text-sm font-semibold text-brand mb-3">
                     DCC Activity Type(s) <span className="text-red-500">*</span>
                   </label>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3">
                     {[
                       'Psychological Assessment',
                       'Intervention',
                       'Prevention',
                       'Evaluation'
                     ].map((type) => (
-                      <label key={type} className="flex items-center space-x-2">
+                      <div key={type} className="flex items-center space-x-2 p-2 rounded-lg border border-border hover:bg-surface/50 transition-colors">
                         <input
                           type="checkbox"
                           checked={smartFormData.dcc_activity_types.includes(type)}
@@ -2618,8 +2638,8 @@ export default function SectionADashboard() {
                           }}
                           className="rounded border-gray-300 text-primary focus:ring-primary"
                         />
-                        <span className="text-sm text-gray-700">{type}</span>
-                      </label>
+                        <span className="text-sm font-medium text-text cursor-pointer flex-1">{type}</span>
+                      </div>
                     ))}
                   </div>
                   {formErrors.dcc_activity_types && <p className="text-red-500 text-xs mt-1">{formErrors.dcc_activity_types}</p>}
@@ -2628,7 +2648,9 @@ export default function SectionADashboard() {
 
               {/* REFLECTION GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Reflection</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  💭 Reflection
+                </h3>
                 
                 {/* Activity Description */}
                 <div>
@@ -2642,6 +2664,19 @@ export default function SectionADashboard() {
                     placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
                   />
                   {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
+                </div>
+                
+                {/* Additional Comments */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Additional Comments
+                  </label>
+                  <textarea
+                    className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[60px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
+                    value={smartFormData.additional_comments || ''}
+                    onChange={(e) => setSmartFormData(prev => ({ ...prev, additional_comments: e.target.value }))}
+                    placeholder="Any additional notes or observations..."
+                  />
                 </div>
               </div>
 

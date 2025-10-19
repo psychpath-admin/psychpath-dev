@@ -80,6 +80,7 @@ class SectionAEntry(models.Model):
     )
     duration_minutes = models.PositiveIntegerField(null=True, blank=True, help_text="Duration in minutes")
     reflections_on_experience = models.TextField(blank=True, help_text="Reflections on the experience")
+    additional_comments = models.TextField(blank=True, help_text="Additional comments or observations")
     
     # Legacy fields for backward compatibility
     client_pseudonym = models.CharField(max_length=50, blank=True, help_text="Legacy field")

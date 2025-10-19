@@ -28,7 +28,7 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'trainee', 'entry_type', 'parent_dcc_entry', 'simulated', 'client_id', 'session_date', 'week_starting',
             'place_of_practice', 'client_age', 'presenting_issues', 'session_activity_types',
-            'session_activity_type', 'duration_minutes', 'reflections_on_experience',
+            'session_activity_type', 'duration_minutes', 'reflections_on_experience', 'additional_comments',
             # Legacy fields
             'client_pseudonym', 'activity_description', 'duration_hours', 'reflection',
             'created_at', 'updated_at',

@@ -23,6 +23,7 @@ interface EntryForm {
   session_activity_types: string[]
   duration_minutes: string
   reflections_on_experience: string
+  additional_comments: string
   simulated: boolean
 }
 
@@ -43,6 +44,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
     session_activity_types: [],
     duration_minutes: '50',
     reflections_on_experience: '',
+    additional_comments: '',
     simulated: false
   })
   const [saving, setSaving] = useState(false)
@@ -64,6 +66,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
             session_activity_types: entry.session_activity_types || [],
             duration_minutes: entry.duration_minutes?.toString() || '50',
             reflections_on_experience: entry.reflections_on_experience || '',
+            additional_comments: entry.additional_comments || '',
             simulated: entry.simulated || false
           })
         })
@@ -109,6 +112,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
         session_activity_types: formData.session_activity_types,
         duration_minutes: parseInt(formData.duration_minutes),
         reflections_on_experience: formData.reflections_on_experience,
+        additional_comments: formData.additional_comments,
       }
 
       if (isEditing && entryId) {
@@ -174,7 +178,9 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* SESSION INFO GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Session Information</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  📅 Session Information
+                </h3>
                 
                 {/* Date (half width) */}
                 <div className="grid grid-cols-2 gap-4">
@@ -194,7 +200,9 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
 
               {/* CLIENT INFO GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Client Information</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  👤 Client Information
+                </h3>
                 
                 {/* Client Pseudonym, Age, and Simulated on same row */}
                 <div className="grid grid-cols-12 gap-4">
@@ -254,7 +262,9 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
 
               {/* LOCATION & DURATION GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Session Details</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  🏢 Session Details
+                </h3>
                 
                 {/* Place of Practice and Duration on same row */}
                 <div className="grid grid-cols-3 gap-4">
@@ -271,32 +281,42 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   
                   <div>
                     <label className="block text-sm font-semibold text-brand mb-3">
-                      Duration (min) *
+                      Duration *
                     </label>
-                    <Input
-                      type="number"
-                      value={formData.duration_minutes}
-                      onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: e.target.value }))}
-                      placeholder="e.g., 60"
-                      min="1"
-                      required
-                    />
+                    <div className="space-y-2">
+                      <Input
+                        type="number"
+                        value={formData.duration_minutes}
+                        onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: e.target.value }))}
+                        placeholder="e.g., 60"
+                        min="1"
+                        required
+                      />
+                      <p className="text-xs text-textLight">
+                        {formData.duration_minutes ? 
+                          `${Math.floor(parseInt(formData.duration_minutes) / 60)}h ${parseInt(formData.duration_minutes) % 60}m` : 
+                          'Enter minutes'
+                        }
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* CLINICAL DETAILS GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Clinical Details</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  🧠 Clinical Details
+                </h3>
                 
                 {/* Session Activity Types */}
                 <div>
                   <label className="block text-sm font-semibold text-brand mb-3">
                     Session Activity Types *
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-3">
                     {ACTIVITY_TYPES.map(type => (
-                      <div key={type} className="flex items-center space-x-2">
+                      <div key={type} className="flex items-center space-x-2 p-2 rounded-lg border border-border hover:bg-surface/50 transition-colors">
                         <Checkbox
                           id={type}
                           checked={formData.session_activity_types.includes(type)}
@@ -304,7 +324,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                             handleActivityTypeChange(type, checked as boolean)
                           }
                         />
-                        <label htmlFor={type} className="text-sm font-medium text-text">
+                        <label htmlFor={type} className="text-sm font-medium text-text cursor-pointer flex-1">
                           {formatActivityType(type)}
                         </label>
                       </div>
@@ -315,7 +335,9 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
 
               {/* REFLECTION GROUP */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Reflection</h3>
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide border-b border-brand/20 pb-2">
+                  💭 Reflection
+                </h3>
                 
                 {/* Reflections on Experience */}
                 <div>
@@ -327,6 +349,19 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                     onChange={(e) => setFormData(prev => ({ ...prev, reflections_on_experience: e.target.value }))}
                     placeholder="Reflect on the session, what went well, areas for improvement..."
                     rows={4}
+                  />
+                </div>
+                
+                {/* Additional Comments */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Additional Comments
+                  </label>
+                  <Textarea
+                    value={formData.additional_comments || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, additional_comments: e.target.value }))}
+                    placeholder="Any additional notes or observations..."
+                    rows={2}
                   />
                 </div>
               </div>

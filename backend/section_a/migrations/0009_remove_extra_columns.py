@@ -25,12 +25,4 @@ class Migration(migrations.Migration):
             name='trainee_response',
             field=models.TextField(blank=True, default='', help_text='Trainee response to supervisor comment when resubmitting'),
         ),
-        migrations.RemoveField(
-            model_name='sectionaentry',
-            name='activity_type',
-        ),
-        migrations.RemoveField(
-            model_name='sectionaentry',
-            name='custom_activity_type',
-        ),
     ]
