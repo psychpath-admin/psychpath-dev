@@ -339,6 +339,19 @@ export async function checkDuplicatePseudonym(pseudonym: string, date: string) {
   return res.json()
 }
 
+// Client session count
+export async function getClientSessionCount(clientId: string): Promise<number> {
+  try {
+    const res = await apiFetch(`/api/section-a/entries/client_session_count/?client_id=${encodeURIComponent(clientId)}`)
+    if (!res.ok) throw new Error('Failed to fetch session count')
+    const data = await res.json()
+    return data.count || 0
+  } catch (error) {
+    console.error('Error fetching session count:', error)
+    return 0
+  }
+}
+
 // Custom activity types
 export async function getCustomActivityTypes() {
   const res = await apiFetch('/api/section-a/custom-activity-types/')

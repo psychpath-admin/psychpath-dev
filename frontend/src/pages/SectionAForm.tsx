@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Save } from 'lucide-react'
 import { 
   createSectionAEntry, 
@@ -14,7 +15,8 @@ import {
   getLastSessionData, 
   getPlaceAutocomplete,
   getPresentingIssuesAutocomplete,
-  checkDuplicatePseudonym
+  checkDuplicatePseudonym,
+  getClientSessionCount
 } from '@/lib/api'
 import { toast } from 'sonner'
 
@@ -31,6 +33,7 @@ interface EntryForm {
   presenting_issues: string
   session_activity_types: string[]
   duration_minutes: string
+  session_modality: string
   reflections_on_experience: string
   additional_comments: string
   simulated: boolean
@@ -52,6 +55,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
     presenting_issues: '',
     session_activity_types: [],
     duration_minutes: '50',
+    session_modality: 'face_to_face',
     reflections_on_experience: '',
     additional_comments: '',
     simulated: false
@@ -71,6 +75,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
     show: boolean
     suggestions: string[]
   }>({ show: false, suggestions: [] })
+  const [sessionCount, setSessionCount] = useState<number>(0)
 
   // Load existing entry data when editing
   useEffect(() => {
@@ -86,6 +91,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
             presenting_issues: entry.presenting_issues || '',
             session_activity_types: entry.session_activity_types || [],
             duration_minutes: entry.duration_minutes?.toString() || '50',
+            session_modality: entry.session_modality || 'face_to_face',
             reflections_on_experience: entry.reflections_on_experience || '',
             additional_comments: entry.additional_comments || '',
             simulated: entry.simulated || false
@@ -117,11 +123,16 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
         const suggestions = await getClientAutocomplete(value)
         setClientSuggestions(suggestions)
         setShowClientSuggestions(true)
+        
+        // Fetch session count
+        const count = await getClientSessionCount(value)
+        setSessionCount(count)
       } catch (error) {
         console.error('Error fetching client suggestions:', error)
       }
     } else {
       setShowClientSuggestions(false)
+      setSessionCount(0)
     }
     
     // Check for duplicates
@@ -155,6 +166,14 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
       }
     } catch (error) {
       // No previous session found - that's ok
+    }
+    
+    // Fetch session count
+    try {
+      const count = await getClientSessionCount(pseudonym)
+      setSessionCount(count)
+    } catch (error) {
+      console.error('Error fetching session count:', error)
     }
     
     // Check for duplicates
@@ -206,12 +225,21 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Client pseudonym validation
     if (!formData.client_id.trim()) {
-      toast.error('Client ID is required')
+      toast.error('Client pseudonym is required')
+      return
+    }
+    if (formData.client_id.trim().length < 2) {
+      toast.error('Client pseudonym must be at least 2 characters long')
+      return
+    }
+    if (formData.client_id.length > 50) {
+      toast.error('Client pseudonym must be 50 characters or less')
       return
     }
     
-    // Add future date validation
+    // Future date validation
     const selectedDate = new Date(formData.session_date + 'T00:00:00')
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -221,11 +249,36 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
       return
     }
     
+    // Duration validation
     if (!formData.duration_minutes) {
       toast.error('Duration is required')
       return
     }
+    const duration = parseInt(formData.duration_minutes)
+    if (duration < 5 || duration > 480) {
+      toast.error('Duration must be between 5 minutes and 8 hours')
+      return
+    }
     
+    // Presenting issues validation
+    if (formData.presenting_issues && formData.presenting_issues.trim().length < 10) {
+      toast.error('Presenting issues must be at least 10 characters for clinical record quality')
+      return
+    }
+    
+    // Reflection validation
+    if (formData.reflections_on_experience && formData.reflections_on_experience.trim().length < 20) {
+      toast.error('Reflection must be at least 20 characters to demonstrate professional learning')
+      return
+    }
+    
+    // Place of practice validation
+    if (formData.place_of_practice && formData.place_of_practice.length > 200) {
+      toast.error('Place of practice must be 200 characters or less')
+      return
+    }
+    
+    // Activity types validation
     if (formData.session_activity_types.length === 0) {
       toast.error('At least one session activity type is required')
       return
@@ -244,6 +297,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
         presenting_issues: formData.presenting_issues,
         session_activity_types: formData.session_activity_types,
         duration_minutes: parseInt(formData.duration_minutes),
+        session_modality: formData.session_modality,
         reflections_on_experience: formData.reflections_on_experience,
         additional_comments: formData.additional_comments,
       }
@@ -343,6 +397,11 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   <div className="col-span-6">
                     <label className="block text-sm font-semibold text-brand mb-3">
                       Client Pseudonym *
+                      {sessionCount > 0 && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          Session #{sessionCount + 1} with this client
+                        </Badge>
+                      )}
                     </label>
                     <div className="relative">
                       <Input
@@ -351,6 +410,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                         onFocus={() => formData.client_id.length >= 2 && setShowClientSuggestions(true)}
                         onBlur={() => setTimeout(() => setShowClientSuggestions(false), 200)}
                         placeholder="e.g., Client-001"
+                        maxLength={50}
                         required
                       />
                       {showClientSuggestions && clientSuggestions.length > 0 && (
@@ -434,8 +494,12 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                       onFocus={() => formData.presenting_issues.length >= 2 && setShowIssuesSuggestions(true)}
                       onBlur={() => setTimeout(() => setShowIssuesSuggestions(false), 200)}
                       placeholder="Describe the client's presenting issues..."
+                      maxLength={2000}
                       rows={3}
                     />
+                    <p className="text-xs text-gray-500 mt-1 text-right">
+                      {formData.presenting_issues.length}/2000 characters
+                    </p>
                     {showIssuesSuggestions && issuesSuggestions.length > 0 && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
                         {issuesSuggestions.map((suggestion, index) => (
@@ -475,6 +539,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                         onFocus={() => formData.place_of_practice.length >= 2 && setShowPlaceSuggestions(true)}
                         onBlur={() => setTimeout(() => setShowPlaceSuggestions(false), 200)}
                         placeholder="e.g., Virtual Clinic, Office, Community Center"
+                        maxLength={200}
                       />
                       {showPlaceSuggestions && placeSuggestions.length > 0 && (
                         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
@@ -514,6 +579,44 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                           'Enter minutes'
                         }
                       </p>
+                    </div>
+                    
+                    {/* Session Modality and Quick Links on same row */}
+                    <div className="flex items-center gap-2 mt-2">
+                      {/* Session Modality - compact, no label */}
+                      <Select
+                        value={formData.session_modality}
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, session_modality: value }))}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue placeholder="Modality" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="face_to_face">Face-to-Face</SelectItem>
+                          <SelectItem value="video">Video</SelectItem>
+                          <SelectItem value="phone">Phone</SelectItem>
+                          <SelectItem value="hybrid">Hybrid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      
+                      {/* Quick links to the right */}
+                      <div className="flex flex-wrap gap-1">
+                        <span className="text-xs text-gray-500">Quick:</span>
+                        {[30, 50, 60, 75, 90].map((minutes) => (
+                          <button
+                            key={minutes}
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, duration_minutes: minutes.toString() }))}
+                            className={`px-2 py-1 text-xs rounded border ${
+                              formData.duration_minutes === minutes.toString()
+                                ? 'bg-primary text-white border-primary'
+                                : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                            }`}
+                          >
+                            {minutes}min
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -560,12 +663,18 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   <label className="block text-sm font-semibold text-brand mb-3">
                     Reflections on Experience
                   </label>
-                  <Textarea
-                    value={formData.reflections_on_experience}
-                    onChange={(e) => setFormData(prev => ({ ...prev, reflections_on_experience: e.target.value }))}
-                    placeholder="Reflect on the session, what went well, areas for improvement..."
-                    rows={4}
-                  />
+                  <div className="relative">
+                    <Textarea
+                      value={formData.reflections_on_experience}
+                      onChange={(e) => setFormData(prev => ({ ...prev, reflections_on_experience: e.target.value }))}
+                      placeholder="Reflect on the session, what went well, areas for improvement..."
+                      maxLength={3000}
+                      rows={4}
+                    />
+                    <p className="text-xs text-gray-500 mt-1 text-right">
+                      {formData.reflections_on_experience.length}/3000 characters
+                    </p>
+                  </div>
                 </div>
                 
                 {/* Additional Comments */}
@@ -573,12 +682,18 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   <label className="block text-sm font-semibold text-brand mb-3">
                     Additional Comments
                   </label>
-                  <Textarea
-                    value={formData.additional_comments || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, additional_comments: e.target.value }))}
-                    placeholder="Any additional notes or observations..."
-                    rows={2}
-                  />
+                  <div className="relative">
+                    <Textarea
+                      value={formData.additional_comments || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, additional_comments: e.target.value }))}
+                      placeholder="Any additional notes or observations..."
+                      maxLength={1000}
+                      rows={2}
+                    />
+                    <p className="text-xs text-gray-500 mt-1 text-right">
+                      {(formData.additional_comments || '').length}/1000 characters
+                    </p>
+                  </div>
                 </div>
               </div>
 

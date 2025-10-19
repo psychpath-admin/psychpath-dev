@@ -19,6 +19,7 @@ import {
   getPlaceAutocomplete,
   getPresentingIssuesAutocomplete,
   checkDuplicatePseudonym,
+  getClientSessionCount,
   getCustomActivityTypes,
   createCustomActivityType,
   deleteCustomActivityType
@@ -46,6 +47,7 @@ interface DCCEntry {
   presenting_issues: string
   session_activity_types: string[]
   duration_minutes: string
+  session_modality?: string
   reflections_on_experience: string
   entry_type: 'client_contact' | 'cra' | 'independent_activity'
   parent_dcc_entry?: number
@@ -133,6 +135,7 @@ export default function SectionADashboard() {
     description: '',
     additional_comments: '',
     duration: 50, // Default 50 minutes
+    session_modality: 'face_to_face',
     simulated_client: false
   })
   const [clientSuggestions, setClientSuggestions] = useState<string[]>([])
@@ -146,6 +149,7 @@ export default function SectionADashboard() {
     show: boolean
     suggestions: string[]
   }>({ show: false, suggestions: [] })
+  const [clientSessionCount, setClientSessionCount] = useState<number>(0)
   
   // Tooltip toggle
   const [showTooltips, setShowTooltips] = useState(true)
@@ -564,6 +568,14 @@ export default function SectionADashboard() {
         }))
       }
       
+      // Fetch session count
+      try {
+        const count = await getClientSessionCount(clientPseudonym)
+        setClientSessionCount(count)
+      } catch (error) {
+        console.error('Error fetching session count:', error)
+      }
+      
       // Check for duplicates
       if (smartFormData.date) {
         const result = await checkDuplicatePseudonym(clientPseudonym, smartFormData.date)
@@ -597,6 +609,18 @@ export default function SectionADashboard() {
     getClientSuggestions(value)
     setShowSuggestions(true)
     checkPseudonymDuplicate(value, smartFormData.date)
+    
+    // Fetch session count
+    if (value.length >= 2) {
+      try {
+        const count = await getClientSessionCount(value)
+        setClientSessionCount(count)
+      } catch (error) {
+        console.error('Error fetching session count:', error)
+      }
+    } else {
+      setClientSessionCount(0)
+    }
   }
 
   const handlePlaceChange = async (value: string) => {
@@ -661,12 +685,58 @@ export default function SectionADashboard() {
       }
     }
     
-    if (!smartFormData.client_pseudonym) errors.client_pseudonym = 'Client pseudonym is required'
-    if (!smartFormData.place_of_practice) errors.place_of_practice = 'Place of practice is required'
-    if (!smartFormData.presenting_issues) errors.presenting_issues = 'Presenting issues are required'
-    if (smartFormData.dcc_activity_types.length === 0) errors.dcc_activity_types = 'At least one DCC activity type is required'
-    if (!smartFormData.description) errors.description = 'Activity description is required'
-    if (smartFormData.duration <= 0) errors.duration = 'Duration must be greater than 0'
+    // Client pseudonym validation
+    if (!smartFormData.client_pseudonym) {
+      errors.client_pseudonym = 'Client pseudonym is required'
+    } else if (smartFormData.client_pseudonym.trim().length < 2) {
+      errors.client_pseudonym = 'Must be at least 2 characters'
+    } else if (smartFormData.client_pseudonym.length > 50) {
+      errors.client_pseudonym = 'Must be 50 characters or less'
+    }
+    
+    // Place of practice validation
+    if (!smartFormData.place_of_practice) {
+      errors.place_of_practice = 'Place of practice is required'
+    } else if (smartFormData.place_of_practice.length > 200) {
+      errors.place_of_practice = 'Must be 200 characters or less'
+    }
+    
+    // Presenting issues validation
+    if (!smartFormData.presenting_issues) {
+      errors.presenting_issues = 'Presenting issues are required'
+    } else if (smartFormData.presenting_issues.trim().length < 10) {
+      errors.presenting_issues = 'Must be at least 10 characters for clinical quality'
+    } else if (smartFormData.presenting_issues.length > 2000) {
+      errors.presenting_issues = 'Must be 2000 characters or less'
+    }
+    
+    // Activity description validation
+    if (!smartFormData.description) {
+      errors.description = 'Activity description is required'
+    } else if (smartFormData.description.trim().length < 20) {
+      errors.description = 'Must be at least 20 characters to demonstrate professional learning'
+    } else if (smartFormData.description.length > 3000) {
+      errors.description = 'Must be 3000 characters or less'
+    }
+    
+    // Duration validation
+    if (smartFormData.duration <= 0) {
+      errors.duration = 'Duration must be greater than 0'
+    } else if (smartFormData.duration < 5) {
+      errors.duration = 'Duration must be at least 5 minutes'
+    } else if (smartFormData.duration > 480) {
+      errors.duration = 'Duration cannot exceed 8 hours'
+    }
+    
+    // Activity types validation
+    if (smartFormData.dcc_activity_types.length === 0) {
+      errors.dcc_activity_types = 'At least one DCC activity type is required'
+    }
+    
+    // Session modality validation
+    if (!smartFormData.session_modality) {
+      errors.session_modality = 'Session modality is required'
+    }
     
     // Validation: DCC activities cannot be with simulated clients
     if (smartFormData.simulated_client) {
@@ -693,6 +763,7 @@ export default function SectionADashboard() {
         presenting_issues: smartFormData.presenting_issues,
         session_activity_types: smartFormData.dcc_activity_types,
         duration_minutes: smartFormData.duration.toString(),
+        session_modality: smartFormData.session_modality,
         reflections_on_experience: smartFormData.description,
         additional_comments: smartFormData.additional_comments,
         simulated: smartFormData.simulated_client,
@@ -713,6 +784,7 @@ export default function SectionADashboard() {
         description: '',
         additional_comments: '',
         duration: 50,
+        session_modality: 'face_to_face',
         simulated_client: false
       })
       setFormErrors({})
@@ -1727,6 +1799,11 @@ export default function SectionADashboard() {
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
                         <span className="font-semibold text-gray-900 break-words">{entry.client_id}</span>
+                        {entry.total_sessions && entry.total_sessions > 1 && (
+                          <Badge variant="outline" className="text-xs">
+                            Session #{entry.total_sessions}
+                          </Badge>
+                        )}
                         {entry.client_age && (
                           <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-blue-600 border-blue-600">
                             Age: {entry.client_age}
@@ -1750,6 +1827,17 @@ export default function SectionADashboard() {
                           {formatDuration(entry.duration_minutes)}
                         </span>
                       </div>
+
+                      {/* Session Modality Badge */}
+                      {entry.session_modality && (
+                        <div className="flex items-center">
+                          <Badge variant="outline" className="text-xs">
+                            {entry.session_modality === 'face_to_face' ? '👤 Face-to-Face' : 
+                             entry.session_modality === 'video' ? '🎥 Video' :
+                             entry.session_modality === 'phone' ? '📞 Phone' : '🔄 Hybrid'}
+                          </Badge>
+                        </div>
+                      )}
 
                       {/* Row 2: Session Types - Full Width */}
                       <div className="lg:col-span-2 xl:col-span-3">
@@ -1811,6 +1899,13 @@ export default function SectionADashboard() {
                               <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.session_date)}</div>
                               <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
                               <div><span className="font-medium">Location:</span> {entry.place_of_practice}</div>
+                              {entry.session_modality && (
+                                <div><span className="font-medium">Modality:</span> {
+                                  entry.session_modality === 'face_to_face' ? 'Face-to-Face' : 
+                                  entry.session_modality === 'video' ? 'Video/Telehealth' :
+                                  entry.session_modality === 'phone' ? 'Phone' : 'Hybrid'
+                                }</div>
+                              )}
                               {entry.simulated && (
                                 <div><span className="font-medium">Type:</span> <Badge variant="secondary" className="text-xs ml-1">Simulated</Badge></div>
                               )}
@@ -2115,6 +2210,11 @@ export default function SectionADashboard() {
                                 <div className="flex items-center gap-2">
                                   <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
                                   <span className="font-semibold text-gray-900 break-words">{entry.client_id}</span>
+                                  {entry.total_sessions && entry.total_sessions > 1 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Session #{entry.total_sessions}
+                                    </Badge>
+                                  )}
                                   {entry.simulated && (
                                     <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
                                       Simulated
@@ -2343,6 +2443,11 @@ export default function SectionADashboard() {
                               <span className="font-semibold text-gray-900 break-words">
                                 {entry.client_pseudonym || entry.client_id}
                               </span>
+                              {entry.total_sessions && entry.total_sessions > 1 && (
+                                <Badge variant="outline" className="text-xs">
+                                  Session #{entry.total_sessions}
+                                </Badge>
+                              )}
                             </div>
                             
                             {/* Date */}
@@ -2555,6 +2660,11 @@ export default function SectionADashboard() {
                   <div className="col-span-6">
                     <label className="block text-sm font-semibold text-brand mb-3">
                       Client Pseudonym <span className="text-red-500">*</span>
+                      {clientSessionCount > 0 && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          Session #{clientSessionCount + 1}
+                        </Badge>
+                      )}
                     </label>
                     <div className="relative">
                       <Input
@@ -2566,6 +2676,7 @@ export default function SectionADashboard() {
                         onFocus={() => setShowSuggestions(true)}
                         onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                         placeholder="Type to search previous clients..."
+                        maxLength={50}
                         className={formErrors.client_pseudonym ? 'border-red-500' : ''}
                       />
                       {showSuggestions && clientSuggestions.length > 0 && (
@@ -2662,7 +2773,11 @@ export default function SectionADashboard() {
                       onFocus={() => smartFormData.presenting_issues.length >= 2 && setShowIssuesSuggestions(true)}
                       onBlur={() => setTimeout(() => setShowIssuesSuggestions(false), 200)}
                       placeholder="Describe the client's presenting issues..."
+                      maxLength={2000}
                     />
+                    <p className="text-xs text-gray-500 mt-1 text-right">
+                      {smartFormData.presenting_issues.length}/2000 characters
+                    </p>
                     {showIssuesSuggestions && issuesSuggestions.length > 0 && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
                         {issuesSuggestions.map((suggestion, index) => (
@@ -2703,6 +2818,7 @@ export default function SectionADashboard() {
                       onChange={(e) => handlePlaceChange(e.target.value)}
                       onFocus={() => smartFormData.place_of_practice.length >= 2 && setShowPlaceSuggestions(true)}
                       onBlur={() => setTimeout(() => setShowPlaceSuggestions(false), 200)}
+                      maxLength={200}
                       className={formErrors.place_of_practice ? 'border-red-500' : ''}
                     />
                     {showPlaceSuggestions && placeSuggestions.length > 0 && (
@@ -2747,26 +2863,46 @@ export default function SectionADashboard() {
                       </p>
                     </div>
                     
-                    {/* Quick Duration Options */}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <span className="text-xs text-gray-500 mr-2">Quick:</span>
-                      {[30, 50, 60, 75, 90].map((minutes) => (
-                        <button
-                          key={minutes}
-                          type="button"
-                          onClick={() => setSmartFormData(prev => ({ ...prev, duration: minutes }))}
-                          className={`px-2 py-1 text-xs rounded border ${
-                            smartFormData.duration === minutes
-                              ? 'bg-primary text-white border-primary'
-                              : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
-                          }`}
-                        >
-                          {minutes}min
-                        </button>
-                      ))}
+                    {/* Session Modality and Quick Links on same row */}
+                    <div className="flex items-center gap-2 mt-2">
+                      {/* Session Modality - compact, no label */}
+                      <Select
+                        value={smartFormData.session_modality}
+                        onValueChange={(value) => setSmartFormData(prev => ({ ...prev, session_modality: value }))}
+                      >
+                        <SelectTrigger className={`w-32 ${formErrors.session_modality ? 'border-red-500' : ''}`}>
+                          <SelectValue placeholder="Modality" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="face_to_face">Face-to-Face</SelectItem>
+                          <SelectItem value="video">Video</SelectItem>
+                          <SelectItem value="phone">Phone</SelectItem>
+                          <SelectItem value="hybrid">Hybrid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      
+                      {/* Quick links to the right */}
+                      <div className="flex flex-wrap gap-1">
+                        <span className="text-xs text-gray-500">Quick:</span>
+                        {[30, 50, 60, 75, 90].map((minutes) => (
+                          <button
+                            key={minutes}
+                            type="button"
+                            onClick={() => setSmartFormData(prev => ({ ...prev, duration: minutes }))}
+                            className={`px-2 py-1 text-xs rounded border ${
+                              smartFormData.duration === minutes
+                                ? 'bg-primary text-white border-primary'
+                                : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                            }`}
+                          >
+                            {minutes}min
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     
                     {formErrors.duration && <p className="text-red-500 text-xs mt-1">{formErrors.duration}</p>}
+                    {formErrors.session_modality && <p className="text-red-500 text-xs mt-1">{formErrors.session_modality}</p>}
                   </div>
                 </div>
               </div>
@@ -2822,16 +2958,22 @@ export default function SectionADashboard() {
                   <label className="block text-sm font-semibold text-brand mb-3">
                     Activity Description <span className="text-red-500">*</span>
                   </label>
-                  <textarea
-                    className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[100px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
-                      formErrors.description 
-                        ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
-                        : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
-                    } focus:shadow-psychpath-lg`}
-                    value={smartFormData.description}
-                    onChange={(e) => setSmartFormData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
-                  />
+                  <div className="relative">
+                    <textarea
+                      className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[100px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
+                        formErrors.description 
+                          ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
+                          : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
+                      } focus:shadow-psychpath-lg`}
+                      value={smartFormData.description}
+                      onChange={(e) => setSmartFormData(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
+                      maxLength={3000}
+                    />
+                    <p className="text-xs text-gray-500 mt-1 text-right">
+                      {smartFormData.description.length}/3000 characters
+                    </p>
+                  </div>
                   {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
                 </div>
                 
@@ -2840,16 +2982,22 @@ export default function SectionADashboard() {
                   <label className="block text-sm font-semibold text-brand mb-3">
                     Additional Comments
                   </label>
-                  <textarea
-                    className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[60px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
-                      formErrors.additional_comments 
-                        ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
-                        : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
-                    } focus:shadow-psychpath-lg`}
-                    value={smartFormData.additional_comments || ''}
-                    onChange={(e) => setSmartFormData(prev => ({ ...prev, additional_comments: e.target.value }))}
-                    placeholder="Any additional notes or observations..."
-                  />
+                  <div className="relative">
+                    <textarea
+                      className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[60px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
+                        formErrors.additional_comments 
+                          ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
+                          : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
+                      } focus:shadow-psychpath-lg`}
+                      value={smartFormData.additional_comments || ''}
+                      onChange={(e) => setSmartFormData(prev => ({ ...prev, additional_comments: e.target.value }))}
+                      placeholder="Any additional notes or observations..."
+                      maxLength={1000}
+                    />
+                    <p className="text-xs text-gray-500 mt-1 text-right">
+                      {(smartFormData.additional_comments || '').length}/1000 characters
+                    </p>
+                  </div>
                 </div>
               </div>
 

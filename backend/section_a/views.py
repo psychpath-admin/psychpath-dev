@@ -163,6 +163,21 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
             'duplicate': exists,
             'suggestions': suggestions
         })
+    
+    @action(detail=False, methods=['get'])
+    def client_session_count(self, request):
+        """Get the session count for a specific client pseudonym"""
+        client_id = request.query_params.get('client_id', '')
+        
+        if not client_id:
+            return Response({'count': 0})
+        
+        count = self.get_queryset().filter(
+            Q(client_id=client_id) | Q(client_pseudonym=client_id),
+            entry_type__in=['client_contact', 'simulated_contact']
+        ).count()
+        
+        return Response({'count': count})
 
 
 class CustomSessionActivityTypeViewSet(viewsets.ModelViewSet):
