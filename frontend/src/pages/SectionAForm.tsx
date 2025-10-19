@@ -526,45 +526,68 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   🏢 Session Details
                 </h3>
                 
-                {/* Place of Practice and Duration on same row */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-sm font-semibold text-brand mb-3">
-                      Place of Practice
-                    </label>
-                    <div className="relative">
-                      <Input
-                        value={formData.place_of_practice}
-                        onChange={(e) => handlePlaceChange(e.target.value)}
-                        onFocus={() => formData.place_of_practice.length >= 2 && setShowPlaceSuggestions(true)}
-                        onBlur={() => setTimeout(() => setShowPlaceSuggestions(false), 200)}
-                        placeholder="e.g., Virtual Clinic, Office, Community Center"
-                        maxLength={200}
-                      />
-                      {showPlaceSuggestions && placeSuggestions.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
-                          {placeSuggestions.map((suggestion, index) => (
-                            <div
-                              key={index}
-                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                              onClick={() => {
-                                setFormData(prev => ({ ...prev, place_of_practice: suggestion }))
-                                setShowPlaceSuggestions(false)
-                              }}
-                            >
-                              {suggestion}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                {/* Place of Practice - full width */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Place of Practice
+                  </label>
+                  <div className="relative">
+                    <Input
+                      value={formData.place_of_practice}
+                      onChange={(e) => handlePlaceChange(e.target.value)}
+                      onFocus={() => formData.place_of_practice.length >= 2 && setShowPlaceSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowPlaceSuggestions(false), 200)}
+                      placeholder="e.g., Virtual Clinic, Office, Community Center"
+                      maxLength={200}
+                    />
+                    {showPlaceSuggestions && placeSuggestions.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                        {placeSuggestions.map((suggestion, index) => (
+                          <div
+                            key={index}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, place_of_practice: suggestion }))
+                              setShowPlaceSuggestions(false)
+                            }}
+                          >
+                            {suggestion}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-brand mb-3">
-                      Duration *
-                    </label>
-                    <div className="space-y-2">
+                </div>
+
+                {/* Session Modality - full width, below Place of Practice */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Session Modality *
+                  </label>
+                  <Select
+                    value={formData.session_modality}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, session_modality: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select modality" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="face_to_face">Face-to-Face</SelectItem>
+                      <SelectItem value="video">Video/Telehealth</SelectItem>
+                      <SelectItem value="phone">Phone</SelectItem>
+                      <SelectItem value="hybrid">Hybrid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Duration with Quick Links - full width */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Duration *
+                  </label>
+                  <div className="flex items-center gap-4">
+                    {/* Duration input on the left */}
+                    <div className="w-32">
                       <Input
                         type="number"
                         value={formData.duration_minutes}
@@ -581,42 +604,23 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                       </p>
                     </div>
                     
-                    {/* Session Modality and Quick Links on same row */}
-                    <div className="flex items-center gap-2 mt-2">
-                      {/* Session Modality - compact, no label */}
-                      <Select
-                        value={formData.session_modality}
-                        onValueChange={(value) => setFormData(prev => ({ ...prev, session_modality: value }))}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue placeholder="Modality" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="face_to_face">Face-to-Face</SelectItem>
-                          <SelectItem value="video">Video</SelectItem>
-                          <SelectItem value="phone">Phone</SelectItem>
-                          <SelectItem value="hybrid">Hybrid</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      
-                      {/* Quick links to the right */}
-                      <div className="flex flex-wrap gap-1">
-                        <span className="text-xs text-gray-500">Quick:</span>
-                        {[30, 50, 60, 75, 90].map((minutes) => (
-                          <button
-                            key={minutes}
-                            type="button"
-                            onClick={() => setFormData(prev => ({ ...prev, duration_minutes: minutes.toString() }))}
-                            className={`px-2 py-1 text-xs rounded border ${
-                              formData.duration_minutes === minutes.toString()
-                                ? 'bg-primary text-white border-primary'
-                                : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
-                            }`}
-                          >
-                            {minutes}min
-                          </button>
-                        ))}
-                      </div>
+                    {/* Quick links on the right */}
+                    <div className="flex flex-wrap gap-1 items-center">
+                      <span className="text-xs text-gray-500">Quick:</span>
+                      {[30, 50, 60, 75, 90].map((minutes) => (
+                        <button
+                          key={minutes}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, duration_minutes: minutes.toString() }))}
+                          className={`px-2 py-1 text-xs rounded border ${
+                            formData.duration_minutes === minutes.toString()
+                              ? 'bg-primary text-white border-primary'
+                              : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          {minutes}min
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
