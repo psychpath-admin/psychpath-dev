@@ -129,8 +129,7 @@ export default function SectionADashboard() {
     dcc_activity_types: [] as string[],
     description: '',
     duration: 50, // Default 50 minutes
-    simulated_client: false,
-    supervisor_reviewed: false
+    simulated_client: false
   })
   const [clientSuggestions, setClientSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -607,7 +606,6 @@ export default function SectionADashboard() {
         duration_minutes: smartFormData.duration.toString(),
         reflections_on_experience: smartFormData.description,
         simulated: smartFormData.simulated_client,
-        supervisor_reviewed: smartFormData.supervisor_reviewed,
         entry_type: 'client_contact',
         week_starting: calculateWeekStarting(smartFormData.date)
       }
@@ -624,8 +622,7 @@ export default function SectionADashboard() {
         dcc_activity_types: [],
         description: '',
         duration: 50,
-        simulated_client: false,
-        supervisor_reviewed: false
+        simulated_client: false
       })
       setFormErrors({})
       setShowSmartForm(false)
@@ -2432,208 +2429,220 @@ export default function SectionADashboard() {
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); handleSmartFormSubmit(); }} className="space-y-6">
-              {/* Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date of Activity <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="date"
-                  value={smartFormData.date}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, date: e.target.value }))}
-                  className={formErrors.date ? 'border-red-500' : ''}
-                />
-                {formErrors.date && <p className="text-red-500 text-xs mt-1">{formErrors.date}</p>}
-              </div>
-
-              {/* Client Pseudonym with Autosuggest */}
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Client Pseudonym <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="text"
-                  value={smartFormData.client_pseudonym}
-                  onChange={(e) => {
-                    setSmartFormData(prev => ({ ...prev, client_pseudonym: e.target.value }))
-                    getClientSuggestions(e.target.value)
-                    setShowSuggestions(true)
-                  }}
-                  onFocus={() => setShowSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  placeholder="Type to search previous clients..."
-                  className={formErrors.client_pseudonym ? 'border-red-500' : ''}
-                />
-                {showSuggestions && clientSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
-                    {clientSuggestions.map((client, index) => (
-                      <div
-                        key={index}
-                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                        onClick={() => handleClientSelect(client)}
-                      >
-                        {client}
-                      </div>
-                    ))}
+              {/* SESSION INFO GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Session Information</h3>
+                
+                {/* Date (half width) */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Date of Activity <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="date"
+                      value={smartFormData.date}
+                      onChange={(e) => setSmartFormData(prev => ({ ...prev, date: e.target.value }))}
+                      className={formErrors.date ? 'border-red-500' : ''}
+                    />
+                    {formErrors.date && <p className="text-red-500 text-xs mt-1">{formErrors.date}</p>}
                   </div>
-                )}
-                {formErrors.client_pseudonym && <p className="text-red-500 text-xs mt-1">{formErrors.client_pseudonym}</p>}
+                </div>
               </div>
 
-              {/* Place of Practice */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Place of Practice <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="text"
-                  value={smartFormData.place_of_practice}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
-                  className={formErrors.place_of_practice ? 'border-red-500' : ''}
-                />
-                {formErrors.place_of_practice && <p className="text-red-500 text-xs mt-1">{formErrors.place_of_practice}</p>}
-              </div>
-
-              {/* Client Age */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Client Age
-                </label>
-                <Input
-                  type="number"
-                  value={smartFormData.client_age}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, client_age: e.target.value }))}
-                  placeholder="e.g., 25"
-                  min="0"
-                  max="120"
-                  className={formErrors.client_age ? 'border-red-500' : ''}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Age in years - helps track practice across the lifespan
-                </p>
-                {formErrors.client_age && <p className="text-red-500 text-xs mt-1">{formErrors.client_age}</p>}
-              </div>
-
-              {/* Presenting Issues */}
-              <div>
-                <label className="block text-sm font-semibold text-brand mb-3">
-                  Presenting Issues <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[80px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
-                  value={smartFormData.presenting_issues}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, presenting_issues: e.target.value }))}
-                  placeholder="Describe the client's presenting issues..."
-                />
-                {formErrors.presenting_issues && <p className="text-red-500 text-xs mt-1">{formErrors.presenting_issues}</p>}
-              </div>
-
-              {/* DCC Activity Types */}
-              <div>
-                <label className="block text-sm font-semibold text-brand mb-3">
-                  DCC Activity Type(s) <span className="text-red-500">*</span>
-                </label>
-                <div className="space-y-2">
-                  {[
-                    'Psychological Assessment',
-                    'Intervention',
-                    'Prevention',
-                    'Evaluation'
-                  ].map((type) => (
-                    <label key={type} className="flex items-center space-x-2">
+              {/* CLIENT INFO GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Client Information</h3>
+                
+                {/* Client Pseudonym, Age, Simulated on same row */}
+                <div className="grid grid-cols-12 gap-4">
+                  <div className="col-span-6">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Client Pseudonym <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type="text"
+                        value={smartFormData.client_pseudonym}
+                        onChange={(e) => {
+                          setSmartFormData(prev => ({ ...prev, client_pseudonym: e.target.value }))
+                          getClientSuggestions(e.target.value)
+                          setShowSuggestions(true)
+                        }}
+                        onFocus={() => setShowSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                        placeholder="Type to search previous clients..."
+                        className={formErrors.client_pseudonym ? 'border-red-500' : ''}
+                      />
+                      {showSuggestions && clientSuggestions.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {clientSuggestions.map((client, index) => (
+                            <div
+                              key={index}
+                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                              onClick={() => handleClientSelect(client)}
+                            >
+                              {client}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {formErrors.client_pseudonym && <p className="text-red-500 text-xs mt-1">{formErrors.client_pseudonym}</p>}
+                  </div>
+                  
+                  <div className="col-span-3">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Age
+                    </label>
+                    <Input
+                      type="number"
+                      value={smartFormData.client_age}
+                      onChange={(e) => setSmartFormData(prev => ({ ...prev, client_age: e.target.value }))}
+                      placeholder="e.g., 25"
+                      min="0"
+                      max="120"
+                      className={formErrors.client_age ? 'border-red-500' : ''}
+                    />
+                  </div>
+                  
+                  <div className="col-span-3 flex items-end pb-2">
+                    <label className="flex items-center space-x-2">
                       <input
                         type="checkbox"
-                        checked={smartFormData.dcc_activity_types.includes(type)}
-                        onChange={(e) => {
-                          const updatedTypes = e.target.checked
-                            ? [...smartFormData.dcc_activity_types, type]
-                            : smartFormData.dcc_activity_types.filter(t => t !== type)
-                          setSmartFormData(prev => ({ ...prev, dcc_activity_types: updatedTypes }))
-                        }}
+                        checked={smartFormData.simulated_client}
+                        onChange={(e) => setSmartFormData(prev => ({ ...prev, simulated_client: e.target.checked }))}
                         className="rounded border-gray-300 text-primary focus:ring-primary"
                       />
-                      <span className="text-sm text-gray-700">{type}</span>
+                      <span className="text-sm font-medium">Simulated</span>
                     </label>
-                  ))}
+                  </div>
                 </div>
-                {formErrors.dcc_activity_types && <p className="text-red-500 text-xs mt-1">{formErrors.dcc_activity_types}</p>}
-              </div>
 
-              {/* Activity Description */}
-              <div>
-                <label className="block text-sm font-semibold text-brand mb-3">
-                  Activity Description <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[100px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
-                  value={smartFormData.description}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
-                />
-                {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
-              </div>
-
-              {/* Duration */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Duration (minutes) <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="number"
-                  min="5"
-                  step="5"
-                  value={smartFormData.duration}
-                  onChange={(e) => setSmartFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                  className={formErrors.duration ? 'border-red-500' : ''}
-                />
-                
-                {/* Quick Duration Options */}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className="text-xs text-gray-500 mr-2">Quick options:</span>
-                  {[30, 50, 60, 75, 90].map((minutes) => (
-                    <button
-                      key={minutes}
-                      type="button"
-                      onClick={() => setSmartFormData(prev => ({ ...prev, duration: minutes }))}
-                      className={`px-2 py-1 text-xs rounded border ${
-                        smartFormData.duration === minutes
-                          ? 'bg-primary text-white border-primary'
-                          : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
-                      }`}
-                    >
-                      {minutes}min
-                    </button>
-                  ))}
+                {/* Presenting Issues */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Presenting Issues <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[80px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
+                    value={smartFormData.presenting_issues}
+                    onChange={(e) => setSmartFormData(prev => ({ ...prev, presenting_issues: e.target.value }))}
+                    placeholder="Describe the client's presenting issues..."
+                  />
+                  {formErrors.presenting_issues && <p className="text-red-500 text-xs mt-1">{formErrors.presenting_issues}</p>}
                 </div>
+              </div>
+
+              {/* LOCATION & DURATION GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Session Details</h3>
                 
-                {formErrors.duration && <p className="text-red-500 text-xs mt-1">{formErrors.duration}</p>}
+                {/* Place of Practice and Duration */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Place of Practice <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="text"
+                      value={smartFormData.place_of_practice}
+                      onChange={(e) => setSmartFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
+                      className={formErrors.place_of_practice ? 'border-red-500' : ''}
+                    />
+                    {formErrors.place_of_practice && <p className="text-red-500 text-xs mt-1">{formErrors.place_of_practice}</p>}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Duration (min) <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="number"
+                      min="5"
+                      step="5"
+                      value={smartFormData.duration}
+                      onChange={(e) => setSmartFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                      className={formErrors.duration ? 'border-red-500' : ''}
+                    />
+                    
+                    {/* Quick Duration Options */}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="text-xs text-gray-500 mr-2">Quick:</span>
+                      {[30, 50, 60, 75, 90].map((minutes) => (
+                        <button
+                          key={minutes}
+                          type="button"
+                          onClick={() => setSmartFormData(prev => ({ ...prev, duration: minutes }))}
+                          className={`px-2 py-1 text-xs rounded border ${
+                            smartFormData.duration === minutes
+                              ? 'bg-primary text-white border-primary'
+                              : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          {minutes}min
+                        </button>
+                      ))}
+                    </div>
+                    
+                    {formErrors.duration && <p className="text-red-500 text-xs mt-1">{formErrors.duration}</p>}
+                  </div>
+                </div>
               </div>
 
-              {/* Simulated Client */}
-              <div>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={smartFormData.simulated_client}
-                    onChange={(e) => setSmartFormData(prev => ({ ...prev, simulated_client: e.target.checked }))}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm text-gray-700">Simulated Client</span>
-                </label>
-                {formErrors.simulated_client && <p className="text-red-500 text-xs mt-1">{formErrors.simulated_client}</p>}
+              {/* CLINICAL DETAILS GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Clinical Details</h3>
+                
+                {/* DCC Activity Types */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    DCC Activity Type(s) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="space-y-2">
+                    {[
+                      'Psychological Assessment',
+                      'Intervention',
+                      'Prevention',
+                      'Evaluation'
+                    ].map((type) => (
+                      <label key={type} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={smartFormData.dcc_activity_types.includes(type)}
+                          onChange={(e) => {
+                            const updatedTypes = e.target.checked
+                              ? [...smartFormData.dcc_activity_types, type]
+                              : smartFormData.dcc_activity_types.filter(t => t !== type)
+                            setSmartFormData(prev => ({ ...prev, dcc_activity_types: updatedTypes }))
+                          }}
+                          className="rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-gray-700">{type}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {formErrors.dcc_activity_types && <p className="text-red-500 text-xs mt-1">{formErrors.dcc_activity_types}</p>}
+                </div>
               </div>
 
-              {/* Supervisor Reviewed */}
-              <div>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={smartFormData.supervisor_reviewed}
-                    onChange={(e) => setSmartFormData(prev => ({ ...prev, supervisor_reviewed: e.target.checked }))}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
+              {/* REFLECTION GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Reflection</h3>
+                
+                {/* Activity Description */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Activity Description <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[100px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
+                    value={smartFormData.description}
+                    onChange={(e) => setSmartFormData(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
                   />
-                  <span className="text-sm text-gray-700">Reviewed by Supervisor?</span>
-                </label>
+                  {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
+                </div>
               </div>
 
               {/* Submit Buttons */}

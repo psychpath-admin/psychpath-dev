@@ -21,6 +21,7 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
     total_duration_display = serializers.SerializerMethodField()
     cra_entries = serializers.SerializerMethodField()
     simulated_hours_info = serializers.SerializerMethodField()
+    supervisor_reviewed = serializers.SerializerMethodField()
     
     class Meta:
         model = SectionAEntry
@@ -36,9 +37,11 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
             # Related entries
             'cra_entries',
             # Simulated hours tracking
-            'simulated_hours_info'
+            'simulated_hours_info',
+            # Supervisor review status
+            'supervisor_reviewed'
         ]
-        read_only_fields = ['id', 'trainee', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'trainee', 'created_at', 'updated_at', 'supervisor_reviewed']
     
     def get_total_sessions(self, obj):
         """Calculate total sessions for this client"""
@@ -105,6 +108,10 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
         if obj.entry_type in ['client_contact', 'simulated_contact']:
             return SectionAEntry.get_simulated_hours_total(obj.trainee)
         return None
+    
+    def get_supervisor_reviewed(self, obj):
+        """Get supervisor review status based on logbook mark status"""
+        return obj.supervisor_reviewed
     
     def to_internal_value(self, data):
         """Transform frontend data before validation"""

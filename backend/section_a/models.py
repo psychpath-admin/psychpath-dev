@@ -92,6 +92,15 @@ class SectionAEntry(models.Model):
     supervisor_comment = models.TextField(blank=True, default="", help_text="Supervisor comment for this entry when reviewing a logbook")
     trainee_response = models.TextField(blank=True, default="", help_text="Trainee response to supervisor comment when resubmitting")
     
+    @property
+    def supervisor_reviewed(self):
+        """Entry is considered reviewed if it's part of an approved/locked logbook"""
+        return self.locked or (
+            hasattr(self, 'logbook') and 
+            self.logbook and 
+            self.logbook.status in ['approved', 'locked']
+        )
+    
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

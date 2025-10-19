@@ -172,139 +172,163 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Client Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-brand mb-3">
-                    Client Pseudonym *
-                  </label>
-                  <Input
-                    value={formData.client_id}
-                    onChange={(e) => setFormData(prev => ({ ...prev, client_id: e.target.value }))}
-                    placeholder="e.g., Client-001"
-                    required
-                  />
-                </div>
+              {/* SESSION INFO GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Session Information</h3>
                 
-                <div>
-                  <label className="block text-sm font-semibold text-brand mb-3">
-                    Session Date *
-                  </label>
-                  <Input
-                    type="date"
-                    value={formData.session_date}
-                    onChange={(e) => setFormData(prev => ({ ...prev, session_date: e.target.value }))}
-                    required
-                  />
+                {/* Date (half width) */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Session Date *
+                    </label>
+                    <Input
+                      type="date"
+                      value={formData.session_date}
+                      onChange={(e) => setFormData(prev => ({ ...prev, session_date: e.target.value }))}
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Session Details */}
-              <div>
-                <label className="block text-sm font-semibold text-brand mb-3">
-                  Place of Practice
-                </label>
-                <Input
-                  value={formData.place_of_practice}
-                  onChange={(e) => setFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
-                  placeholder="e.g., Virtual Clinic, Office, Community Center"
-                />
-              </div>
-
-              {/* Client Age */}
-              <div>
-                <label className="block text-sm font-semibold text-brand mb-3">
-                  Client Age
-                </label>
-                <Input
-                  type="number"
-                  value={formData.client_age}
-                  onChange={(e) => setFormData(prev => ({ ...prev, client_age: e.target.value }))}
-                  placeholder="e.g., 25"
-                  min="0"
-                  max="120"
-                />
-                <p className="text-xs text-textLight mt-1">
-                  Age in years - helps track practice across the lifespan
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-brand mb-3">
-                  Presenting Issues
-                </label>
-                <Textarea
-                  value={formData.presenting_issues}
-                  onChange={(e) => setFormData(prev => ({ ...prev, presenting_issues: e.target.value }))}
-                  placeholder="Describe the client's presenting issues..."
-                  rows={3}
-                />
-              </div>
-
-              {/* Session Activity Types */}
-              <div>
-                <label className="block text-sm font-semibold text-brand mb-3">
-                  Session Activity Types *
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {ACTIVITY_TYPES.map(type => (
-                    <div key={type} className="flex items-center space-x-2">
+              {/* CLIENT INFO GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Client Information</h3>
+                
+                {/* Client Pseudonym, Age, and Simulated on same row */}
+                <div className="grid grid-cols-12 gap-4">
+                  <div className="col-span-6">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Client Pseudonym *
+                    </label>
+                    <Input
+                      value={formData.client_id}
+                      onChange={(e) => setFormData(prev => ({ ...prev, client_id: e.target.value }))}
+                      placeholder="e.g., Client-001"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="col-span-3">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Age
+                    </label>
+                    <Input
+                      type="number"
+                      value={formData.client_age}
+                      onChange={(e) => setFormData(prev => ({ ...prev, client_age: e.target.value }))}
+                      placeholder="e.g., 25"
+                      min="0"
+                      max="120"
+                    />
+                  </div>
+                  
+                  <div className="col-span-3 flex items-end pb-2">
+                    <label className="flex items-center space-x-2">
                       <Checkbox
-                        id={type}
-                        checked={formData.session_activity_types.includes(type)}
+                        id="simulated"
+                        checked={formData.simulated}
                         onCheckedChange={(checked) => 
-                          handleActivityTypeChange(type, checked as boolean)
+                          setFormData(prev => ({ ...prev, simulated: checked as boolean }))
                         }
                       />
-                      <label htmlFor={type} className="text-sm font-medium text-text">
-                        {formatActivityType(type)}
-                      </label>
-                    </div>
-                  ))}
+                      <span className="text-sm font-medium text-text">Simulated</span>
+                    </label>
+                  </div>
                 </div>
-              </div>
 
-              {/* Duration and Simulated */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Presenting Issues */}
                 <div>
                   <label className="block text-sm font-semibold text-brand mb-3">
-                    Duration (minutes) *
+                    Presenting Issues
                   </label>
-                  <Input
-                    type="number"
-                    value={formData.duration_minutes}
-                    onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: e.target.value }))}
-                    placeholder="e.g., 60"
-                    min="1"
-                    required
+                  <Textarea
+                    value={formData.presenting_issues}
+                    onChange={(e) => setFormData(prev => ({ ...prev, presenting_issues: e.target.value }))}
+                    placeholder="Describe the client's presenting issues..."
+                    rows={3}
                   />
-                </div>
-                
-                <div className="flex items-center space-x-2 pt-6">
-                  <Checkbox
-                    id="simulated"
-                    checked={formData.simulated}
-                    onCheckedChange={(checked) => 
-                      setFormData(prev => ({ ...prev, simulated: checked as boolean }))
-                    }
-                  />
-                  <label htmlFor="simulated" className="text-sm font-medium text-text">
-                    Simulated Client Contact
-                  </label>
                 </div>
               </div>
 
-              {/* Reflections */}
-              <div>
-                <label className="block text-sm font-semibold text-brand mb-3">
-                  Reflections on Experience
-                </label>
-                <Textarea
-                  value={formData.reflections_on_experience}
-                  onChange={(e) => setFormData(prev => ({ ...prev, reflections_on_experience: e.target.value }))}
-                  placeholder="Reflect on the session, what went well, areas for improvement..."
-                  rows={4}
-                />
+              {/* LOCATION & DURATION GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Session Details</h3>
+                
+                {/* Place of Practice and Duration on same row */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Place of Practice
+                    </label>
+                    <Input
+                      value={formData.place_of_practice}
+                      onChange={(e) => setFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
+                      placeholder="e.g., Virtual Clinic, Office, Community Center"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Duration (min) *
+                    </label>
+                    <Input
+                      type="number"
+                      value={formData.duration_minutes}
+                      onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: e.target.value }))}
+                      placeholder="e.g., 60"
+                      min="1"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* CLINICAL DETAILS GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Clinical Details</h3>
+                
+                {/* Session Activity Types */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Session Activity Types *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ACTIVITY_TYPES.map(type => (
+                      <div key={type} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={type}
+                          checked={formData.session_activity_types.includes(type)}
+                          onCheckedChange={(checked) => 
+                            handleActivityTypeChange(type, checked as boolean)
+                          }
+                        />
+                        <label htmlFor={type} className="text-sm font-medium text-text">
+                          {formatActivityType(type)}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* REFLECTION GROUP */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand uppercase tracking-wide">Reflection</h3>
+                
+                {/* Reflections on Experience */}
+                <div>
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Reflections on Experience
+                  </label>
+                  <Textarea
+                    value={formData.reflections_on_experience}
+                    onChange={(e) => setFormData(prev => ({ ...prev, reflections_on_experience: e.target.value }))}
+                    placeholder="Reflect on the session, what went well, areas for improvement..."
+                    rows={4}
+                  />
+                </div>
               </div>
 
               {/* Form Actions */}
