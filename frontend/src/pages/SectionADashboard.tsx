@@ -648,7 +648,19 @@ export default function SectionADashboard() {
   const validateSmartForm = () => {
     const errors: Record<string, string> = {}
     
-    if (!smartFormData.date) errors.date = 'Date is required'
+    if (!smartFormData.date) {
+      errors.date = 'Date is required'
+    } else {
+      // Validate date is not in the future
+      const selectedDate = new Date(smartFormData.date + 'T00:00:00')
+      const today = new Date()
+      today.setHours(0, 0, 0, 0) // Reset to start of day for fair comparison
+      
+      if (selectedDate > today) {
+        errors.date = 'Session date cannot be in the future. Please enter the actual date of the session.'
+      }
+    }
+    
     if (!smartFormData.client_pseudonym) errors.client_pseudonym = 'Client pseudonym is required'
     if (!smartFormData.place_of_practice) errors.place_of_practice = 'Place of practice is required'
     if (!smartFormData.presenting_issues) errors.presenting_issues = 'Presenting issues are required'
@@ -2524,6 +2536,7 @@ export default function SectionADashboard() {
                       type="date"
                       value={smartFormData.date}
                       onChange={(e) => setSmartFormData(prev => ({ ...prev, date: e.target.value }))}
+                      max={new Date().toISOString().split('T')[0]}
                       className={formErrors.date ? 'border-red-500' : ''}
                     />
                     {formErrors.date && <p className="text-red-500 text-xs mt-1">{formErrors.date}</p>}

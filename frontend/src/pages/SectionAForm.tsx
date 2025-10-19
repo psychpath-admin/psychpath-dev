@@ -211,6 +211,16 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
       return
     }
     
+    // Add future date validation
+    const selectedDate = new Date(formData.session_date + 'T00:00:00')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    if (selectedDate > today) {
+      toast.error('Session date cannot be in the future. Please enter the actual date of the session.')
+      return
+    }
+    
     if (!formData.duration_minutes) {
       toast.error('Duration is required')
       return
@@ -315,6 +325,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                       type="date"
                       value={formData.session_date}
                       onChange={(e) => setFormData(prev => ({ ...prev, session_date: e.target.value }))}
+                      max={new Date().toISOString().split('T')[0]}
                       required
                     />
                   </div>
