@@ -559,69 +559,69 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   </div>
                 </div>
 
-                {/* Session Modality - full width, below Place of Practice */}
-                <div>
-                  <label className="block text-sm font-semibold text-brand mb-3">
-                    Session Modality *
-                  </label>
-                  <Select
-                    value={formData.session_modality}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, session_modality: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select modality" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="face_to_face">Face-to-Face</SelectItem>
-                      <SelectItem value="video">Video/Telehealth</SelectItem>
-                      <SelectItem value="phone">Phone</SelectItem>
-                      <SelectItem value="hybrid">Hybrid</SelectItem>
-                    </SelectContent>
-                  </Select>
+                {/* Session Modality and Duration side by side */}
+                <div className="flex gap-4">
+                  {/* Session Modality - left side, compact */}
+                  <div className="w-48">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Session Modality *
+                    </label>
+                    <Select
+                      value={formData.session_modality}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, session_modality: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select modality" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="face_to_face">Face-to-Face</SelectItem>
+                        <SelectItem value="video">Video/Telehealth</SelectItem>
+                        <SelectItem value="phone">Phone</SelectItem>
+                        <SelectItem value="hybrid">Hybrid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Duration - right side */}
+                  <div className="flex-1">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Duration *
+                    </label>
+                    <Input
+                      type="number"
+                      value={formData.duration_minutes}
+                      onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: e.target.value }))}
+                      placeholder="e.g., 60"
+                      min="1"
+                      required
+                    />
+                    <p className="text-xs text-textLight">
+                      {formData.duration_minutes ? 
+                        `${Math.floor(parseInt(formData.duration_minutes) / 60)}h ${parseInt(formData.duration_minutes) % 60}m` : 
+                        'Enter minutes'
+                      }
+                    </p>
+                  </div>
                 </div>
 
-                {/* Duration with Quick Links - full width */}
+                {/* Quick Links - below Duration */}
                 <div>
-                  <label className="block text-sm font-semibold text-brand mb-3">
-                    Duration *
-                  </label>
-                  <div className="flex items-center gap-4">
-                    {/* Duration input on the left */}
-                    <div className="w-32">
-                      <Input
-                        type="number"
-                        value={formData.duration_minutes}
-                        onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: e.target.value }))}
-                        placeholder="e.g., 60"
-                        min="1"
-                        required
-                      />
-                      <p className="text-xs text-textLight">
-                        {formData.duration_minutes ? 
-                          `${Math.floor(parseInt(formData.duration_minutes) / 60)}h ${parseInt(formData.duration_minutes) % 60}m` : 
-                          'Enter minutes'
-                        }
-                      </p>
-                    </div>
-                    
-                    {/* Quick links on the right */}
-                    <div className="flex flex-wrap gap-1 items-center">
-                      <span className="text-xs text-gray-500">Quick:</span>
-                      {[30, 50, 60, 75, 90].map((minutes) => (
-                        <button
-                          key={minutes}
-                          type="button"
-                          onClick={() => setFormData(prev => ({ ...prev, duration_minutes: minutes.toString() }))}
-                          className={`px-2 py-1 text-xs rounded border ${
-                            formData.duration_minutes === minutes.toString()
-                              ? 'bg-primary text-white border-primary'
-                              : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
-                          }`}
-                        >
-                          {minutes}min
-                        </button>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-1 items-center">
+                    <span className="text-xs text-gray-500">Quick duration:</span>
+                    {[30, 50, 60, 75, 90].map((minutes) => (
+                      <button
+                        key={minutes}
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, duration_minutes: minutes.toString() }))}
+                        className={`px-2 py-1 text-xs rounded border ${
+                          formData.duration_minutes === minutes.toString()
+                            ? 'bg-primary text-white border-primary'
+                            : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                        }`}
+                      >
+                        {minutes}min
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

@@ -2840,72 +2840,72 @@ export default function SectionADashboard() {
                   {formErrors.place_of_practice && <p className="text-red-500 text-xs mt-1">{formErrors.place_of_practice}</p>}
                 </div>
 
-                {/* Session Modality - full width, below Place of Practice */}
-                <div>
-                  <label className="block text-sm font-semibold text-brand mb-3">
-                    Session Modality <span className="text-red-500">*</span>
-                  </label>
-                  <Select
-                    value={smartFormData.session_modality}
-                    onValueChange={(value) => setSmartFormData(prev => ({ ...prev, session_modality: value }))}
-                  >
-                    <SelectTrigger className={formErrors.session_modality ? 'border-red-500' : ''}>
-                      <SelectValue placeholder="Select modality" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="face_to_face">Face-to-Face</SelectItem>
-                      <SelectItem value="video">Video/Telehealth</SelectItem>
-                      <SelectItem value="phone">Phone</SelectItem>
-                      <SelectItem value="hybrid">Hybrid</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {formErrors.session_modality && <p className="text-red-500 text-xs mt-1">{formErrors.session_modality}</p>}
+                {/* Session Modality and Duration side by side */}
+                <div className="flex gap-4">
+                  {/* Session Modality - left side, compact */}
+                  <div className="w-48">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Session Modality <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={smartFormData.session_modality}
+                      onValueChange={(value) => setSmartFormData(prev => ({ ...prev, session_modality: value }))}
+                    >
+                      <SelectTrigger className={formErrors.session_modality ? 'border-red-500' : ''}>
+                        <SelectValue placeholder="Select modality" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="face_to_face">Face-to-Face</SelectItem>
+                        <SelectItem value="video">Video/Telehealth</SelectItem>
+                        <SelectItem value="phone">Phone</SelectItem>
+                        <SelectItem value="hybrid">Hybrid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {formErrors.session_modality && <p className="text-red-500 text-xs mt-1">{formErrors.session_modality}</p>}
+                  </div>
+
+                  {/* Duration - right side */}
+                  <div className="flex-1">
+                    <label className="block text-sm font-semibold text-brand mb-3">
+                      Duration <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="number"
+                      min="5"
+                      step="5"
+                      value={smartFormData.duration}
+                      onChange={(e) => setSmartFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                      className={formErrors.duration ? 'border-red-500' : ''}
+                    />
+                    <p className="text-xs text-textLight">
+                      {smartFormData.duration ? 
+                        `${Math.floor(smartFormData.duration / 60)}h ${smartFormData.duration % 60}m` : 
+                        'Enter minutes'
+                      }
+                    </p>
+                    {formErrors.duration && <p className="text-red-500 text-xs mt-1">{formErrors.duration}</p>}
+                  </div>
                 </div>
 
-                {/* Duration with Quick Links - full width */}
+                {/* Quick Links - below Duration */}
                 <div>
-                  <label className="block text-sm font-semibold text-brand mb-3">
-                    Duration <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex items-center gap-4">
-                    {/* Duration input on the left */}
-                    <div className="w-32">
-                      <Input
-                        type="number"
-                        min="5"
-                        step="5"
-                        value={smartFormData.duration}
-                        onChange={(e) => setSmartFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                        className={formErrors.duration ? 'border-red-500' : ''}
-                      />
-                      <p className="text-xs text-textLight">
-                        {smartFormData.duration ? 
-                          `${Math.floor(smartFormData.duration / 60)}h ${smartFormData.duration % 60}m` : 
-                          'Enter minutes'
-                        }
-                      </p>
-                    </div>
-                    
-                    {/* Quick links on the right */}
-                    <div className="flex flex-wrap gap-1 items-center">
-                      <span className="text-xs text-gray-500">Quick:</span>
-                      {[30, 50, 60, 75, 90].map((minutes) => (
-                        <button
-                          key={minutes}
-                          type="button"
-                          onClick={() => setSmartFormData(prev => ({ ...prev, duration: minutes }))}
-                          className={`px-2 py-1 text-xs rounded border ${
-                            smartFormData.duration === minutes
-                              ? 'bg-primary text-white border-primary'
-                              : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
-                          }`}
-                        >
-                          {minutes}min
-                        </button>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-1 items-center">
+                    <span className="text-xs text-gray-500">Quick duration:</span>
+                    {[30, 50, 60, 75, 90].map((minutes) => (
+                      <button
+                        key={minutes}
+                        type="button"
+                        onClick={() => setSmartFormData(prev => ({ ...prev, duration: minutes }))}
+                        className={`px-2 py-1 text-xs rounded border ${
+                          smartFormData.duration === minutes
+                            ? 'bg-primary text-white border-primary'
+                            : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                        }`}
+                      >
+                        {minutes}min
+                      </button>
+                    ))}
                   </div>
-                  {formErrors.duration && <p className="text-red-500 text-xs mt-1">{formErrors.duration}</p>}
                 </div>
               </div>
 
