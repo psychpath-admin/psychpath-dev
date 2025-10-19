@@ -314,6 +314,31 @@ export async function getLastSessionData(clientId: string) {
   return res.json()
 }
 
+// Place of practice autocomplete
+export async function getPlaceAutocomplete(query: string) {
+  const res = await apiFetch(`/api/section-a/entries/place_autocomplete/?q=${encodeURIComponent(query)}`)
+  if (!res.ok) throw new Error('Failed to fetch place autocomplete')
+  return res.json()
+}
+
+// Presenting issues autocomplete (client-specific)
+export async function getPresentingIssuesAutocomplete(query: string, clientId: string) {
+  const res = await apiFetch(
+    `/api/section-a/entries/presenting_issues_autocomplete/?q=${encodeURIComponent(query)}&client_id=${encodeURIComponent(clientId)}`
+  )
+  if (!res.ok) throw new Error('Failed to fetch presenting issues autocomplete')
+  return res.json()
+}
+
+// Check duplicate pseudonym
+export async function checkDuplicatePseudonym(pseudonym: string, date: string) {
+  const res = await apiFetch(
+    `/api/section-a/entries/check_duplicate_pseudonym/?pseudonym=${encodeURIComponent(pseudonym)}&date=${encodeURIComponent(date)}`
+  )
+  if (!res.ok) throw new Error('Failed to check duplicate pseudonym')
+  return res.json()
+}
+
 // Custom activity types
 export async function getCustomActivityTypes() {
   const res = await apiFetch('/api/section-a/custom-activity-types/')

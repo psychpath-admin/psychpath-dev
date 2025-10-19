@@ -16,6 +16,9 @@ import {
   deleteSectionAEntry,
   getClientAutocomplete,
   getLastSessionData,
+  getPlaceAutocomplete,
+  getPresentingIssuesAutocomplete,
+  checkDuplicatePseudonym,
   getCustomActivityTypes,
   createCustomActivityType,
   deleteCustomActivityType
@@ -133,8 +136,16 @@ export default function SectionADashboard() {
     simulated_client: false
   })
   const [clientSuggestions, setClientSuggestions] = useState<string[]>([])
+  const [placeSuggestions, setPlaceSuggestions] = useState<string[]>([])
+  const [issuesSuggestions, setIssuesSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [showPlaceSuggestions, setShowPlaceSuggestions] = useState(false)
+  const [showIssuesSuggestions, setShowIssuesSuggestions] = useState(false)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    show: boolean
+    suggestions: string[]
+  }>({ show: false, suggestions: [] })
   
   // Tooltip toggle
   const [showTooltips, setShowTooltips] = useState(true)
@@ -527,17 +538,8 @@ export default function SectionADashboard() {
     }
     
     try {
-      const entries = await getSectionAEntries()
-      const uniqueClients = [...new Set(
-        entries
-          .filter(entry => 
-            entry.client_pseudonym?.toLowerCase().includes(query.toLowerCase()) ||
-            entry.client_id?.toLowerCase().includes(query.toLowerCase())
-          )
-          .map(entry => entry.client_pseudonym || entry.client_id)
-      )].filter(Boolean) as string[]
-      
-      setClientSuggestions(uniqueClients.slice(0, 10))
+      const suggestions = await getClientAutocomplete(query)
+      setClientSuggestions(suggestions.slice(0, 10))
     } catch (error) {
       console.error('Error fetching client suggestions:', error)
     }
@@ -545,17 +547,15 @@ export default function SectionADashboard() {
 
   const handleClientSelect = async (clientPseudonym: string) => {
     try {
-      const entries = await getSectionAEntries()
-      const lastEntry = entries
-        .filter(entry => (entry.client_pseudonym || entry.client_id) === clientPseudonym)
-        .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())[0]
+      const lastSession = await getLastSessionData(clientPseudonym)
       
-      if (lastEntry) {
+      if (lastSession) {
         setSmartFormData(prev => ({
           ...prev,
           client_pseudonym: clientPseudonym,
-          place_of_practice: lastEntry.place_of_practice || '',
-          presenting_issues: lastEntry.presenting_issues || ''
+          place_of_practice: lastSession.place_of_practice || prev.place_of_practice,
+          client_age: lastSession.client_age?.toString() || prev.client_age,
+          presenting_issues: lastSession.presenting_issues || prev.presenting_issues
         }))
       } else {
         setSmartFormData(prev => ({
@@ -563,9 +563,70 @@ export default function SectionADashboard() {
           client_pseudonym: clientPseudonym
         }))
       }
+      
+      // Check for duplicates
+      if (smartFormData.date) {
+        const result = await checkDuplicatePseudonym(clientPseudonym, smartFormData.date)
+        setDuplicateWarning({
+          show: result.duplicate,
+          suggestions: result.suggestions || []
+        })
+      }
+      
       setShowSuggestions(false)
     } catch (error) {
-      console.error('Error fetching client data:', error)
+      console.error('Error handling client selection:', error)
+      setSmartFormData(prev => ({
+        ...prev,
+        client_pseudonym: clientPseudonym
+      }))
+      setShowSuggestions(false)
+    }
+  }
+
+  const handlePlaceChange = async (value: string) => {
+    setSmartFormData(prev => ({ ...prev, place_of_practice: value }))
+    
+    if (value.length >= 2) {
+      try {
+        const suggestions = await getPlaceAutocomplete(value)
+        setPlaceSuggestions(suggestions)
+        setShowPlaceSuggestions(true)
+      } catch (error) {
+        console.error('Error fetching place suggestions:', error)
+      }
+    } else {
+      setShowPlaceSuggestions(false)
+    }
+  }
+
+  const handlePresentingIssuesChange = async (value: string) => {
+    setSmartFormData(prev => ({ ...prev, presenting_issues: value }))
+    
+    if (value.length >= 2 && smartFormData.client_pseudonym) {
+      try {
+        const suggestions = await getPresentingIssuesAutocomplete(value, smartFormData.client_pseudonym)
+        setIssuesSuggestions(suggestions)
+        setShowIssuesSuggestions(true)
+      } catch (error) {
+        console.error('Error fetching issues suggestions:', error)
+      }
+    } else {
+      setShowIssuesSuggestions(false)
+    }
+  }
+
+  const checkPseudonymDuplicate = async (pseudonym: string, date: string) => {
+    if (pseudonym.length >= 2 && date) {
+      try {
+        const result = await checkDuplicatePseudonym(pseudonym, date)
+        setDuplicateWarning({
+          show: result.duplicate,
+          suggestions: result.suggestions || []
+        })
+      } catch (error) {
+        console.error('Error checking duplicate:', error)
+      }
     }
   }
 
@@ -2475,6 +2536,7 @@ export default function SectionADashboard() {
                           setSmartFormData(prev => ({ ...prev, client_pseudonym: e.target.value }))
                           getClientSuggestions(e.target.value)
                           setShowSuggestions(true)
+                          checkPseudonymDuplicate(e.target.value, smartFormData.date)
                         }}
                         onFocus={() => setShowSuggestions(true)}
                         onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
@@ -2496,6 +2558,31 @@ export default function SectionADashboard() {
                       )}
                     </div>
                     {formErrors.client_pseudonym && <p className="text-red-500 text-xs mt-1">{formErrors.client_pseudonym}</p>}
+                    
+                    {duplicateWarning.show && (
+                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
+                        <p className="text-yellow-800 font-medium">⚠️ This pseudonym was already used today</p>
+                        <p className="text-yellow-700 text-xs mt-1">
+                          It's unlikely you have 2 sessions with the same client on the same day. 
+                          If these are different clients, consider using:
+                        </p>
+                        <div className="flex gap-2 mt-2">
+                          {duplicateWarning.suggestions.map((suggestion, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setSmartFormData(prev => ({ ...prev, client_pseudonym: suggestion }))
+                                setDuplicateWarning({ show: false, suggestions: [] })
+                              }}
+                              className="px-2 py-1 bg-white border border-yellow-300 rounded text-xs hover:bg-yellow-50"
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="col-span-3">
@@ -2531,12 +2618,32 @@ export default function SectionADashboard() {
                   <label className="block text-sm font-semibold text-brand mb-3">
                     Presenting Issues <span className="text-red-500">*</span>
                   </label>
-                  <textarea
-                    className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[80px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
-                    value={smartFormData.presenting_issues}
-                    onChange={(e) => setSmartFormData(prev => ({ ...prev, presenting_issues: e.target.value }))}
-                    placeholder="Describe the client's presenting issues..."
-                  />
+                  <div className="relative">
+                    <textarea
+                      className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[80px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
+                      value={smartFormData.presenting_issues}
+                      onChange={(e) => handlePresentingIssuesChange(e.target.value)}
+                      onFocus={() => smartFormData.presenting_issues.length >= 2 && setShowIssuesSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowIssuesSuggestions(false), 200)}
+                      placeholder="Describe the client's presenting issues..."
+                    />
+                    {showIssuesSuggestions && issuesSuggestions.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                        {issuesSuggestions.map((suggestion, index) => (
+                          <div
+                            key={index}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                            onClick={() => {
+                              setSmartFormData(prev => ({ ...prev, presenting_issues: suggestion }))
+                              setShowIssuesSuggestions(false)
+                            }}
+                          >
+                            {suggestion}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   {formErrors.presenting_issues && <p className="text-red-500 text-xs mt-1">{formErrors.presenting_issues}</p>}
                 </div>
               </div>
@@ -2549,18 +2656,38 @@ export default function SectionADashboard() {
                 
                 {/* Place of Practice and Duration */}
                 <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-sm font-semibold text-brand mb-3">
-                      Place of Practice <span className="text-red-500">*</span>
-                    </label>
+                <div className="col-span-2">
+                  <label className="block text-sm font-semibold text-brand mb-3">
+                    Place of Practice <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
                     <Input
                       type="text"
                       value={smartFormData.place_of_practice}
-                      onChange={(e) => setSmartFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
+                      onChange={(e) => handlePlaceChange(e.target.value)}
+                      onFocus={() => smartFormData.place_of_practice.length >= 2 && setShowPlaceSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowPlaceSuggestions(false), 200)}
                       className={formErrors.place_of_practice ? 'border-red-500' : ''}
                     />
-                    {formErrors.place_of_practice && <p className="text-red-500 text-xs mt-1">{formErrors.place_of_practice}</p>}
+                    {showPlaceSuggestions && placeSuggestions.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                        {placeSuggestions.map((suggestion, index) => (
+                          <div
+                            key={index}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                            onClick={() => {
+                              setSmartFormData(prev => ({ ...prev, place_of_practice: suggestion }))
+                              setShowPlaceSuggestions(false)
+                            }}
+                          >
+                            {suggestion}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
+                  {formErrors.place_of_practice && <p className="text-red-500 text-xs mt-1">{formErrors.place_of_practice}</p>}
+                </div>
                   
                   <div>
                     <label className="block text-sm font-semibold text-brand mb-3">

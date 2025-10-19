@@ -6,7 +6,16 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ArrowLeft, Save } from 'lucide-react'
-import { createSectionAEntry, updateSectionAEntry, getSectionAEntry } from '@/lib/api'
+import { 
+  createSectionAEntry, 
+  updateSectionAEntry, 
+  getSectionAEntry,
+  getClientAutocomplete, 
+  getLastSessionData, 
+  getPlaceAutocomplete,
+  getPresentingIssuesAutocomplete,
+  checkDuplicatePseudonym
+} from '@/lib/api'
 import { toast } from 'sonner'
 
 interface SectionAFormProps {
@@ -50,6 +59,18 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const isEditing = !!entryId
+  
+  // Autocomplete state
+  const [clientSuggestions, setClientSuggestions] = useState<string[]>([])
+  const [placeSuggestions, setPlaceSuggestions] = useState<string[]>([])
+  const [issuesSuggestions, setIssuesSuggestions] = useState<string[]>([])
+  const [showClientSuggestions, setShowClientSuggestions] = useState(false)
+  const [showPlaceSuggestions, setShowPlaceSuggestions] = useState(false)
+  const [showIssuesSuggestions, setShowIssuesSuggestions] = useState(false)
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    show: boolean
+    suggestions: string[]
+  }>({ show: false, suggestions: [] })
 
   // Load existing entry data when editing
   useEffect(() => {
@@ -79,6 +100,101 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
         })
     }
   }, [entryId])
+
+  // Autocomplete handlers
+  const handleClientPseudonymChange = async (value: string) => {
+    setFormData(prev => ({ ...prev, client_id: value }))
+    
+    if (value.length >= 2) {
+      try {
+        const suggestions = await getClientAutocomplete(value)
+        setClientSuggestions(suggestions)
+        setShowClientSuggestions(true)
+      } catch (error) {
+        console.error('Error fetching client suggestions:', error)
+      }
+    } else {
+      setShowClientSuggestions(false)
+    }
+    
+    // Check for duplicates
+    if (value.length >= 2 && formData.session_date) {
+      try {
+        const result = await checkDuplicatePseudonym(value, formData.session_date)
+        setDuplicateWarning({
+          show: result.duplicate,
+          suggestions: result.suggestions || []
+        })
+      } catch (error) {
+        console.error('Error checking duplicate:', error)
+      }
+    }
+  }
+
+  const handleClientSelect = async (pseudonym: string) => {
+    setFormData(prev => ({ ...prev, client_id: pseudonym }))
+    setShowClientSuggestions(false)
+    
+    // Auto-fill from last session
+    try {
+      const lastSession = await getLastSessionData(pseudonym)
+      if (lastSession) {
+        setFormData(prev => ({
+          ...prev,
+          place_of_practice: lastSession.place_of_practice || prev.place_of_practice,
+          client_age: lastSession.client_age?.toString() || prev.client_age,
+          presenting_issues: lastSession.presenting_issues || prev.presenting_issues
+        }))
+      }
+    } catch (error) {
+      // No previous session found - that's ok
+    }
+    
+    // Check for duplicates
+    if (formData.session_date) {
+      try {
+        const result = await checkDuplicatePseudonym(pseudonym, formData.session_date)
+        setDuplicateWarning({
+          show: result.duplicate,
+          suggestions: result.suggestions || []
+        })
+      } catch (error) {
+        console.error('Error checking duplicate:', error)
+      }
+    }
+  }
+
+  const handlePlaceChange = async (value: string) => {
+    setFormData(prev => ({ ...prev, place_of_practice: value }))
+    
+    if (value.length >= 2) {
+      try {
+        const suggestions = await getPlaceAutocomplete(value)
+        setPlaceSuggestions(suggestions)
+        setShowPlaceSuggestions(true)
+      } catch (error) {
+        console.error('Error fetching place suggestions:', error)
+      }
+    } else {
+      setShowPlaceSuggestions(false)
+    }
+  }
+
+  const handlePresentingIssuesChange = async (value: string) => {
+    setFormData(prev => ({ ...prev, presenting_issues: value }))
+    
+    if (value.length >= 2 && formData.client_id) {
+      try {
+        const suggestions = await getPresentingIssuesAutocomplete(value, formData.client_id)
+        setIssuesSuggestions(suggestions)
+        setShowIssuesSuggestions(true)
+      } catch (error) {
+        console.error('Error fetching issues suggestions:', error)
+      }
+    } else {
+      setShowIssuesSuggestions(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -210,12 +326,54 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                     <label className="block text-sm font-semibold text-brand mb-3">
                       Client Pseudonym *
                     </label>
-                    <Input
-                      value={formData.client_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, client_id: e.target.value }))}
-                      placeholder="e.g., Client-001"
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        value={formData.client_id}
+                        onChange={(e) => handleClientPseudonymChange(e.target.value)}
+                        onFocus={() => formData.client_id.length >= 2 && setShowClientSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowClientSuggestions(false), 200)}
+                        placeholder="e.g., Client-001"
+                        required
+                      />
+                      {showClientSuggestions && clientSuggestions.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {clientSuggestions.map((suggestion, index) => (
+                            <div
+                              key={index}
+                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                              onClick={() => handleClientSelect(suggestion)}
+                            >
+                              {suggestion}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {duplicateWarning.show && (
+                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
+                        <p className="text-yellow-800 font-medium">⚠️ This pseudonym was already used today</p>
+                        <p className="text-yellow-700 text-xs mt-1">
+                          It's unlikely you have 2 sessions with the same client on the same day. 
+                          If these are different clients, consider using:
+                        </p>
+                        <div className="flex gap-2 mt-2">
+                          {duplicateWarning.suggestions.map((suggestion, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, client_id: suggestion }))
+                                setDuplicateWarning({ show: false, suggestions: [] })
+                              }}
+                              className="px-2 py-1 bg-white border border-yellow-300 rounded text-xs hover:bg-yellow-50"
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="col-span-3">
@@ -251,12 +409,32 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                   <label className="block text-sm font-semibold text-brand mb-3">
                     Presenting Issues
                   </label>
-                  <Textarea
-                    value={formData.presenting_issues}
-                    onChange={(e) => setFormData(prev => ({ ...prev, presenting_issues: e.target.value }))}
-                    placeholder="Describe the client's presenting issues..."
-                    rows={3}
-                  />
+                  <div className="relative">
+                    <Textarea
+                      value={formData.presenting_issues}
+                      onChange={(e) => handlePresentingIssuesChange(e.target.value)}
+                      onFocus={() => formData.presenting_issues.length >= 2 && setShowIssuesSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowIssuesSuggestions(false), 200)}
+                      placeholder="Describe the client's presenting issues..."
+                      rows={3}
+                    />
+                    {showIssuesSuggestions && issuesSuggestions.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                        {issuesSuggestions.map((suggestion, index) => (
+                          <div
+                            key={index}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, presenting_issues: suggestion }))
+                              setShowIssuesSuggestions(false)
+                            }}
+                          >
+                            {suggestion}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -272,11 +450,31 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                     <label className="block text-sm font-semibold text-brand mb-3">
                       Place of Practice
                     </label>
-                    <Input
-                      value={formData.place_of_practice}
-                      onChange={(e) => setFormData(prev => ({ ...prev, place_of_practice: e.target.value }))}
-                      placeholder="e.g., Virtual Clinic, Office, Community Center"
-                    />
+                    <div className="relative">
+                      <Input
+                        value={formData.place_of_practice}
+                        onChange={(e) => handlePlaceChange(e.target.value)}
+                        onFocus={() => formData.place_of_practice.length >= 2 && setShowPlaceSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowPlaceSuggestions(false), 200)}
+                        placeholder="e.g., Virtual Clinic, Office, Community Center"
+                      />
+                      {showPlaceSuggestions && placeSuggestions.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {placeSuggestions.map((suggestion, index) => (
+                            <div
+                              key={index}
+                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, place_of_practice: suggestion }))
+                                setShowPlaceSuggestions(false)
+                              }}
+                            >
+                              {suggestion}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
                   <div>

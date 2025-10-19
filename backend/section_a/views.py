@@ -97,6 +97,72 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
             'client_age': last_entry.client_age or '',
             'session_activity_types': last_entry.session_activity_types or [],
         })
+    
+    @action(detail=False, methods=['get'])
+    def place_autocomplete(self, request):
+        """Get unique places of practice for autocomplete"""
+        query = request.query_params.get('q', '')
+        queryset = self.get_queryset()
+        
+        if query:
+            queryset = queryset.filter(place_of_practice__icontains=query)
+        
+        # Get unique places
+        places = queryset.values_list('place_of_practice', flat=True).distinct()
+        places = [p for p in places if p]  # Filter out empty strings
+        
+        return Response(list(places)[:20])  # Limit to 20 suggestions
+    
+    @action(detail=False, methods=['get'])
+    def presenting_issues_autocomplete(self, request):
+        """Get presenting issues from selected client's previous sessions"""
+        query = request.query_params.get('q', '')
+        client_id = request.query_params.get('client_id', '')
+        
+        if not client_id:
+            return Response([])
+        
+        queryset = self.get_queryset().filter(
+            Q(client_id=client_id) | Q(client_pseudonym=client_id)
+        )
+        
+        if query:
+            queryset = queryset.filter(presenting_issues__icontains=query)
+        
+        # Get unique presenting issues for this client
+        issues = queryset.values_list('presenting_issues', flat=True).distinct()
+        issues = [i for i in issues if i]  # Filter out empty strings
+        
+        return Response(list(issues)[:10])  # Limit to 10 suggestions
+    
+    @action(detail=False, methods=['get'])
+    def check_duplicate_pseudonym(self, request):
+        """Check if pseudonym already used today"""
+        pseudonym = request.query_params.get('pseudonym', '')
+        date = request.query_params.get('date', '')
+        
+        if not pseudonym or not date:
+            return Response({'duplicate': False})
+        
+        # Check for entries with same pseudonym on same date
+        exists = self.get_queryset().filter(
+            Q(client_id=pseudonym) | Q(client_pseudonym=pseudonym),
+            session_date=date
+        ).exists()
+        
+        suggestions = []
+        if exists:
+            # Generate suggestions: pseudonym-2, pseudonym-A, pseudonym-B
+            suggestions = [
+                f"{pseudonym}-2",
+                f"{pseudonym}-A", 
+                f"{pseudonym}-B"
+            ]
+        
+        return Response({
+            'duplicate': exists,
+            'suggestions': suggestions
+        })
 
 
 class CustomSessionActivityTypeViewSet(viewsets.ModelViewSet):
