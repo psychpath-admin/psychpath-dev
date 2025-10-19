@@ -28,7 +28,7 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'trainee', 'entry_type', 'parent_dcc_entry', 'simulated', 'client_id', 'session_date', 'week_starting',
             'place_of_practice', 'client_age', 'presenting_issues', 'session_activity_types',
-            'session_activity_type', 'duration_minutes', 'reflections_on_experience', 'additional_comments',
+            'session_activity_type', 'duration_minutes', 'session_modality', 'reflections_on_experience', 'additional_comments',
             # Legacy fields
             'client_pseudonym', 'activity_description', 'duration_hours', 'reflection',
             'created_at', 'updated_at',
@@ -112,6 +112,38 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
     def get_supervisor_reviewed(self, obj):
         """Get supervisor review status based on logbook mark status"""
         return obj.supervisor_reviewed
+    
+    def validate_client_id(self, value):
+        """Validate client pseudonym format"""
+        if value and len(value.strip()) < 2:
+            raise serializers.ValidationError(
+                "Client pseudonym must be at least 2 characters long."
+            )
+        return value.strip() if value else value
+    
+    def validate_presenting_issues(self, value):
+        """Validate presenting issues has minimum detail"""
+        if value and len(value.strip()) < 10:
+            raise serializers.ValidationError(
+                "Presenting issues description must be at least 10 characters long for clinical record quality."
+            )
+        return value.strip() if value else value
+    
+    def validate_reflections_on_experience(self, value):
+        """Validate reflection has sufficient detail"""
+        if value and len(value.strip()) < 20:
+            raise serializers.ValidationError(
+                "Reflection must be at least 20 characters long to demonstrate professional learning."
+            )
+        return value.strip() if value else value
+    
+    def validate_duration_minutes(self, value):
+        """Validate duration is reasonable"""
+        if value and (value < 5 or value > 480):  # 5 minutes to 8 hours
+            raise serializers.ValidationError(
+                "Session duration must be between 5 minutes and 8 hours."
+            )
+        return value
     
     def to_internal_value(self, data):
         """Transform frontend data before validation"""

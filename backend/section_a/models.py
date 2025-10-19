@@ -36,6 +36,13 @@ class SectionAEntry(models.Model):
         ('other', 'Other'),
     ]
     
+    MODALITY_CHOICES = [
+        ('face_to_face', 'Face-to-Face'),
+        ('video', 'Video/Telehealth'),
+        ('phone', 'Phone'),
+        ('hybrid', 'Hybrid'),
+    ]
+    
     # Entry details
     trainee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='section_a_entries')
     entry_type = models.CharField(max_length=20, choices=ENTRY_TYPE_CHOICES, default='client_contact')
@@ -54,10 +61,18 @@ class SectionAEntry(models.Model):
     )
     
     # Client and session details
-    client_id = models.CharField(max_length=50, blank=True, help_text="Client pseudonym e.g., LN-1985-M")
+    client_id = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Client pseudonym (max 50 characters)"
+    )
     session_date = models.DateField(null=True, blank=True)
     week_starting = models.DateField(null=True, blank=True, help_text="Week starting date for this session")
-    place_of_practice = models.CharField(max_length=200, blank=True)
+    place_of_practice = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Location of practice (max 200 characters)"
+    )
     
     # Client demographics
     client_age = models.PositiveIntegerField(
@@ -66,7 +81,11 @@ class SectionAEntry(models.Model):
     )
     
     # Session details
-    presenting_issues = models.TextField(blank=True, help_text="Detailed description of presenting issues")
+    presenting_issues = models.TextField(
+        blank=True,
+        max_length=2000,
+        help_text="Detailed description of presenting issues (max 2000 characters)"
+    )
     session_activity_types = models.JSONField(
         default=list,
         help_text="List of selected activity types (standard and custom)"
@@ -79,8 +98,25 @@ class SectionAEntry(models.Model):
         blank=True
     )
     duration_minutes = models.PositiveIntegerField(null=True, blank=True, help_text="Duration in minutes")
-    reflections_on_experience = models.TextField(blank=True, help_text="Reflections on the experience")
-    additional_comments = models.TextField(blank=True, help_text="Additional comments or observations")
+    
+    # Session modality
+    session_modality = models.CharField(
+        max_length=20,
+        choices=MODALITY_CHOICES,
+        default='face_to_face',
+        help_text="Mode of session delivery"
+    )
+    
+    reflections_on_experience = models.TextField(
+        blank=True,
+        max_length=3000,
+        help_text="Reflections on the experience (max 3000 characters)"
+    )
+    additional_comments = models.TextField(
+        blank=True,
+        max_length=1000,
+        help_text="Additional comments or observations (max 1000 characters)"
+    )
     
     # Legacy fields for backward compatibility
     client_pseudonym = models.CharField(max_length=50, blank=True, help_text="Legacy field")
