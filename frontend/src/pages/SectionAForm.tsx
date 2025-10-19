@@ -601,27 +601,27 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                         'Enter minutes'
                       }
                     </p>
-                  </div>
-                </div>
-
-                {/* Quick Links - below Duration */}
-                <div>
-                  <div className="flex flex-wrap gap-1 items-center">
-                    <span className="text-xs text-gray-500">Quick duration:</span>
-                    {[30, 50, 60, 75, 90].map((minutes) => (
-                      <button
-                        key={minutes}
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, duration_minutes: minutes.toString() }))}
-                        className={`px-2 py-1 text-xs rounded border ${
-                          formData.duration_minutes === minutes.toString()
-                            ? 'bg-primary text-white border-primary'
-                            : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
-                        }`}
-                      >
-                        {minutes}min
-                      </button>
-                    ))}
+                    
+                    {/* Quick Links - below Duration input */}
+                    <div className="mt-2">
+                      <div className="flex flex-wrap gap-1 items-center">
+                        <span className="text-xs text-gray-500">Quick duration:</span>
+                        {[30, 50, 60, 75, 90].map((minutes) => (
+                          <button
+                            key={minutes}
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, duration_minutes: minutes.toString() }))}
+                            className={`px-2 py-1 text-xs rounded border ${
+                              formData.duration_minutes === minutes.toString()
+                                ? 'bg-primary text-white border-primary'
+                                : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                            }`}
+                          >
+                            {minutes}min
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
