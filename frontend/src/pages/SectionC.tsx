@@ -29,6 +29,7 @@ import {
 } from '@/lib/api'
 import type { SupervisionEntry, SupervisionWeeklyGroup } from '@/types/supervision'
 import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
+import { toast } from 'sonner'
 
 const SectionC: React.FC = () => {
   const [weeklyGroups, setWeeklyGroups] = useState<SupervisionWeeklyGroup[]>([])
@@ -378,6 +379,17 @@ const SectionC: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validate date is not in the future
+    const selectedDate = new Date(formData.date_of_supervision + 'T00:00:00')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    if (selectedDate > today) {
+      toast.error('Supervision session date cannot be in the future. Please enter the actual date of the session.')
+      return
+    }
+    
     try {
       if (editingEntry) {
         await updateSupervisionEntry(editingEntry.id, formData)
@@ -1632,6 +1644,7 @@ const SectionC: React.FC = () => {
                       type="date"
                       value={formData.date_of_supervision}
                       onChange={(e) => setFormData({ ...formData, date_of_supervision: e.target.value })}
+                      max={new Date().toISOString().split('T')[0]}
                       required
                     />
                   </div>

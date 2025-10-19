@@ -144,6 +144,16 @@ const RegistrarSupervisionLog: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Validate date is not in the future
+    const selectedDate = new Date(formData.date + 'T00:00:00')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    if (selectedDate > today) {
+      toast.error('Supervision session date cannot be in the future. Please enter the actual date of the session.')
+      return
+    }
+    
     if (!program) {
       toast.error('No program found')
       return
@@ -324,6 +334,7 @@ const RegistrarSupervisionLog: React.FC = () => {
                       type="date"
                       value={formData.date}
                       onChange={(e) => handleInputChange('date', e.target.value)}
+                      max={new Date().toISOString().split('T')[0]}
                       required
                     />
                   </div>

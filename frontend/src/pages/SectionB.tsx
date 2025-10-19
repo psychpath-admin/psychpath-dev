@@ -30,6 +30,7 @@ import {
 } from '@/lib/api'
 import type { PDEntry, PDCompetency, PDWeeklyGroup } from '@/types/pd'
 import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationUtils'
+import { toast } from 'sonner'
 
 const SectionB: React.FC = () => {
   const [weeklyGroups, setWeeklyGroups] = useState<PDWeeklyGroup[]>([])
@@ -524,6 +525,16 @@ const SectionB: React.FC = () => {
   }
 
   const handleSave = async () => {
+    // Validate date is not in the future
+    const selectedDate = new Date(formData.date_of_activity + 'T00:00:00')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    if (selectedDate > today) {
+      toast.error('Activity date cannot be in the future. Please enter the actual date of the activity.')
+      return
+    }
+    
     try {
       if (editingEntry) {
         await updatePDEntry(editingEntry.id, formData)
@@ -1736,6 +1747,7 @@ const SectionB: React.FC = () => {
                     type="date"
                     value={formData.date_of_activity}
                     onChange={(e) => setFormData(prev => ({ ...prev, date_of_activity: e.target.value }))}
+                    max={new Date().toISOString().split('T')[0]}
                   />
                 </div>
               </div>

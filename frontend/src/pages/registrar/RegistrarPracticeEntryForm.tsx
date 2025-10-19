@@ -295,6 +295,16 @@ const RegistrarPracticeEntryForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Validate date is not in the future
+    const selectedDate = new Date(formData.date + 'T00:00:00')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    if (selectedDate > today) {
+      toast.error('Practice date cannot be in the future. Please enter the actual date of practice.')
+      return
+    }
+    
     if (!validateForm()) {
       return
     }
