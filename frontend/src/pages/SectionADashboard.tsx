@@ -2613,16 +2613,23 @@ export default function SectionADashboard() {
                   </div>
                   
                   <div className="col-span-3 flex items-end pb-2">
-                    <label className="flex items-center space-x-2">
+                    <label className={`flex items-center space-x-2 ${formErrors.simulated_client ? 'text-red-600' : ''}`}>
                       <input
                         type="checkbox"
                         checked={smartFormData.simulated_client}
                         onChange={(e) => setSmartFormData(prev => ({ ...prev, simulated_client: e.target.checked }))}
-                        className="rounded border-gray-300 text-primary focus:ring-primary"
+                        className={`rounded border-gray-300 text-primary focus:ring-primary ${
+                          formErrors.simulated_client ? 'border-red-500' : ''
+                        }`}
                       />
                       <span className="text-sm font-medium">Simulated</span>
                     </label>
                   </div>
+                  {formErrors.simulated_client && (
+                    <div className="col-span-3 mt-1">
+                      <p className="text-red-500 text-xs">{formErrors.simulated_client}</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Presenting Issues */}
@@ -2632,7 +2639,11 @@ export default function SectionADashboard() {
                   </label>
                   <div className="relative">
                     <textarea
-                      className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[80px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
+                      className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[80px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
+                        formErrors.presenting_issues 
+                          ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
+                          : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
+                      } focus:shadow-psychpath-lg`}
                       value={smartFormData.presenting_issues}
                       onChange={(e) => handlePresentingIssuesChange(e.target.value)}
                       onFocus={() => smartFormData.presenting_issues.length >= 2 && setShowIssuesSuggestions(true)}
@@ -2758,7 +2769,9 @@ export default function SectionADashboard() {
                   <label className="block text-sm font-semibold text-brand mb-3">
                     DCC Activity Type(s) <span className="text-red-500">*</span>
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className={`grid grid-cols-2 gap-3 p-3 rounded-lg ${
+                    formErrors.dcc_activity_types ? 'border-2 border-red-500 bg-red-50' : ''
+                  }`}>
                     {[
                       'Psychological Assessment',
                       'Intervention',
@@ -2797,7 +2810,11 @@ export default function SectionADashboard() {
                     Activity Description <span className="text-red-500">*</span>
                   </label>
                   <textarea
-                    className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[100px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
+                    className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[100px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
+                      formErrors.description 
+                        ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
+                        : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
+                    } focus:shadow-psychpath-lg`}
                     value={smartFormData.description}
                     onChange={(e) => setSmartFormData(prev => ({ ...prev, description: e.target.value }))}
                     placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
@@ -2811,7 +2828,11 @@ export default function SectionADashboard() {
                     Additional Comments
                   </label>
                   <textarea
-                    className="w-full px-4 py-3 border-2 border-border bg-surface rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand resize-vertical min-h-[60px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 hover:border-brand/50 focus:shadow-psychpath-lg"
+                    className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[60px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
+                      formErrors.additional_comments 
+                        ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
+                        : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
+                    } focus:shadow-psychpath-lg`}
                     value={smartFormData.additional_comments || ''}
                     onChange={(e) => setSmartFormData(prev => ({ ...prev, additional_comments: e.target.value }))}
                     placeholder="Any additional notes or observations..."
