@@ -1,8 +1,12 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
 import secrets
 import string
+import uuid
 
 User = get_user_model()
 
@@ -304,13 +308,35 @@ class UserProfile(models.Model):
         return weeks_active * fte_factor
 
 
+class Competency(models.Model):
+    """AHPRA Core Competencies C1-C8"""
+    code = models.CharField(max_length=10, unique=True)  # C1, C2, ..., C8
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    descriptors = models.JSONField(default=dict)  # {descriptor_no: text}
+    order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['order']
+        verbose_name_plural = 'Competencies'
+    
+    def __str__(self):
+        return f"{self.code} - {self.title}"
+
+
 class EPA(models.Model):
     code = models.CharField(max_length=20, unique=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
+    competency = models.ForeignKey(Competency, on_delete=models.CASCADE, related_name='epas', null=True, blank=True)
+    descriptors = models.JSONField(default=list)  # Descriptor references [2.1, 2.3, ...]
+    order = models.IntegerField(default=0)
 
     class Meta:
-        ordering = ['code']
+        ordering = ['order', 'code']
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.code} - {self.title}"
@@ -319,14 +345,16 @@ class EPA(models.Model):
 class Milestone(models.Model):
     epa = models.ForeignKey(EPA, on_delete=models.CASCADE, related_name='milestones')
     code = models.CharField(max_length=20)
+    level = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(4)], default=1)  # 1-4
+    label = models.CharField(max_length=50, default='Novice')  # Novice, Advanced Beginner, Competent, Proficient
     description = models.TextField(blank=True)
 
     class Meta:
         unique_together = ('epa', 'code')
-        ordering = ['epa__code', 'code']
+        ordering = ['epa__code', 'level']
 
     def __str__(self) -> str:  # pragma: no cover
-        return f"{self.epa.code} - {self.code}"
+        return f"{self.epa.code} - L{self.level}: {self.label}"
 
 
 
@@ -928,3 +956,137 @@ class AuditLog(models.Model):
             user_agent=user_agent,
             session_id=session_id
         )
+
+
+class Rubric(models.Model):
+    """Structured scoring matrix for EPA assessment"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    epa = models.ForeignKey(EPA, on_delete=models.CASCADE, related_name='rubrics')
+    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='rubrics')
+    competency = models.ForeignKey(Competency, on_delete=models.CASCADE, related_name='rubrics')
+    
+    # Rubric structure
+    criteria = models.JSONField(default=list)
+    # [{
+    #   "criterion_id": "ethic_1",
+    #   "criterion_label": "Identifies and manages ethical dilemmas",
+    #   "descriptor_L1": "Recognises ethical issues only when prompted",
+    #   "descriptor_L2": "Can describe ethical principles but needs guidance",
+    #   "descriptor_L3": "Independently recognises ethical dilemmas",
+    #   "descriptor_L4": "Anticipates ethical risks and acts proactively"
+    # }]
+    
+    weightings = models.JSONField(default=dict)  # {"ethic_1": 0.4, "ethic_2": 0.6}
+    guidance_notes = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('epa', 'milestone', 'competency')
+        indexes = [
+            models.Index(fields=['epa', 'is_active']),
+            models.Index(fields=['competency', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"Rubric: {self.epa.code} - {self.milestone.label}"
+    
+    def calculate_total_weight(self):
+        """Ensure weightings sum to 1.0"""
+        return sum(self.weightings.values())
+
+
+class RubricScore(models.Model):
+    """Individual criterion score by supervisor"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    rubric = models.ForeignKey(Rubric, on_delete=models.CASCADE, related_name='scores')
+    supervisee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rubric_scores')
+    supervisor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='given_rubric_scores')
+    
+    criterion_id = models.CharField(max_length=50)
+    criterion_label = models.CharField(max_length=255)
+    selected_level = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(4)]
+    )  # L1-L4
+    notes = models.TextField(blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('rubric', 'supervisee', 'supervisor', 'criterion_id')
+        indexes = [
+            models.Index(fields=['supervisee', 'supervisor', '-created_at']),
+            models.Index(fields=['rubric', 'criterion_id']),
+        ]
+    
+    def __str__(self):
+        return f"{self.supervisee.username} - {self.criterion_label}: L{self.selected_level}"
+
+
+class RubricSummary(models.Model):
+    """Aggregated rubric evaluation summary"""
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('submitted', 'Submitted'),
+        ('approved', 'Approved'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    epa = models.ForeignKey(EPA, on_delete=models.CASCADE, related_name='rubric_summaries')
+    rubric = models.ForeignKey(Rubric, on_delete=models.CASCADE, related_name='summaries')
+    supervisee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rubric_summaries')
+    supervisor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='given_rubric_summaries')
+    
+    total_weighted_score = models.FloatField(default=0.0)
+    milestone_equivalent = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(4)]
+    )  # Calculated from weighted score
+    summary_comment = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    locked = models.BooleanField(default=False)
+    
+    # Link to evidence
+    evidence_links = models.JSONField(default=list)  # [logbook_entry_uuids, reflection_ids, ...]
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        unique_together = ('epa', 'supervisee', 'supervisor', 'created_at')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['supervisee', 'status', '-created_at']),
+            models.Index(fields=['supervisor', '-created_at']),
+            models.Index(fields=['epa', 'supervisee']),
+        ]
+    
+    def __str__(self):
+        return f"{self.supervisee.username} - {self.epa.code}: L{self.milestone_equivalent}"
+    
+    def calculate_weighted_score(self):
+        """Calculate total weighted score from individual criterion scores"""
+        scores = self.rubric.scores.filter(
+            supervisee=self.supervisee,
+            supervisor=self.supervisor
+        )
+        total = 0.0
+        for score in scores:
+            weight = self.rubric.weightings.get(score.criterion_id, 0)
+            total += score.selected_level * weight
+        return round(total, 2)
+    
+    def determine_milestone_level(self):
+        """Map weighted score to milestone level"""
+        # Example mapping: 1.0-1.74 -> L1, 1.75-2.49 -> L2, 2.5-3.24 -> L3, 3.25-4.0 -> L4
+        if self.total_weighted_score < 1.75:
+            return 1
+        elif self.total_weighted_score < 2.5:
+            return 2
+        elif self.total_weighted_score < 3.25:
+            return 3
+        else:
+            return 4

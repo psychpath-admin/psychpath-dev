@@ -94,6 +94,7 @@ CSRF_TRUSTED_ORIGINS = [
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -104,8 +105,13 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
+    'channels',
     # Local
     'registrar_logbook', # Registrar program logbook app (must be before api)
+    'registrar_aope', # Registrar AoPE program app
+    'cpd_portfolio', # CPD Portfolio for all psychologists
+    'competency_tracking', # Universal competency tracking for all user types
+    'progress_reports', # Universal progress reports for all trainee types
     'api',
     'logbook_app',
     'section_a',
@@ -286,5 +292,34 @@ PROGRAM_REQUIREMENTS = {
                 'pd_hours': 60,
             },
         }
+    },
+    'registrar_aope': {
+        'tracks': {
+            'TRACK_1': {'duration_years': 2, 'supervision_hours': 80, 'cpd_hours': 30},
+            'TRACK_2': {'duration_years': 3, 'supervision_hours': 120, 'cpd_hours': 45},
+            'TRACK_3': {'duration_years': 4, 'supervision_hours': 160, 'cpd_hours': 60},
+        },
+        'supervision_rules': {
+            'short_session_max_hours': 10,
+            'short_session_threshold_minutes': 60,
+            'principal_min_percentage': 50.0,
+            'individual_min_percentage': 66.6,
+        },
+        'observation': {
+            'frequency_days': 180,
+            'warning_days': 150,
+        }
     }
+}
+
+# Channels Configuration
+ASGI_APPLICATION = 'config.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
 }

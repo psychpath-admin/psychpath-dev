@@ -891,7 +891,7 @@ export default function SectionADashboard() {
       <div className="container mx-auto px-4 py-8">
         {/* Hero Section - PsychPathway Brand */}
         <div className="mb-8">
-          <div className="bg-gradient-to-r from-primary to-primary/90 rounded-card p-8 text-white shadow-md">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-card p-8 text-white shadow-md">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <h1 className="text-4xl font-headings mb-2">Section A: Direct Client Contact</h1>
@@ -915,7 +915,7 @@ export default function SectionADashboard() {
                     <Button 
                       onClick={() => setShowSmartForm(true)}
                       size="lg"
-                      className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg"
+                      className="bg-white text-blue-600 hover:bg-white/90 font-semibold shadow-sm rounded-lg"
                     >
                       <Plus className="h-5 w-5 mr-2" />
                       Log DCC Entry
@@ -929,10 +929,9 @@ export default function SectionADashboard() {
                       New ICRA Entry
                     </Button>
                 <Button 
-                  variant="outline"
                   size="lg"
                   onClick={() => window.location.href = '/logbook'}
-                  className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+                  className="bg-orange-500 text-white hover:bg-orange-600 font-semibold rounded-lg shadow-sm"
                 >
                   <BarChart3 className="h-5 w-5 mr-2" />
                   Weekly Logbooks
@@ -1732,52 +1731,8 @@ export default function SectionADashboard() {
               const cardColorClass = colorVariations[index % colorVariations.length]
               
               return (
-                <Card key={entry.id} className={`hover:shadow-md transition-all duration-300 relative shadow-sm group rounded-card ${cardColorClass}`}>
-                  {/* Enhanced Action buttons */}
-                  <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleViewDetails(entry)}
-                      title={expandedEntries.has(entry.id.toString()) ? "Collapse Details" : "Expand Details"}
-                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                    >
-                      {expandedEntries.has(entry.id.toString()) ? (
-                        <ChevronUp className="h-4 w-4 text-textDark" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-textDark" />
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleEdit(entry)}
-                      title="Edit"
-                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                    >
-                      <Edit className="h-4 w-4 text-textDark" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAddCRA(entry)}
-                      title="Add CRA"
-                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                    >
-                      <Plus className="h-4 w-4 text-textDark" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDelete(entry)}
-                      title="Delete"
-                      className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <CardContent className="p-4 pr-32">
+                <Card key={entry.id} className="brand-card hover:shadow-md transition-all duration-300">
+                  <CardContent className="p-4">
                     {/* ICRA Identification */}
                     {entry.entry_type === 'independent_activity' && (
                       <div className="mb-3">
@@ -1787,82 +1742,114 @@ export default function SectionADashboard() {
                       </div>
                     )}
                     
-                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {/* Row 1: Basic Info */}
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-sm font-medium text-gray-700 break-words">
-                          {formatDateDDMMYYYY(entry.session_date)}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <span className="font-semibold text-gray-900 break-words">{entry.client_id}</span>
-                        {entry.total_sessions && entry.total_sessions > 1 && (
-                          <Badge variant="outline" className="text-xs">
-                            Session #{entry.total_sessions}
-                          </Badge>
-                        )}
-                        {entry.client_age && (
-                          <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-blue-600 border-blue-600">
-                            Age: {entry.client_age}
-                          </Badge>
-                        )}
-                        {entry.simulated && (
-                          <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
-                            Simulated
-                          </Badge>
-                        )}
-                        {entry.supervisor_reviewed && (
-                          <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-green-600 border-green-600">
-                            ✓ Reviewed
-                          </Badge>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-sm text-gray-600">
-                          {formatDuration(entry.duration_minutes)}
-                        </span>
-                      </div>
-
-                      {/* Session Modality Badge */}
-                      {entry.session_modality && (
-                        <div className="flex items-center">
-                          <Badge variant="outline" className="text-xs">
-                            {entry.session_modality === 'face_to_face' ? '👤 Face-to-Face' : 
-                             entry.session_modality === 'video' ? '🎥 Video' :
-                             entry.session_modality === 'phone' ? '📞 Phone' : '🔄 Hybrid'}
-                          </Badge>
-                        </div>
-                      )}
-
-                      {/* Row 2: Session Types - Full Width */}
-                      <div className="lg:col-span-2 xl:col-span-3">
-                        <div className="flex flex-wrap gap-1">
-                          {entry.session_activity_types.map((type, typeIndex) => (
-                            <Badge key={typeIndex} variant="outline" className="text-xs">
-                              {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                      <div className="lg:col-span-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Clock className="h-4 w-4 text-textLight" />
+                          <span className="text-sm font-semibold text-textDark">
+                            {formatDuration(entry.duration_minutes)}
+                          </span>
+                          {entry.simulated && (
+                            <Badge variant="secondary" className="text-xs">
+                              Simulated
                             </Badge>
-                          ))}
+                          )}
+                          {entry.supervisor_reviewed && (
+                            <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                              ✓ Reviewed
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-textLight" />
+                          <span className="text-sm font-semibold text-textDark">
+                            {formatDateDDMMYYYY(entry.session_date)}
+                          </span>
                         </div>
                       </div>
                       
-                      {/* Row 3: Location and Reflections */}
-                      <div className="lg:col-span-1">
-                        <span className="text-sm text-gray-600 break-words">{entry.place_of_practice}</span>
+                      <div className="lg:col-span-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          <User className="h-4 w-4 text-textLight" />
+                          <span className="text-sm font-semibold text-textDark">
+                            {entry.client_id}
+                          </span>
+                          {entry.total_sessions && entry.total_sessions > 1 && (
+                            <Badge variant="outline" className="text-xs">
+                              Session #{entry.total_sessions}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm text-textDark break-words">
+                          {entry.presenting_issues}
+                        </div>
                       </div>
                       
-                      {entry.reflections_on_experience && (
-                        <div className="lg:col-span-2">
-                          <p className="text-sm text-gray-700 break-words line-clamp-2">
-                            {truncateText(entry.reflections_on_experience, 120)}
-                          </p>
+                      <div className="lg:col-span-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Target className="h-4 w-4 text-textLight" />
+                          <span className="text-sm font-semibold text-textDark">
+                            {entry.session_activity_types[0]?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Activity'}
+                          </span>
                         </div>
-                      )}
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-textLight" />
+                          <span className="text-sm text-textDark">
+                            {entry.place_of_practice}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleViewDetails(entry)}
+                        className="text-primary border-primary/20 hover:bg-primary/5"
+                      >
+                        {expandedEntries.has(entry.id.toString()) ? (
+                          <>
+                            <ChevronUp className="h-4 w-4 mr-2" />
+                            Hide Details
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </>
+                        )}
+                      </Button>
                       
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(entry)}
+                          className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleAddCRA(entry)}
+                          className="text-green-600 border-green-200 hover:bg-green-50"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add CRA
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDelete(entry)}
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
 
@@ -2143,52 +2130,8 @@ export default function SectionADashboard() {
                         const cardColorClass = colorVariations[entryIndex % colorVariations.length]
                         
                         return (
-                          <Card key={entry.id} className={`hover:shadow-md transition-all duration-300 relative shadow-sm group rounded-card ${cardColorClass}`}>
-                            {/* Enhanced Action buttons */}
-                            <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleViewDetails(entry)}
-                                title={expandedEntries.has(entry.id.toString()) ? "Collapse Details" : "Expand Details"}
-                                className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                              >
-                                {expandedEntries.has(entry.id.toString()) ? (
-                                  <ChevronUp className="h-4 w-4 text-textDark" />
-                                ) : (
-                                  <ChevronDown className="h-4 w-4 text-textDark" />
-                                )}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleEdit(entry)}
-                                title="Edit"
-                                className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                              >
-                                <Edit className="h-4 w-4 text-textDark" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleAddCRA(entry)}
-                                title="Add CRA"
-                                className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                              >
-                                <Plus className="h-4 w-4 text-textDark" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDelete(entry)}
-                                title="Delete"
-                                className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-
-                            <CardContent className="p-4 pr-32">
+                          <Card key={entry.id} className="brand-card hover:shadow-md transition-all duration-300">
+                            <CardContent className="p-4">
                               {/* ICRA Identification */}
                               {entry.entry_type === 'independent_activity' && (
                                 <div className="mb-3">
@@ -2198,62 +2141,130 @@ export default function SectionADashboard() {
                                 </div>
                               )}
                               
-                              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                                {/* Row 1: Basic Info */}
-                                <div className="flex items-center gap-2">
-                                  <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                                  <span className="text-sm font-medium text-gray-700 break-words">
-                                    {formatDateDDMMYYYY(entry.session_date)}
-                                  </span>
-                                </div>
-                                
-                                <div className="flex items-center gap-2">
-                                  <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                                  <span className="font-semibold text-gray-900 break-words">{entry.client_id}</span>
-                                  {entry.total_sessions && entry.total_sessions > 1 && (
-                                    <Badge variant="outline" className="text-xs">
-                                      Session #{entry.total_sessions}
-                                    </Badge>
-                                  )}
-                                  {entry.simulated && (
-                                    <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
-                                      Simulated
-                                    </Badge>
-                                  )}
-                                  {entry.supervisor_reviewed && (
-                                    <Badge variant="outline" className="text-xs ml-2 flex-shrink-0 text-green-600 border-green-600">
-                                      ✓ Reviewed
-                                    </Badge>
-                                  )}
-                                </div>
-                                
-                                <div className="flex items-center gap-2">
-                                  <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                                  <span className="text-sm font-medium text-gray-700">
-                                    {formatDurationDisplay(entry.duration_minutes)}
-                                  </span>
-                                </div>
-                                
-                                {/* Row 2: Activity Types */}
-                                <div className="flex items-center gap-2 lg:col-span-2 xl:col-span-3">
-                                  <FileText className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                                  <div className="flex flex-wrap gap-1">
-                                    {entry.session_activity_types.map((activity, idx) => (
-                                      <Badge key={idx} variant="outline" className="text-xs">
-                                        {activity}
+                              <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                                <div className="lg:col-span-2">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Clock className="h-4 w-4 text-textLight" />
+                                    <span className="text-sm font-semibold text-textDark">
+                                      {formatDuration(entry.duration_minutes)}
+                                    </span>
+                                    {entry.simulated && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        Simulated
                                       </Badge>
-                                    ))}
+                                    )}
+                                    {entry.supervisor_reviewed && (
+                                      <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                                        ✓ Reviewed
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4 text-textLight" />
+                                    <span className="text-sm font-semibold text-textDark">
+                                      {formatDateDDMMYYYY(entry.session_date)}
+                                    </span>
+                                  </div>
+                                </div>
+                                
+                                <div className="lg:col-span-2">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <User className="h-4 w-4 text-textLight" />
+                                    <span className="text-sm font-semibold text-textDark">
+                                      {entry.client_id}
+                                    </span>
+                                    {entry.total_sessions && entry.total_sessions > 1 && (
+                                      <Badge variant="outline" className="text-xs">
+                                        Session #{entry.total_sessions}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-textDark break-words">
+                                    {entry.presenting_issues}
+                                  </div>
+                                </div>
+                                
+                                <div className="lg:col-span-2">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Target className="h-4 w-4 text-textLight" />
+                                    <span className="text-sm font-semibold text-textDark">
+                                      {entry.session_activity_types[0]?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Activity'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <FileText className="h-4 w-4 text-textLight" />
+                                    <span className="text-sm text-textDark">
+                                      {entry.place_of_practice}
+                                    </span>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Expanded Details */}
-                              {expandedEntries.has(entry.id.toString()) && (
-                                <div className="mt-4 pt-4 border-t border-gray-200">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                      <h4 className="font-semibold text-gray-900 mb-2">Session Details</h4>
-                                      <div className="space-y-2 text-sm">
+                              <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleViewDetails(entry)}
+                                  className="text-primary border-primary/20 hover:bg-primary/5"
+                                >
+                                  {expandedEntries.has(entry.id.toString()) ? (
+                                    <>
+                                      <ChevronUp className="h-4 w-4 mr-2" />
+                                      Hide Details
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View Details
+                                    </>
+                                  )}
+                                </Button>
+                                
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleEdit(entry)}
+                                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                  >
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleAddCRA(entry)}
+                                    className="text-green-600 border-green-200 hover:bg-green-50"
+                                  >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Add CRA
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDelete(entry)}
+                                    className="text-red-600 border-red-200 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardContent>
+
+                            {/* Expanded Details */}
+                            {expandedEntries.has(entry.id.toString()) && (
+                              <div className="border-t border-gray-200 bg-gray-50/50">
+                                <CardContent className="p-4">
+                                  <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                                    <Eye className="h-4 w-4" />
+                                    Detailed Information
+                                  </h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                    {/* Session Information */}
+                                    <div className="space-y-2">
+                                      <h5 className="font-medium text-gray-700">Session Details</h5>
+                                      <div className="space-y-1 text-gray-600">
                                         <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.session_date)}</div>
                                         <div><span className="font-medium">Duration:</span> {formatDurationDisplay(entry.duration_minutes)}</div>
                                         <div><span className="font-medium">Location:</span> {entry.place_of_practice}</div>
@@ -2262,23 +2273,29 @@ export default function SectionADashboard() {
                                         )}
                                       </div>
                                     </div>
-                                    <div>
-                                      <h4 className="font-semibold text-gray-900 mb-2">Presenting Issues</h4>
-                                      <p className="text-sm text-gray-700">{entry.presenting_issues || 'No issues recorded'}</p>
+
+                                    {/* Presenting Issues */}
+                                    <div className="space-y-2">
+                                      <h5 className="font-medium text-gray-700">Presenting Issues</h5>
+                                      <p className="text-gray-600 text-sm leading-relaxed bg-white p-3 rounded border">
+                                        {entry.presenting_issues || 'No issues recorded'}
+                                      </p>
                                     </div>
                                   </div>
                                   
                                   {entry.reflections_on_experience && (
                                     <div className="mt-4">
-                                      <h4 className="font-semibold text-gray-900 mb-2">Reflections</h4>
-                                      <p className="text-sm text-gray-700">{entry.reflections_on_experience}</p>
+                                      <h5 className="font-medium text-gray-700 mb-2">Reflections</h5>
+                                      <p className="text-gray-600 text-sm leading-relaxed bg-white p-3 rounded border">
+                                        {entry.reflections_on_experience}
+                                      </p>
                                     </div>
                                   )}
 
                                   {/* CRA Entries */}
                                   {entry.cra_entries && entry.cra_entries.length > 0 && (
                                     <div className="mt-4">
-                                      <h4 className="font-semibold text-gray-900 mb-2">Client Related Activities</h4>
+                                      <h5 className="font-medium text-gray-700 mb-2">Client Related Activities</h5>
                                       <div className="space-y-2">
                                         {entry.cra_entries.map((craEntry, craIndex) => (
                                           <Card key={craEntry.id} className="bg-gray-50 border-gray-200">
@@ -2294,9 +2311,9 @@ export default function SectionADashboard() {
                                       </div>
                                     </div>
                                   )}
-                                </div>
-                              )}
-                            </CardContent>
+                                </CardContent>
+                              </div>
+                            )}
                           </Card>
                         )
                         })}

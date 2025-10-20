@@ -36,6 +36,18 @@ class ProfessionalDevelopmentEntry(models.Model):
     supervisor_comment = models.TextField(blank=True, default="", help_text="Supervisor comment for this entry when reviewing a logbook")
     trainee_response = models.TextField(blank=True, default="", help_text="Trainee response to supervisor comment when resubmitting")
     
+    # AHPRA Compliance - Supervisor Initials (separate from reviewed status)
+    supervisor_initials = models.CharField(
+        max_length=10,
+        blank=True,
+        help_text="Supervisor initials confirming review and discussion"
+    )
+    
+    reviewed_in_supervision = models.BooleanField(
+        default=False,
+        help_text="Whether this PD activity has been reviewed and discussed in supervision"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

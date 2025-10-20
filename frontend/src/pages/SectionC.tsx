@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { apiFetch } from '@/lib/api'
 import { 
   Plus, 
   Users, 
@@ -19,7 +20,9 @@ import {
   Eye,
   Edit,
   Trash2,
-  Calendar
+  Calendar,
+  Monitor,
+  Save
 } from 'lucide-react'
 import { 
   getSupervisionEntriesGroupedByWeek, 
@@ -27,9 +30,44 @@ import {
   updateSupervisionEntry, 
   deleteSupervisionEntry
 } from '@/lib/api'
-import type { SupervisionEntry, SupervisionWeeklyGroup } from '@/types/supervision'
+import type { SupervisionEntry, SupervisionWeeklyGroup, ShortSessionStats } from '@/types/supervision'
 import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 import { toast } from 'sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { InfoIcon } from 'lucide-react'
+
+interface UserProfile {
+  id?: number
+  first_name: string
+  middle_name?: string
+  last_name: string
+  ahpra_registration_number: string
+  email: string
+  provisional_start_date: string
+  principal_supervisor: string
+  principal_supervisor_email?: string
+  secondary_supervisor?: string
+  secondary_supervisor_email?: string
+  supervisor_emails?: string
+  role: 'PROVISIONAL' | 'REGISTRAR' | 'SUPERVISOR' | 'ORG_ADMIN'
+  signature_url?: string
+  initials_url?: string
+  prior_hours?: {
+    section_a_direct_client: number
+    section_a_client_related: number
+    section_b_professional_development: number
+    section_c_supervision: number
+  }
+  prior_hours_declined?: boolean
+  prior_hours_submitted?: boolean
+  city?: string
+  state?: string
+  timezone?: string
+  mobile?: string
+  organization?: number
+  profile_completed?: boolean
+  first_login_completed?: boolean
+}
 
 const SectionC: React.FC = () => {
   const [weeklyGroups, setWeeklyGroups] = useState<SupervisionWeeklyGroup[]>([])
@@ -55,14 +93,34 @@ const SectionC: React.FC = () => {
   
   // Tooltip toggle
   const [showTooltips, setShowTooltips] = useState(true)
+  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({})
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [formData, setFormData] = useState({
     date_of_supervision: new Date().toISOString().split('T')[0],
     supervisor_name: '',
     supervisor_type: 'PRINCIPAL' as 'PRINCIPAL' | 'SECONDARY',
     supervision_type: 'INDIVIDUAL' as 'INDIVIDUAL' | 'GROUP' | 'OTHER',
+    supervision_medium: 'IN_PERSON' as 'IN_PERSON' | 'VIDEO' | 'PHONE' | 'ASYNC',
+    supervision_mode: 'CLINICAL' as 'CLINICAL' | 'PROFESSIONAL' | 'ADMINISTRATIVE',
+    is_cultural_supervision: false,
+    supervisor_is_board_approved: true,
     duration_minutes: 60,
     summary: ''
   })
+  const [supervisorName, setSupervisorName] = useState('')
+  const [showAHPRAInfo, setShowAHPRAInfo] = useState(false) // AHPRA collapsible state
+  const [saving, setSaving] = useState(false) // Form saving state
+  const [shortSessionStats, setShortSessionStats] = useState<ShortSessionStats | null>(null)
+
+  // Debug form data changes
+  useEffect(() => {
+    console.log('Form data updated:', formData)
+  }, [formData])
+
+  // Debug AHPRA state
+  useEffect(() => {
+    console.log('AHPRA info state:', showAHPRAInfo)
+  }, [showAHPRAInfo])
 
   const supervisorTypes = [
     { value: 'PRINCIPAL', label: 'Principal' },
@@ -75,7 +133,100 @@ const SectionC: React.FC = () => {
     { value: 'OTHER', label: 'Other' }
   ]
 
-  const durationQuickLinks = [30, 60, 90, 120, 180, 240]
+  const supervisionMediums = [
+    { value: 'IN_PERSON', label: 'In-Person (Visual)' },
+    { value: 'VIDEO', label: 'Video Conference (Visual)' },
+    { value: 'PHONE', label: 'Telephone (Audio Only)' },
+    { value: 'ASYNC', label: 'Asynchronous (Written)' }
+  ]
+
+  const durationQuickLinks = [30, 50, 60, 75, 90]
+
+  // Load user profile
+  const loadUserProfile = async () => {
+    try {
+      const res = await apiFetch('/api/user-profile/')
+      if (res.ok) {
+        const profile = await res.json()
+        setUserProfile(profile)
+        console.log('🔍 User profile loaded:', profile)
+        console.log('🔍 Principal supervisor:', profile.principal_supervisor)
+        console.log('🔍 Secondary supervisor:', profile.secondary_supervisor)
+        console.log('🔍 Current supervisor type:', formData.supervisor_type)
+        
+        // Force set supervisor name immediately
+        if (profile.principal_supervisor) {
+          console.log('✅ FORCE SETTING principal supervisor name:', profile.principal_supervisor)
+          setSupervisorName(profile.principal_supervisor)
+          setFormData(prev => {
+            console.log('🔄 Previous form data:', prev)
+            const newData = { ...prev, supervisor_name: profile.principal_supervisor || '' }
+            console.log('🔄 New form data:', newData)
+            return newData
+          })
+        } else {
+          console.log('❌ No principal supervisor found in profile')
+        }
+      } else {
+        console.error('❌ Failed to load user profile:', res.status, res.statusText)
+      }
+    } catch (error) {
+      console.error('❌ Error loading user profile:', error)
+    }
+  }
+
+  // Load short session stats
+  const loadShortSessionStats = async () => {
+    try {
+      const res = await apiFetch('/api/section-c/entries/short-session-stats/')
+      if (res.ok) {
+        const stats = await res.json()
+        setShortSessionStats(stats)
+        console.log('📊 Short session stats loaded:', stats)
+      } else {
+        console.error('❌ Failed to load short session stats:', res.status, res.statusText)
+      }
+    } catch (error) {
+      console.error('❌ Error loading short session stats:', error)
+    }
+  }
+
+  // Form validation function
+  const validateForm = () => {
+    const errors: {[key: string]: string} = {}
+    
+    if (!formData.date_of_supervision) {
+      errors.date_of_supervision = 'Date is required'
+    }
+    
+    const currentSupervisorName = supervisorName || formData.supervisor_name
+    if (!currentSupervisorName) {
+      errors.supervisor_name = 'Please enter supervisor name'
+    }
+    
+    if (!formData.supervisor_type) {
+      errors.supervisor_type = 'Please select principal or secondary'
+    }
+    
+    if (!formData.supervision_type) {
+      errors.supervision_type = 'Please select individual, group, or other'
+    }
+    
+    if (!formData.supervision_medium) {
+      errors.supervision_medium = 'Please select supervision medium'
+    }
+    
+    if (!formData.duration_minutes || formData.duration_minutes < 1) {
+      errors.duration_minutes = 'Duration must be at least 1 minute'
+    }
+    
+    if (!formData.summary || formData.summary.trim().length < 10) {
+      errors.summary = 'Please provide a detailed supervision summary (at least 10 characters)'
+    }
+    
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
 
   // Helper functions
   const formatDateDDMMYYYY = (dateString: string) => {
@@ -335,7 +486,39 @@ const SectionC: React.FC = () => {
 
   useEffect(() => {
     loadData()
+    loadUserProfile()
+    loadShortSessionStats()
   }, [])
+
+  // Auto-select supervisor when supervisor type changes
+  useEffect(() => {
+    console.log('useEffect triggered - supervisor type:', formData.supervisor_type, 'userProfile:', userProfile)
+    if (formData.supervisor_type === 'PRINCIPAL' && userProfile?.principal_supervisor) {
+      console.log('Auto-setting principal supervisor:', userProfile.principal_supervisor)
+      setFormData(prev => ({ ...prev, supervisor_name: userProfile.principal_supervisor || '' }))
+    } else if (formData.supervisor_type === 'SECONDARY' && userProfile?.secondary_supervisor) {
+      console.log('Auto-setting secondary supervisor:', userProfile.secondary_supervisor)
+      setFormData(prev => ({ ...prev, supervisor_name: userProfile.secondary_supervisor || '' }))
+    } else {
+      console.log('No supervisor name available for type:', formData.supervisor_type)
+    }
+  }, [formData.supervisor_type, userProfile])
+
+  // Force set supervisor name when profile loads
+  useEffect(() => {
+    if (userProfile && userProfile.principal_supervisor) {
+      console.log('🚀 useEffect: Force setting principal supervisor from profile:', userProfile.principal_supervisor)
+      setSupervisorName(userProfile.principal_supervisor)
+      setFormData(prev => {
+        console.log('🚀 useEffect: Previous form data:', prev)
+        const newData = { ...prev, supervisor_name: userProfile.principal_supervisor }
+        console.log('🚀 useEffect: New form data:', newData)
+        return newData
+      })
+    } else {
+      console.log('🚀 useEffect: No profile or supervisor found', { userProfile, principal_supervisor: userProfile?.principal_supervisor })
+    }
+  }, [userProfile])
 
   const loadData = async () => {
     try {
@@ -358,6 +541,10 @@ const SectionC: React.FC = () => {
       supervisor_name: '',
       supervisor_type: 'PRINCIPAL',
       supervision_type: 'INDIVIDUAL',
+      supervision_medium: 'IN_PERSON',
+      supervision_mode: 'CLINICAL',
+      is_cultural_supervision: false,
+      supervisor_is_board_approved: true,
       duration_minutes: 60,
       summary: ''
     })
@@ -371,6 +558,10 @@ const SectionC: React.FC = () => {
       supervisor_name: entry.supervisor_name,
       supervisor_type: entry.supervisor_type,
       supervision_type: entry.supervision_type,
+      supervision_medium: (entry as any).supervision_medium || 'IN_PERSON',
+      supervision_mode: (entry as any).supervision_mode || 'CLINICAL',
+      is_cultural_supervision: (entry as any).is_cultural_supervision || false,
+      supervisor_is_board_approved: (entry as any).supervisor_is_board_approved || true,
       duration_minutes: entry.duration_minutes,
       summary: entry.summary
     })
@@ -380,34 +571,85 @@ const SectionC: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validate date is not in the future
+    // Validate future date
     const selectedDate = new Date(formData.date_of_supervision + 'T00:00:00')
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     
     if (selectedDate > today) {
-      toast.error('Supervision session date cannot be in the future. Please enter the actual date of the session.')
+      toast.error('Supervision session date cannot be in the future.')
+      return
+    }
+    
+    // Validate form
+    if (!validateForm()) {
+      toast.error('Please fix the form errors before submitting')
       return
     }
     
     try {
-      if (editingEntry) {
-        await updateSupervisionEntry(editingEntry.id, formData)
-      } else {
-        await createSupervisionEntry(formData)
+      setSaving(true)
+      // Ensure supervisor name is included in form data
+      const submissionData = {
+        ...formData,
+        supervisor_name: supervisorName || formData.supervisor_name
       }
+      
+      const response = editingEntry 
+        ? await updateSupervisionEntry(editingEntry.id, submissionData)
+        : await createSupervisionEntry(submissionData)
+      
+      // Check for warning message
+      if ((response as any)._warning_message) {
+        toast.warning((response as any)._warning_message, { duration: 10000 })
+      } else {
+        toast.success('Supervision entry saved successfully')
+      }
+      
       setShowForm(false)
       loadData()
+      loadShortSessionStats() // Refresh short session stats
     } catch (error) {
       console.error('Error saving supervision entry:', error)
+      toast.error('Failed to save supervision entry')
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleDeleteEntry = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this supervision entry?')) {
       try {
+        console.log('🗑️ Deleting entry with ID:', id)
+        console.log('🗑️ Current editingEntry:', editingEntry)
+        console.log('🗑️ Will close modal?', editingEntry && editingEntry.id === id)
+        
         await deleteSupervisionEntry(id)
         loadData()
+        loadShortSessionStats() // Refresh short session stats
+        
+        // Close modal if we're deleting the currently edited entry
+        if (editingEntry && editingEntry.id === id) {
+          console.log('✅ Closing modal after delete')
+          setEditingEntry(null)
+          setShowForm(false) // This is the key missing piece!
+          setFormData({
+            date_of_supervision: new Date().toISOString().split('T')[0],
+            supervisor_name: '',
+            supervisor_type: 'PRINCIPAL' as 'PRINCIPAL' | 'SECONDARY',
+            supervision_type: 'INDIVIDUAL' as 'INDIVIDUAL' | 'GROUP' | 'OTHER',
+            supervision_medium: 'IN_PERSON' as 'IN_PERSON' | 'VIDEO' | 'PHONE' | 'ASYNC',
+            supervision_mode: 'CLINICAL' as 'CLINICAL' | 'PROFESSIONAL' | 'ADMINISTRATIVE',
+            is_cultural_supervision: false,
+            supervisor_is_board_approved: true,
+            duration_minutes: 60,
+            summary: ''
+          })
+          setSupervisorName('')
+          setFormErrors({})
+        } else {
+          console.log('❌ Not closing modal - editingEntry:', editingEntry, 'deleting ID:', id)
+        }
       } catch (error) {
         console.error('Error deleting supervision entry:', error)
       }
@@ -424,7 +666,7 @@ const SectionC: React.FC = () => {
       <div className="container mx-auto px-4 py-8">
         {/* Hero Section - PsychPathway Brand */}
         <div className="mb-8">
-          <div className="bg-gradient-to-r from-primary to-primary/90 rounded-card p-8 text-white shadow-md">
+          <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-card p-8 text-white shadow-md">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <h1 className="text-4xl font-headings mb-2">Section C: Supervision</h1>
@@ -448,16 +690,15 @@ const SectionC: React.FC = () => {
                 <Button 
                   onClick={handleCreateNewEntry}
                   size="lg"
-                  className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg"
+                  className="bg-white text-purple-600 hover:bg-white/90 font-semibold shadow-sm rounded-lg"
                 >
                   <Plus className="h-5 w-5 mr-2" />
                   New Supervision Record
                 </Button>
                 <Button
-                  variant="outline"
                   size="lg"
                   onClick={() => window.location.href = '/logbook'}
-                  className="border-white text-white hover:bg-white hover:text-primary font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+                  className="bg-orange-500 text-white hover:bg-orange-600 font-semibold rounded-lg shadow-sm"
                 >
                   <Users className="h-5 w-5 mr-2" />
                   Weekly Logbooks
@@ -466,6 +707,35 @@ const SectionC: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* AHPRA Info Banner - Collapsible */}
+        <Alert variant="default" className="mb-8 border-blue-200 bg-blue-50">
+          <div 
+            className="flex items-center justify-between cursor-pointer hover:bg-blue-100/50 -m-4 p-4 rounded-lg transition-colors"
+            onClick={() => {
+              console.log('Toggling AHPRA info, current state:', showAHPRAInfo);
+              setShowAHPRAInfo(!showAHPRAInfo);
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <InfoIcon className="h-4 w-4 text-blue-600" />
+              <AlertTitle className="text-blue-800">AHPRA Supervision Requirements</AlertTitle>
+            </div>
+            {showAHPRAInfo ? <ChevronUp className="h-4 w-4 text-blue-600" /> : <ChevronDown className="h-4 w-4 text-blue-600" />}
+          </div>
+          {showAHPRAInfo && (
+            <AlertDescription className="text-blue-700 pt-2">
+              <div className="space-y-2">
+                <div><strong>Total:</strong> At least 80 hours over the internship</div>
+                <div><strong>Principal:</strong> At least 50 hours of individual supervision with principal supervisor</div>
+                <div><strong>Ratio:</strong> 1 hour supervision for every 17 hours of internship</div>
+                <div><strong>Frequency:</strong> Usually weekly throughout internship</div>
+                <div><strong>Medium:</strong> Primarily visual (in-person/video). Max 20h phone, max 10h written</div>
+                <div><strong>Session Length:</strong> Primarily 1h+ sessions. Max 10h of shorter sessions</div>
+              </div>
+            </AlertDescription>
+          )}
+        </Alert>
 
         {/* Summary Cards */}
         {(() => {
@@ -556,6 +826,60 @@ const SectionC: React.FC = () => {
             </div>
           )
         })()}
+
+        {/* Short Session Tracking Widget */}
+        {shortSessionStats && (
+          <Card className="mb-8 border-l-4 border-l-orange-500">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Short Session Tracking</h3>
+                  <p className="text-sm text-gray-600">AHPRA Rule: Max 10 hours from sessions under 60 minutes</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-gray-900">
+                    {shortSessionStats.short_session_hours.toFixed(1)} / {shortSessionStats.limit_hours} hours
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {shortSessionStats.remaining_hours.toFixed(1)} hours remaining
+                  </div>
+                </div>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                <div 
+                  className={`h-3 rounded-full transition-all duration-300 ${
+                    shortSessionStats.limit_exceeded 
+                      ? 'bg-red-500' 
+                      : shortSessionStats.warning_threshold_reached 
+                        ? 'bg-yellow-500' 
+                        : 'bg-green-500'
+                  }`}
+                  style={{ width: `${Math.min(shortSessionStats.percentage_used, 100)}%` }}
+                ></div>
+              </div>
+              
+              {/* Status Message */}
+              {shortSessionStats.limit_exceeded ? (
+                <div className="flex items-center gap-2 text-red-600 font-medium">
+                  <InfoIcon className="h-4 w-4" />
+                  <span>⚠️ Short session limit exceeded! You have {shortSessionStats.short_session_hours.toFixed(1)} hours from short sessions.</span>
+                </div>
+              ) : shortSessionStats.warning_threshold_reached ? (
+                <div className="flex items-center gap-2 text-yellow-600 font-medium">
+                  <InfoIcon className="h-4 w-4" />
+                  <span>⚠️ Approaching short session limit. You have {shortSessionStats.short_session_hours.toFixed(1)}/10.0 hours from short sessions.</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-green-600 font-medium">
+                  <InfoIcon className="h-4 w-4" />
+                  <span>✅ Within short session limits. You have {shortSessionStats.short_session_hours.toFixed(1)}/10.0 hours from short sessions.</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* AHPRA Supervision Compliance Dashboard */}
         <div className="mb-8">
@@ -1302,92 +1626,101 @@ const SectionC: React.FC = () => {
                 {/* Week Entries */}
                 {expandedWeeks.has(group.weekStart) && (
                   <div className="space-y-3">
-                    {group.entries.map((entry, entryIndex) => {
-                      const colorVariations = [
-                        'bg-blue-50 border-blue-200 hover:border-blue-300',
-                        'bg-amber-50 border-amber-200 hover:border-amber-300', 
-                        'bg-orange-50 border-orange-200 hover:border-orange-300',
-                        'bg-green-50 border-green-200 hover:border-green-300',
-                        'bg-purple-50 border-purple-200 hover:border-purple-300',
-                        'bg-pink-50 border-pink-200 hover:border-pink-300',
-                        'bg-indigo-50 border-indigo-200 hover:border-indigo-300',
-                        'bg-teal-50 border-teal-200 hover:border-teal-300',
-                        'bg-rose-50 border-rose-200 hover:border-rose-300',
-                        'bg-cyan-50 border-cyan-200 hover:border-cyan-300'
-                      ]
-                      const cardColorClass = colorVariations[entryIndex % colorVariations.length]
-                      
+                    {group.entries.map((entry) => {
                       return (
-                        <Card key={entry.id} className={`hover:shadow-md transition-all duration-300 relative shadow-sm group rounded-card ${cardColorClass}`}>
-                          {/* Enhanced Action buttons */}
-                          <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => toggleEntryExpansion(entry.id.toString())}
-                              title={expandedEntries.has(entry.id.toString()) ? "Collapse Details" : "Expand Details"}
-                              className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                            >
-                              {expandedEntries.has(entry.id.toString()) ? (
-                                <ChevronUp className="h-4 w-4 text-textDark" />
-                              ) : (
-                                <ChevronDown className="h-4 w-4 text-textDark" />
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditEntry(entry)}
-                              title="Edit"
-                              className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                            >
-                              <Edit className="h-4 w-4 text-textDark" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDeleteEntry(entry.id)}
-                              title="Delete"
-                              className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-
-                          <CardContent className="p-4 pr-32">
-                            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                              {/* Row 1: Basic Info */}
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                                <span className="text-sm font-medium text-gray-700 break-words">
-                                  {formatDateDDMMYYYY(entry.date_of_supervision)}
-                                </span>
+                        <Card key={entry.id} className="brand-card hover:shadow-md transition-all duration-300">
+                          <CardContent className="p-4">
+                            <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                              <div className="lg:col-span-2">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Clock className="h-4 w-4 text-textLight" />
+                                  <span className="text-sm font-semibold text-textDark">
+                                    {formatDuration(entry.duration_minutes)}
+                                  </span>
+                                  <Badge variant={entry.supervisor_type === 'PRINCIPAL' ? "default" : "secondary"} className="text-xs">
+                                    {entry.supervisor_type}
+                                  </Badge>
+                                  {(entry as any).is_registrar_session && (
+                                    <Badge variant="outline" className="border-purple-500 text-purple-700 text-xs">
+                                      Registrar Program
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-4 w-4 text-textLight" />
+                                  <span className="text-sm font-semibold text-textDark">
+                                    {formatDateDDMMYYYY(entry.date_of_supervision)}
+                                  </span>
+                                </div>
                               </div>
                               
-                              <div className="flex items-center gap-2">
-                                <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                                <span className="font-semibold text-gray-900 break-words">{entry.supervisor_name}</span>
-                                <Badge variant={entry.supervisor_type === 'PRINCIPAL' ? 'default' : 'secondary'} className="text-xs">
-                                  {entry.supervisor_type}
-                                </Badge>
+                              <div className="lg:col-span-2">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <User className="h-4 w-4 text-textLight" />
+                                  <span className="text-sm font-semibold text-textDark">
+                                    {entry.supervisor_name}
+                                  </span>
+                                </div>
+                                <div className="text-sm text-textDark break-words">
+                                  {truncateText(entry.summary, 80)}
+                                </div>
                               </div>
                               
-                              <div className="flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                                <span className="text-sm text-gray-600">
-                                  {formatDuration(entry.duration_minutes)}
-                                </span>
-                                <Badge variant="outline" className="text-xs">
-                                  {entry.supervision_type}
-                                </Badge>
+                              <div className="lg:col-span-2">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Users className="h-4 w-4 text-textLight" />
+                                  <span className="text-sm font-semibold text-textDark">
+                                    {entry.supervision_type}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Monitor className="h-4 w-4 text-textLight" />
+                                  <span className="text-sm text-textDark">
+                                    {entry.supervision_medium.replace('_', ' ')}
+                                  </span>
+                                </div>
                               </div>
+                            </div>
 
-                              {/* Row 2: Summary - Full Width */}
-                              <div className="lg:col-span-2 xl:col-span-3">
-                                <div className="text-xs text-gray-500 mb-1 font-medium">Summary:</div>
-                                <p className="text-sm text-gray-700 break-words line-clamp-2">
-                                  {truncateText(entry.summary, 120)}
-                                </p>
+                            <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => toggleEntryExpansion(entry.id.toString())}
+                                className="text-primary border-primary/20 hover:bg-primary/5"
+                              >
+                                {expandedEntries.has(entry.id.toString()) ? (
+                                  <>
+                                    <ChevronUp className="h-4 w-4 mr-2" />
+                                    Hide Details
+                                  </>
+                                ) : (
+                                  <>
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View Details
+                                  </>
+                                )}
+                              </Button>
+                              
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEditEntry(entry)}
+                                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                >
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDeleteEntry(entry.id)}
+                                  className="text-red-600 border-red-200 hover:bg-red-50"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </Button>
                               </div>
                             </div>
                           </CardContent>
@@ -1433,92 +1766,101 @@ const SectionC: React.FC = () => {
             ))
           ) : (
             // Individual entries display
-            getPaginatedEntries(sortEntries(filteredEntries)).map((entry, index) => {
-              const colorVariations = [
-                'bg-blue-50 border-blue-200 hover:border-blue-300',
-                'bg-amber-50 border-amber-200 hover:border-amber-300', 
-                'bg-orange-50 border-orange-200 hover:border-orange-300',
-                'bg-green-50 border-green-200 hover:border-green-300',
-                'bg-purple-50 border-purple-200 hover:border-purple-300',
-                'bg-pink-50 border-pink-200 hover:border-pink-300',
-                'bg-indigo-50 border-indigo-200 hover:border-indigo-300',
-                'bg-teal-50 border-teal-200 hover:border-teal-300',
-                'bg-rose-50 border-rose-200 hover:border-rose-300',
-                'bg-cyan-50 border-cyan-200 hover:border-cyan-300'
-              ]
-              const cardColorClass = colorVariations[index % colorVariations.length]
-              
+            getPaginatedEntries(sortEntries(filteredEntries)).map((entry) => {
               return (
-                <Card key={entry.id} className={`hover:shadow-md transition-all duration-300 relative shadow-sm group rounded-card ${cardColorClass}`}>
-                  {/* Enhanced Action buttons */}
-                  <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleEntryExpansion(entry.id.toString())}
-                      title={expandedEntries.has(entry.id.toString()) ? "Collapse Details" : "Expand Details"}
-                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                    >
-                      {expandedEntries.has(entry.id.toString()) ? (
-                        <ChevronUp className="h-4 w-4 text-textDark" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-textDark" />
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleEditEntry(entry)}
-                      title="Edit"
-                      className="h-9 w-9 p-0 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-border rounded-lg"
-                    >
-                      <Edit className="h-4 w-4 text-textDark" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDeleteEntry(entry.id)}
-                      title="Delete"
-                      className="h-9 w-9 p-0 text-accent hover:text-accent hover:bg-accent/10 bg-bgCard/95 backdrop-blur-sm shadow-sm hover:shadow-md border-accent/20 rounded-lg"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <CardContent className="p-4 pr-32">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {/* Row 1: Basic Info */}
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-sm font-medium text-gray-700 break-words">
-                          {formatDateDDMMYYYY(entry.date_of_supervision)}
-                        </span>
+                <Card key={entry.id} className="brand-card hover:shadow-md transition-all duration-300">
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                      <div className="lg:col-span-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Clock className="h-4 w-4 text-textLight" />
+                          <span className="text-sm font-semibold text-textDark">
+                            {formatDuration(entry.duration_minutes)}
+                          </span>
+                          <Badge variant={entry.supervisor_type === 'PRINCIPAL' ? "default" : "secondary"} className="text-xs">
+                            {entry.supervisor_type}
+                          </Badge>
+                          {(entry as any).is_registrar_session && (
+                            <Badge variant="outline" className="border-purple-500 text-purple-700 text-xs">
+                              Registrar Program
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-textLight" />
+                          <span className="text-sm font-semibold text-textDark">
+                            {formatDateDDMMYYYY(entry.date_of_supervision)}
+                          </span>
+                        </div>
                       </div>
                       
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <span className="font-semibold text-gray-900 break-words">{entry.supervisor_name}</span>
-                        <Badge variant={entry.supervisor_type === 'PRINCIPAL' ? 'default' : 'secondary'} className="text-xs">
-                          {entry.supervisor_type}
-                        </Badge>
+                      <div className="lg:col-span-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          <User className="h-4 w-4 text-textLight" />
+                          <span className="text-sm font-semibold text-textDark">
+                            {entry.supervisor_name}
+                          </span>
+                        </div>
+                        <div className="text-sm text-textDark break-words">
+                          {truncateText(entry.summary, 80)}
+                        </div>
                       </div>
                       
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-sm text-gray-600">
-                          {formatDuration(entry.duration_minutes)}
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          {entry.supervision_type}
-                        </Badge>
+                      <div className="lg:col-span-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Users className="h-4 w-4 text-textLight" />
+                          <span className="text-sm font-semibold text-textDark">
+                            {entry.supervision_type}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Monitor className="h-4 w-4 text-textLight" />
+                          <span className="text-sm text-textDark">
+                            {entry.supervision_medium.replace('_', ' ')}
+                          </span>
+                        </div>
                       </div>
+                    </div>
 
-                      {/* Row 2: Summary - Full Width */}
-                      <div className="lg:col-span-2 xl:col-span-3">
-                        <div className="text-xs text-gray-500 mb-1 font-medium">Summary:</div>
-                        <p className="text-sm text-gray-700 break-words line-clamp-2">
-                          {truncateText(entry.summary, 120)}
-                        </p>
+                    <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => toggleEntryExpansion(entry.id.toString())}
+                        className="text-primary border-primary/20 hover:bg-primary/5"
+                      >
+                        {expandedEntries.has(entry.id.toString()) ? (
+                          <>
+                            <ChevronUp className="h-4 w-4 mr-2" />
+                            Hide Details
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </>
+                        )}
+                      </Button>
+                      
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditEntry(entry)}
+                          className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeleteEntry(entry.id)}
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
@@ -1639,31 +1981,42 @@ const SectionC: React.FC = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Supervision <span className="text-red-500">*</span></label>
                     <Input
                       type="date"
                       value={formData.date_of_supervision}
                       onChange={(e) => setFormData({ ...formData, date_of_supervision: e.target.value })}
                       max={new Date().toISOString().split('T')[0]}
+                      className={formErrors.date_of_supervision ? 'border-red-500 ring-2 ring-red-200' : ''}
                       required
                     />
+                    {formErrors.date_of_supervision && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.date_of_supervision}</p>
+                    )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Name</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Name <span className="text-red-500">*</span></label>
                     <Input
                       type="text"
-                      value={formData.supervisor_name}
-                      onChange={(e) => setFormData({ ...formData, supervisor_name: e.target.value })}
-                      placeholder="Enter supervisor name"
+                      value={supervisorName || formData.supervisor_name}
+                      onChange={(e) => {
+                        setSupervisorName(e.target.value)
+                        setFormData(prev => ({ ...prev, supervisor_name: e.target.value }))
+                      }}
+                      placeholder="Supervisor name will be auto-populated"
+                      className={`w-full ${formErrors.supervisor_name ? 'border-red-500 ring-2 ring-red-200' : ''} ${supervisorName ? 'bg-green-50' : ''}`}
                       required
                     />
+                    {formErrors.supervisor_name && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.supervisor_name}</p>
+                    )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Principal or Secondary?</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Principal or Secondary? <span className="text-red-500">*</span></label>
                     <select
                       value={formData.supervisor_type}
                       onChange={(e) => setFormData({ ...formData, supervisor_type: e.target.value as 'PRINCIPAL' | 'SECONDARY' })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue"
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue ${formErrors.supervisor_type ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300'}`}
                       required
                     >
                       {supervisorTypes.map(type => (
@@ -1671,16 +2024,19 @@ const SectionC: React.FC = () => {
                       ))}
                     </select>
                     <p className="text-xs text-gray-500 mt-1">Principal, Secondary</p>
+                    {formErrors.supervisor_type && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.supervisor_type}</p>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Individual/Group/Other</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Individual/Group/Other <span className="text-red-500">*</span></label>
                     <select
                       value={formData.supervision_type}
                       onChange={(e) => setFormData({ ...formData, supervision_type: e.target.value as 'INDIVIDUAL' | 'GROUP' | 'OTHER' })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue"
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue ${formErrors.supervision_type ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300'}`}
                       required
                     >
                       {supervisionTypes.map(type => (
@@ -1688,60 +2044,121 @@ const SectionC: React.FC = () => {
                       ))}
                     </select>
                     <p className="text-xs text-gray-500 mt-1">Individual, Group, Other</p>
+                    {formErrors.supervision_type && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.supervision_type}</p>
+                    )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Minutes)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Supervision Medium *</label>
+                    <select
+                      value={formData.supervision_medium}
+                      onChange={(e) => setFormData({ ...formData, supervision_medium: e.target.value as 'IN_PERSON' | 'VIDEO' | 'PHONE' | 'ASYNC' })}
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue ${formErrors.supervision_medium ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300'}`}
+                      required
+                    >
+                      {supervisionMediums.map(medium => (
+                        <option key={medium.value} value={medium.value}>{medium.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Visual medium preferred. Max 20h phone, max 10h async</p>
+                    {formErrors.supervision_medium && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.supervision_medium}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Minutes) <span className="text-red-500">*</span></label>
                     <Input
                       type="number"
                       value={formData.duration_minutes}
                       onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 0 })}
                       min="1"
+                      className={formErrors.duration_minutes ? 'border-red-500 ring-2 ring-red-200' : ''}
                       required
                     />
-                    <div className="flex gap-1 mt-1">
+                    {formErrors.duration_minutes && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.duration_minutes}</p>
+                    )}
+                    
+                    {/* Short Session Indicator */}
+                    {formData.duration_minutes < 60 && (
+                      <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <InfoIcon className="h-4 w-4 text-orange-600" />
+                          <span className="text-sm font-medium text-orange-800">
+                            ⚠️ Short Session (&lt; 60 min)
+                          </span>
+                        </div>
+                        <p className="text-xs text-orange-700 mt-1">
+                          This session will count toward your 10-hour short session limit.
+                        </p>
+                      </div>
+                    )}
+                    
+                    <div className="flex flex-wrap gap-1 mt-1">
                       {durationQuickLinks.map(minutes => (
-                        <Button
+                        <button
                           key={minutes}
                           type="button"
-                          variant="outline"
-                          size="sm"
                           onClick={() => setFormData({ ...formData, duration_minutes: minutes })}
-                          className="text-xs"
+                          className={`px-2 py-1 text-xs rounded border ${
+                            formData.duration_minutes === minutes
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                          }`}
                         >
-                          {minutes === 30 ? '30 Minutes' : 
-                           minutes === 60 ? '1 Hour' : 
-                           minutes === 90 ? '90 Minutes' : 
-                           minutes === 120 ? '2 Hours' : 
-                           `${minutes} min`}
-                        </Button>
+                          {minutes < 60 ? `${minutes}min` : `${minutes / 60}h`}
+                        </button>
                       ))}
                     </div>
+                    {formData.duration_minutes < 60 && (
+                      <p className="text-xs text-orange-500 mt-1">
+                        ⚠️ Sessions should primarily be 1h+. Max 10h of short sessions allowed.
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sup Summ</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supervision Summary <span className="text-red-500">*</span></label>
                   <textarea
                     value={formData.summary}
                     onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue"
+                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue ${formErrors.summary ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300'}`}
                     rows={4}
                     placeholder="Enter supervision summary and key points discussed"
                     required
                   />
+                  {formErrors.summary && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.summary}</p>
+                  )}
                 </div>
 
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+
+                <div className="flex justify-end gap-4 pt-6">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setShowForm(false)}
+                    className="px-6 py-2 border-blue-300 text-blue-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100"
+                  >
                     Cancel
                   </Button>
-                  {editingEntry && (
-                    <Button type="button" variant="destructive" onClick={() => handleDeleteEntry(editingEntry.id)}>
-                      Delete
-                    </Button>
-                  )}
-                  <Button type="submit" className="bg-primaryBlue hover:bg-primaryBlue/90 text-white">
-                    Save
+                  <Button 
+                    type="submit" 
+                    disabled={saving}
+                    className="px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        {editingEntry ? 'Update Entry' : 'Create Entry'}
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>

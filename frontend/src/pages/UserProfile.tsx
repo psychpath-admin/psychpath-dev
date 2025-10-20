@@ -6,11 +6,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { CalendarIcon, Upload, X } from 'lucide-react'
+import { Upload } from 'lucide-react'
+import SignatureCanvas from '@/components/SignatureCanvas'
 import { format } from 'date-fns'
-import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, updateSignature } from '@/lib/api'
 import CitySelect from '@/components/CitySelect'
 import EndorsementManagementModal from '@/components/EndorsementManagementModal'
 import SupervisorWelcomeOverlay from '@/components/SupervisorWelcomeOverlay'
@@ -598,11 +597,6 @@ const UserProfile: React.FC = () => {
     }
   }
 
-  const removeSignature = () => {
-    setSignatureFile(null)
-    setSignaturePreview(null)
-    setProfile(prev => ({ ...prev, signature_url: '' }))
-  }
 
   const handleInitialsUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     console.log('handleInitialsUpload called')
@@ -633,10 +627,37 @@ const UserProfile: React.FC = () => {
     }
   }
 
-  const removeInitials = () => {
-    setInitialsFile(null)
-    setInitialsPreview(null)
-    setProfile(prev => ({ ...prev, initials_url: '' }))
+
+  const handleSignatureCanvasSave = async (dataUrl: string) => {
+    try {
+      setSaving(true)
+      await updateSignature(dataUrl)
+      setProfile(prev => ({ ...prev, signature_url: dataUrl }))
+      setSignaturePreview(dataUrl)
+      // Show success message
+      alert('Signature saved successfully!')
+    } catch (error) {
+      console.error('Error saving signature:', error)
+      alert('Failed to save signature. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleInitialsCanvasSave = async (dataUrl: string) => {
+    try {
+      setSaving(true)
+      await updateSignature(undefined, dataUrl)
+      setProfile(prev => ({ ...prev, initials_url: dataUrl }))
+      setInitialsPreview(dataUrl)
+      // Show success message
+      alert('Initials saved successfully!')
+    } catch (error) {
+      console.error('Error saving initials:', error)
+      alert('Failed to save initials. Please try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleCityChange = (city: string) => {
@@ -2140,11 +2161,20 @@ const UserProfile: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle className="text-xl font-semibold text-textDark">Signatures & Initials</CardTitle>
+          <p className="text-sm text-gray-600">Draw your signature or upload an image. These will be used in generated PDFs.</p>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Signature Upload */}
+        <CardContent className="space-y-8">
+          {/* Signature Canvas */}
           <div className="space-y-4">
-            <h4 className="text-lg font-medium">Signature</h4>
+            <SignatureCanvas
+              onSave={handleSignatureCanvasSave}
+              initialValue={profile.signature_url || signaturePreview || undefined}
+              label="Full Signature"
+              width={400}
+              height={150}
+            />
+            
+            {/* Alternative file upload */}
             <div className="flex items-center gap-4">
               <input
                 type="file"
@@ -2155,38 +2185,27 @@ const UserProfile: React.FC = () => {
               />
               <Button
                 onClick={() => document.getElementById('signature-upload')?.click()}
-                className="bg-yellow-500 hover:bg-yellow-600 text-white"
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
               >
-                <Upload className="mr-2 h-4 w-4" />
-                Upload Signature
+                <Upload className="h-4 w-4" />
+                Or Upload Image
               </Button>
             </div>
-
-            {signaturePreview || profile.signature_url ? (
-              <div className="border rounded-lg p-4 bg-white">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Current Signature</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={removeSignature}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <img
-                  src={signaturePreview || (profile.signature_url as string)}
-                  alt="Signature preview"
-                  className="max-w-xs max-h-32 object-contain border rounded"
-                />
-              </div>
-            ) : null}
           </div>
 
-          {/* Initials Upload */}
+          {/* Initials Canvas */}
           <div className="space-y-4 border-t pt-6">
-            <h4 className="text-lg font-medium">Initials</h4>
+            <SignatureCanvas
+              onSave={handleInitialsCanvasSave}
+              initialValue={profile.initials_url || initialsPreview || undefined}
+              label="Initials"
+              width={200}
+              height={100}
+            />
+            
+            {/* Alternative file upload */}
             <div className="flex items-center gap-4">
               <input
                 type="file"
@@ -2197,33 +2216,14 @@ const UserProfile: React.FC = () => {
               />
               <Button
                 onClick={() => document.getElementById('initials-upload')?.click()}
-                className="bg-blue-500 hover:bg-blue-600 text-white"
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
               >
-                <Upload className="mr-2 h-4 w-4" />
-                Upload Initials
+                <Upload className="h-4 w-4" />
+                Or Upload Image
               </Button>
             </div>
-
-            {initialsPreview || profile.initials_url ? (
-              <div className="border rounded-lg p-4 bg-white">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Current Initials</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={removeInitials}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <img
-                  src={initialsPreview || (profile.initials_url as string)}
-                  alt="Initials preview"
-                  className="max-w-xs max-h-32 object-contain border rounded"
-                />
-              </div>
-            ) : null}
           </div>
         </CardContent>
       </Card>

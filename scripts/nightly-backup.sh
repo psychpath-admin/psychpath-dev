@@ -51,7 +51,7 @@ if [[ ! -d "$PROJECT_ROOT" ]]; then
   exit 1
 fi
 cd "$PROJECT_ROOT"
-$DOCKER compose exec -T db sh -lc 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' | $GZIP > "$BACKUP_DIR/db-$TS.sql.gz"
+$DOCKER compose exec -T postgres sh -lc 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' | $GZIP > "$BACKUP_DIR/db-$TS.sql.gz"
 
 # Snapshot source (exclude bulky/transient dirs)
 $RSYNC -a --delete \

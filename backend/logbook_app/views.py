@@ -645,7 +645,7 @@ def logbook_create(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-# @support_error_handler  # Temporarily removed to see full traceback
+@support_error_handler
 def logbook_submit(request):
     """Submit a logbook for supervisor review"""
     if not hasattr(request.user, 'profile') or request.user.profile.role not in ['PROVISIONAL', 'REGISTRAR']:
@@ -2293,3 +2293,32 @@ def update_unlock_request(request, request_id):
         
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@support_error_handler
+def download_logbook_pdf(request, logbook_id):
+    """Generate and download AHPRA LBPP-76 PDF for a specific logbook"""
+    from .pdf_generator import LBPP76PDFGenerator
+    from django.http import HttpResponse
+    
+    try:
+        logbook = WeeklyLogbook.objects.get(id=logbook_id)
+    except WeeklyLogbook.DoesNotExist:
+        return Response({'error': 'Logbook not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check permissions
+    user_role = request.user.profile.role
+    if logbook.trainee != request.user and user_role not in ['SUPERVISOR', 'ORG_ADMIN']:
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Generate PDF
+    generator = LBPP76PDFGenerator(logbook_id, request.user)
+    pdf_bytes = generator.generate_pdf()
+    
+    # Return as downloadable file
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    filename = f"LBPP76_Week_{logbook.week_start_date.strftime('%Y%m%d')}_{logbook.trainee.profile.last_name}.pdf"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response

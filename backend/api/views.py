@@ -236,6 +236,25 @@ def user_profile(request):
         
         return Response(serializer.data)
 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_signature(request):
+    """Update user signature and/or initials"""
+    try:
+        user_profile = request.user.profile
+        
+        if 'signature' in request.data:
+            user_profile.signature_url = request.data['signature']
+        
+        if 'initials' in request.data:
+            user_profile.initials_url = request.data['initials']
+        
+        user_profile.save()
+        serializer = UserProfileSerializer(user_profile)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['POST'])
 def password_reset_request(request):
     """Request a password reset token. Always return 200 to avoid user enumeration."""

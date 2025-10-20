@@ -12,44 +12,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Create AuditLog model only
-        migrations.CreateModel(
-            name='AuditLog',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('action', models.CharField(choices=[('CREATE', 'Create'), ('READ', 'Read'), ('UPDATE', 'Update'), ('DELETE', 'Delete'), ('LOGIN', 'Login'), ('LOGOUT', 'Logout'), ('INVITE', 'Invite'), ('ACCEPT', 'Accept'), ('REJECT', 'Reject'), ('SUBMIT', 'Submit'), ('APPROVE', 'Approve'), ('REJECT', 'Reject'), ('UNLOCK', 'Unlock'), ('LOCK', 'Lock'), ('EXPORT', 'Export'), ('IMPORT', 'Import'), ('OTHER', 'Other')], max_length=20)),
-                ('resource_type', models.CharField(choices=[('USER_PROFILE', 'User Profile'), ('WEEKLY_LOGBOOK', 'Weekly Logbook'), ('SECTION_A_ENTRY', 'Section A Entry'), ('SECTION_B_ENTRY', 'Section B Entry'), ('SECTION_C_ENTRY', 'Section C Entry'), ('SUPERVISION', 'Supervision'), ('SUPERVISION_REQUEST', 'Supervision Request'), ('SUPERVISION_INVITATION', 'Supervision Invitation'), ('MEETING', 'Meeting'), ('MESSAGE', 'Message'), ('NOTIFICATION', 'Notification'), ('UNLOCK_REQUEST', 'Unlock Request'), ('REVIEW_REQUEST', 'Review Request'), ('AUDIT_LOG', 'Audit Log'), ('SYSTEM', 'System'), ('OTHER', 'Other')], max_length=30)),
-                ('resource_id', models.CharField(blank=True, help_text='ID of the affected resource', max_length=100, null=True)),
-                ('result', models.CharField(choices=[('SUCCESS', 'Success'), ('FAILED', 'Failed'), ('PARTIAL', 'Partial'), ('CANCELLED', 'Cancelled')], max_length=20)),
-                ('details', models.JSONField(default=dict, help_text='Additional context and data')),
-                ('ip_address', models.GenericIPAddressField(blank=True, null=True)),
-                ('user_agent', models.TextField(blank=True, null=True)),
-                ('session_id', models.CharField(blank=True, max_length=100, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('user', models.ForeignKey(blank=True, null=True, on_delete=deletion.SET_NULL, related_name='audit_logs', to='auth.user')),
-            ],
-            options={
-                'ordering': ['-created_at'],
-            },
-        ),
-        migrations.AddIndex(
-            model_name='auditlog',
-            index=models.Index(fields=['user', 'created_at'], name='api_auditlo_user_id_b608a1_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='auditlog',
-            index=models.Index(fields=['action', 'created_at'], name='api_auditlo_action_e69819_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='auditlog',
-            index=models.Index(fields=['resource_type', 'created_at'], name='api_auditlo_resourc_bddbfc_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='auditlog',
-            index=models.Index(fields=['result', 'created_at'], name='api_auditlo_result_6c4eb1_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='auditlog',
-            index=models.Index(fields=['ip_address', 'created_at'], name='api_auditlo_ip_addr_233ca2_idx'),
-        ),
+        # AuditLog model already created in migration 0030, so this is a no-op
+        # The table already exists, so we skip creating it again
     ]

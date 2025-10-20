@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { Link } from 'react-router-dom'
 import HeaderNotificationBell from '@/components/HeaderNotificationBell'
-import { ChevronDown, User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar } from 'lucide-react'
+import { User, BookOpen, Users, Settings, LogOut, Bell, FileText, BarChart3, ClipboardList, Calendar, Target, GraduationCap } from 'lucide-react'
 // Logo is served from public folder
 
 export function Navbar() {
@@ -79,10 +79,76 @@ export function Navbar() {
                         </div>
                       </Link>
                       <Link to="/logbook" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
-                        <ClipboardList className="h-4 w-4 text-indigo-600" />
+                        <ClipboardList className="h-4 w-4 text-orange-600" />
                         <div>
                           <div className="font-medium">Weekly Logbook</div>
                           <div className="text-xs text-gray-500">Submit & Review</div>
+                        </div>
+                      </Link>
+                      <Link to="/logbooks" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                        <div>
+                          <div className="font-medium">Logbook Review</div>
+                          <div className="text-xs text-gray-500">Enhanced Review System</div>
+                        </div>
+                      </Link>
+                      <Link to="/cpd" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <BookOpen className="h-4 w-4 text-indigo-600" />
+                        <div>
+                          <div className="font-medium">CPD Portfolio</div>
+                          <div className="text-xs text-gray-500">Professional Development</div>
+                        </div>
+                      </Link>
+                    </div>
+                  </div>
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+            )}
+
+            {/* Registrar Program - For Registrars */}
+            {me?.role === 'REGISTRAR' && (
+              <NavigationMenuItem>
+                <NavigationMenuTrigger className="text-sm text-textDark hover:text-primaryBlue">
+                  <Target className="h-4 w-4 mr-2" />
+                  Registrar Program
+                </NavigationMenuTrigger>
+                <NavigationMenuContent>
+                  <div className="grid gap-3 p-4 w-[400px]">
+                    <div className="grid gap-2">
+                      <h4 className="font-medium text-sm text-textDark">AoPE Program</h4>
+                      <Link to="/registrar-dashboard" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <BarChart3 className="h-4 w-4 text-purple-600" />
+                        <div>
+                          <div className="font-medium">Dashboard</div>
+                          <div className="text-xs text-gray-500">Program progress & compliance</div>
+                        </div>
+                      </Link>
+                      <Link to="/registrar/practice-log" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                        <div>
+                          <div className="font-medium">Practice Log</div>
+                          <div className="text-xs text-gray-500">Log practice activities</div>
+                        </div>
+                      </Link>
+                      <Link to="/registrar/cpd" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <BookOpen className="h-4 w-4 text-green-600" />
+                        <div>
+                          <div className="font-medium">CPD Portfolio</div>
+                          <div className="text-xs text-gray-500">Professional development</div>
+                        </div>
+                      </Link>
+                      <Link to="/registrar/competencies" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <GraduationCap className="h-4 w-4 text-orange-600" />
+                        <div>
+                          <div className="font-medium">Competency Tracker</div>
+                          <div className="text-xs text-gray-500">Track competency progress</div>
+                        </div>
+                      </Link>
+                      <Link to="/progress-reports" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <FileText className="h-4 w-4 text-purple-600" />
+                        <div>
+                          <div className="font-medium">Progress Reports</div>
+                          <div className="text-xs text-gray-500">Submit progress reports</div>
                         </div>
                       </Link>
                     </div>
@@ -109,11 +175,32 @@ export function Navbar() {
                           <div className="text-xs text-gray-500">Pending logbook reviews</div>
                         </div>
                       </Link>
+                      <Link to="/logbooks" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                        <div>
+                          <div className="font-medium">Logbook Review</div>
+                          <div className="text-xs text-gray-500">Enhanced Review System</div>
+                        </div>
+                      </Link>
                       <Link to="/supervisor/links" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
                         <Users className="h-4 w-4 text-blue-600" />
                         <div>
                           <div className="font-medium">Manage Trainees</div>
                           <div className="text-xs text-gray-500">Invite & supervise trainees</div>
+                        </div>
+                      </Link>
+                      <Link to="/supervisor/competency-overview" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <Target className="h-4 w-4 text-purple-600" />
+                        <div>
+                          <div className="font-medium">Trainee Competencies</div>
+                          <div className="text-xs text-gray-500">View and validate progress</div>
+                        </div>
+                      </Link>
+                      <Link to="/supervisor/progress-reports" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <FileText className="h-4 w-4 text-indigo-600" />
+                        <div>
+                          <div className="font-medium">Progress Reports</div>
+                          <div className="text-xs text-gray-500">Review trainee reports</div>
                         </div>
                       </Link>
                     </div>

@@ -380,15 +380,15 @@ export default function LogbookEditor() {
       {/* Section Tabs */}
       <div className="flex gap-2 mb-6">
         {[
-          { key: 'section_a', label: 'Section A', total: (logbook.total_dcc_hours || 0) + (logbook.total_cra_hours || 0), description: 'Direct Client Contact + Client Related Activities' },
-          { key: 'section_b', label: 'Section B', total: logbook.total_pd_hours || 0, description: 'Professional Development' },
-          { key: 'section_c', label: 'Section C', total: logbook.total_sup_hours || 0, description: 'Supervision' },
+          { key: 'section_a', label: 'Section A', total: (logbook.total_dcc_hours || 0) + (logbook.total_cra_hours || 0), description: 'Direct Client Contact + Client Related Activities', color: 'bg-blue-600' },
+          { key: 'section_b', label: 'Section B', total: logbook.total_pd_hours || 0, description: 'Professional Development', color: 'bg-green-600' },
+          { key: 'section_c', label: 'Section C', total: logbook.total_sup_hours || 0, description: 'Supervision', color: 'bg-purple-600' },
         ].map((section) => (
           <Button
             key={section.key}
             variant={activeSection === section.key ? 'default' : 'outline'}
             onClick={() => setActiveSection(section.key as any)}
-            className={activeSection === section.key ? 'bg-primaryBlue' : ''}
+            className={activeSection === section.key ? section.color : ''}
           >
             {section.label} ({section.total}h)
           </Button>
@@ -706,16 +706,31 @@ export default function LogbookEditor() {
                     required
                   />
                 </div>
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={saving} className="bg-primaryBlue hover:bg-primaryBlue/90">
-                    {editingEntry ? 'Update Entry' : 'Add Entry'}
-                  </Button>
-                  <Button
+                <div className="flex gap-4 pt-6">
+                  <Button 
                     type="button"
-                    variant="outline"
+                    variant="outline" 
                     onClick={() => setShowEntryForm(false)}
+                    className="px-6 py-2 border-blue-300 text-blue-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100"
                   >
                     Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={saving}
+                    className="px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        {editingEntry ? 'Update Entry' : 'Add Entry'}
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>

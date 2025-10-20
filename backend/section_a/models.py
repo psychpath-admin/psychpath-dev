@@ -118,6 +118,12 @@ class SectionAEntry(models.Model):
         help_text="Additional comments or observations (max 1000 characters)"
     )
     
+    # AHPRA Compliance - Simulated Hours Limit (60h rule)
+    counts_toward_total = models.BooleanField(
+        default=True,
+        help_text="Whether this entry counts toward total hours (simulated >60h don't count)"
+    )
+    
     # Legacy fields for backward compatibility
     client_pseudonym = models.CharField(max_length=50, blank=True, help_text="Legacy field")
     activity_description = models.TextField(blank=True, help_text="Legacy field")
@@ -198,9 +204,24 @@ class SectionAEntry(models.Model):
         }
     
     def save(self, *args, **kwargs):
-        """Auto-calculate week_starting if not provided"""
+        """Auto-calculate week_starting if not provided and handle simulated hours limit"""
         if self.session_date and not self.week_starting:
             self.week_starting = self.calculate_week_starting(self.session_date)
+        
+        # Auto-set counts_toward_total based on simulated hour limit
+        if self.simulated and self.pk is None:  # Only for new entries
+            total_simulated = SectionAEntry.objects.filter(
+                trainee=self.trainee,
+                simulated=True,
+                counts_toward_total=True
+            ).aggregate(
+                total=models.Sum('duration_minutes')
+            )['total'] or 0
+            
+            # If adding this would exceed 60 hours (3600 minutes)
+            if total_simulated >= 3600:  # 60 hours = 3600 minutes
+                self.counts_toward_total = False
+        
         super().save(*args, **kwargs)
     
     @classmethod

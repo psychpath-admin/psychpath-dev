@@ -1230,16 +1230,16 @@ export default function Dashboard({ userRole }: DashboardProps) {
             </p>
           </div>
           <div className="flex gap-2">
-            <Link to="/section-a" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+            <Link to="/section-a" className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700 transition-colors shadow-md">
               Open Section A
             </Link>
-            <Link to="/section-b" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+            <Link to="/section-b" className="px-4 py-2 rounded-md bg-green-600 text-white text-sm hover:bg-green-700 transition-colors shadow-md">
               Open Section B
             </Link>
-            <Link to="/section-c" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+            <Link to="/section-c" className="px-4 py-2 rounded-md bg-purple-600 text-white text-sm hover:bg-purple-700 transition-colors shadow-md">
               Open Section C
             </Link>
-            <Link to="/logbook" className="px-4 py-2 rounded-md bg-white/20 text-white text-sm hover:bg-white/30 transition-colors">
+            <Link to="/logbook" className="px-4 py-2 rounded-md bg-orange-600 text-white text-sm hover:bg-orange-700 transition-colors shadow-md">
               Weekly Logbook
             </Link>
           </div>
@@ -1751,6 +1751,44 @@ export default function Dashboard({ userRole }: DashboardProps) {
         
         {/* Recent Activity */}
         <RecentActivityWidget entries={entries} />
+        
+        {/* Competency Tracker - For Provisional Psychologists */}
+        {userRole === 'PROVISIONAL' && (
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-l-4 border-l-purple-500">
+            <Link to="/competency-tracker">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-purple-100 rounded-lg">
+                    <Target className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">Competency Tracker</h3>
+                    <p className="text-sm text-gray-600">Track your progress across AHPRA competencies</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Link>
+          </Card>
+        )}
+
+        {/* Progress Reports - For Provisional Psychologists */}
+        {userRole === 'PROVISIONAL' && (
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-l-4 border-l-indigo-500">
+            <Link to="/progress-reports">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-indigo-100 rounded-lg">
+                    <FileText className="h-6 w-6 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">Progress Reports</h3>
+                    <p className="text-sm text-gray-600">Submit midpoint and final progress reports</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Link>
+          </Card>
+        )}
       </div>
 
       {/* Additional Information */}

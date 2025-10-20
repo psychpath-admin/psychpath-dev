@@ -19,7 +19,8 @@ import {
   Edit, 
   Trash2,
   Calendar,
-  BarChart3
+  BarChart3,
+  Save
 } from 'lucide-react'
 import { 
   getPDEntriesGroupedByWeek, 
@@ -31,6 +32,8 @@ import {
 import type { PDEntry, PDCompetency, PDWeeklyGroup } from '@/types/pd'
 import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationUtils'
 import { toast } from 'sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { InfoIcon } from 'lucide-react'
 
 const SectionB: React.FC = () => {
   const [weeklyGroups, setWeeklyGroups] = useState<PDWeeklyGroup[]>([])
@@ -264,6 +267,14 @@ const SectionB: React.FC = () => {
       entries: sortEntries(entries)
     }))
   }
+  const [showPDInfo, setShowPDInfo] = useState(false) // PD info collapsible state
+  const [saving, setSaving] = useState(false) // Form saving state
+
+  // Debug PD info state
+  useEffect(() => {
+    console.log('PD info state:', showPDInfo)
+  }, [showPDInfo])
+  
   const [formData, setFormData] = useState({
     activity_type: 'WORKSHOP',
     date_of_activity: new Date().toISOString().split('T')[0],
@@ -273,7 +284,8 @@ const SectionB: React.FC = () => {
     topics_covered: '',
     competencies_covered: [] as string[],
     reflection: '',
-    reviewed_in_supervision: false
+    reviewed_in_supervision: false,
+    supervisor_initials: ''
   })
 
   const activityTypes = [
@@ -281,7 +293,7 @@ const SectionB: React.FC = () => {
     'READING', 'COURSE', 'CONFERENCE', 'TRAINING', 'OTHER'
   ]
 
-  const durationQuickLinks = [15, 30, 60, 120, 180, 240, 480]
+  const durationQuickLinks = [30, 50, 60, 75, 90]
 
   useEffect(() => {
     loadData()
@@ -502,7 +514,8 @@ const SectionB: React.FC = () => {
       topics_covered: '',
       competencies_covered: [],
       reflection: '',
-      reviewed_in_supervision: false
+      reviewed_in_supervision: false,
+      supervisor_initials: ''
     })
     setEditingEntry(null)
     setShowForm(true)
@@ -518,7 +531,8 @@ const SectionB: React.FC = () => {
       topics_covered: entry.topics_covered,
       competencies_covered: entry.competencies_covered,
       reflection: entry.reflection || '',
-      reviewed_in_supervision: entry.reviewed_in_supervision || false
+      reviewed_in_supervision: entry.reviewed_in_supervision || false,
+      supervisor_initials: (entry as any).supervisor_initials || ''
     })
     setEditingEntry(entry)
     setShowForm(true)
@@ -536,16 +550,22 @@ const SectionB: React.FC = () => {
     }
     
     try {
+      setSaving(true)
       if (editingEntry) {
         await updatePDEntry(editingEntry.id, formData)
+        toast.success('PD entry updated successfully!')
       } else {
         await createPDEntry(formData)
+        toast.success('PD entry created successfully!')
       }
       setShowForm(false)
       setEditingEntry(null)
       loadData()
     } catch (error) {
       console.error('Error saving entry:', error)
+      toast.error('Failed to save PD entry')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -584,7 +604,7 @@ const SectionB: React.FC = () => {
       <div className="container mx-auto px-4 py-8">
         {/* Hero Section - PsychPathway Brand */}
         <div className="mb-8">
-          <div className="bg-gradient-to-r from-green-600 to-green-600/90 rounded-card p-8 text-white shadow-md">
+          <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-card p-8 text-white shadow-md">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <h1 className="text-4xl font-headings mb-2">Section B: Professional Development</h1>
@@ -623,10 +643,9 @@ const SectionB: React.FC = () => {
                   Competencies Help
                 </Button>
                 <Button 
-                  variant="outline"
                   size="lg"
                   onClick={() => window.location.href = '/logbook'}
-                  className="border-white text-white hover:bg-white hover:text-green-600 font-semibold rounded-lg bg-white/10 backdrop-blur-sm"
+                  className="bg-orange-500 text-white hover:bg-orange-600 font-semibold rounded-lg shadow-sm"
                 >
                   <BarChart3 className="h-5 w-5 mr-2" />
                   Weekly Logbooks
@@ -635,6 +654,34 @@ const SectionB: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* AHPRA Info Banner - Collapsible */}
+        <Alert variant="default" className="mb-8 border-blue-200 bg-blue-50">
+          <div 
+            className="flex items-center justify-between cursor-pointer hover:bg-blue-100/50 -m-4 p-4 rounded-lg transition-colors"
+            onClick={() => {
+              console.log('Toggling PD info, current state:', showPDInfo);
+              setShowPDInfo(!showPDInfo);
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <InfoIcon className="h-4 w-4 text-blue-600" />
+              <AlertTitle className="text-blue-800">About Professional Development (PD)</AlertTitle>
+            </div>
+            {showPDInfo ? <ChevronUp className="h-4 w-4 text-blue-600" /> : <ChevronDown className="h-4 w-4 text-blue-600" />}
+          </div>
+          {showPDInfo && (
+            <AlertDescription className="text-blue-700 pt-2">
+              <div className="space-y-2">
+                <div>Professional development activities help you maintain, improve and broaden your knowledge and competencies.</div>
+                <div><strong>Examples:</strong> Lectures, seminars, workshops, conferences, readings, audiovisual materials, self-directed learning.</div>
+                <div><strong>Active PD:</strong> Activities that engage you through written/oral tasks to enhance and test learning.</div>
+                <div><strong>Supervisor Approval:</strong> All PD activities must be approved by your supervisor and relate to core competencies.</div>
+                <div><strong>Record Keeping:</strong> Keep receipts, certificates, notes as verification. AHPRA may audit at any time.</div>
+              </div>
+            </AlertDescription>
+          )}
+        </Alert>
 
         {/* PD Compliance Dashboard */}
         {(() => {
@@ -1760,14 +1807,18 @@ const SectionB: React.FC = () => {
                     value={formData.duration_minutes}
                     onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: parseInt(e.target.value) || 0 }))}
                   />
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap gap-1">
                     {durationQuickLinks.map(minutes => (
                       <button
                         key={minutes}
                         onClick={() => setFormData(prev => ({ ...prev, duration_minutes: minutes }))}
-                        className="text-blue-600 underline text-sm hover:text-blue-800"
+                        className={`px-2 py-1 text-xs rounded border ${
+                          formData.duration_minutes === minutes
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                        }`}
                       >
-                        {minutes < 60 ? `${minutes} Minutes` : `${minutes / 60} Hour${minutes / 60 !== 1 ? 's' : ''}`}
+                        {minutes < 60 ? `${minutes}min` : `${minutes / 60}h`}
                       </button>
                     ))}
                   </div>
@@ -1904,21 +1955,46 @@ const SectionB: React.FC = () => {
                 </label>
                 <p className="text-xs text-gray-500 mt-1">Mark this if you've discussed this PD activity with your supervisor</p>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Supervisor Initials</label>
+                <Input
+                  type="text"
+                  value={formData.supervisor_initials}
+                  onChange={(e) => setFormData(prev => ({ ...prev, supervisor_initials: e.target.value }))}
+                  placeholder="Will be filled by supervisor"
+                  disabled
+                  className="bg-gray-100"
+                />
+                <p className="text-xs text-gray-500 mt-1">Your supervisor will initial this entry to confirm review and discussion</p>
+              </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 mt-6 px-6 pb-6">
+              <div className="flex justify-end gap-4 pt-6 border-t border-gray-200 mt-6 px-6 pb-6">
                 <Button 
+                  type="button"
                   variant="outline" 
                   onClick={() => setShowForm(false)}
-                  className="px-6 py-2 border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="px-6 py-2 border-blue-300 text-blue-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100"
                 >
                   Cancel
                 </Button>
                 <Button 
-                  onClick={handleSave} 
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                  type="submit"
+                  disabled={saving}
+                  className="px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium"
                 >
-                  {editingEntry ? 'Update Activity' : 'Create Activity'}
+                  {saving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      {editingEntry ? 'Update Activity' : 'Create Activity'}
+                    </>
+                  )}
                 </Button>
               </div>
             </div>

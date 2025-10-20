@@ -14,8 +14,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/Dockerfile
     env_file:
       - ./backend/.env
     environment:
@@ -25,18 +25,19 @@ services:
       - DB_USER=psychpath
       - DB_PASSWORD=psychpath
       - DEBUG=1
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,testserver,backend
     depends_on:
       - postgres
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-    command: bash -lc "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    command: bash -lc "python manage.py runserver 0.0.0.0:8000"
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./frontend/Dockerfile
     ports:
       - "5173:5173"
     volumes:

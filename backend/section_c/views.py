@@ -44,7 +44,19 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
         date_of_supervision = serializer.validated_data['date_of_supervision']
         week_starting = date_of_supervision - timedelta(days=date_of_supervision.weekday())
         
-        serializer.save(trainee=self.request.user.profile, week_starting=week_starting)
+        # Check if user is a registrar and link to registrar profile
+        try:
+            from registrar_aope.models import RegistrarProfile
+            registrar_profile = RegistrarProfile.objects.get(user=self.request.user)
+            serializer.save(
+                trainee=self.request.user.profile, 
+                week_starting=week_starting,
+                is_registrar_session=True,
+                registrar_profile=registrar_profile
+            )
+        except RegistrarProfile.DoesNotExist:
+            # Regular provisional psychologist or intern
+            serializer.save(trainee=self.request.user.profile, week_starting=week_starting)
 
     @action(detail=False, methods=['get'], url_path='grouped-by-week', permission_classes=[permissions.IsAuthenticated])
     def grouped_by_week(self, request):
@@ -137,5 +149,32 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
             'current_week_supervision_hours': format_minutes_to_hhmm(current_week_supervision_minutes),
             'total_supervision_minutes': total_supervision_minutes,
             'current_week_supervision_minutes': current_week_supervision_minutes,
+        }
+        return Response(data)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def short_session_stats(self, request):
+        """Get short session statistics for the current user"""
+        try:
+            user_profile = request.user.profile
+        except Exception:
+            return Response({'detail': 'User profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Calculate short session statistics
+        short_session_hours = SupervisionEntry.get_short_session_total(user_profile)
+        short_session_minutes = int(short_session_hours * 60)
+        limit_hours = 10.0
+        remaining_hours = max(0, limit_hours - short_session_hours)
+        percentage_used = (short_session_hours / limit_hours) * 100
+        warning_threshold_reached = short_session_hours > 8.0
+        
+        data = {
+            'short_session_hours': round(short_session_hours, 1),
+            'short_session_minutes': short_session_minutes,
+            'limit_hours': limit_hours,
+            'remaining_hours': round(remaining_hours, 1),
+            'percentage_used': round(percentage_used, 1),
+            'warning_threshold_reached': warning_threshold_reached,
+            'limit_exceeded': short_session_hours > limit_hours
         }
         return Response(data)

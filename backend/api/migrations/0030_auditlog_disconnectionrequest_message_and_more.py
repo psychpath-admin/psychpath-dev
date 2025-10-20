@@ -145,10 +145,11 @@ class Migration(migrations.Migration):
             new_name='api_meeting_status_0593aa_idx',
             old_name='api_meeting_status_idx',
         ),
-        migrations.AlterUniqueTogether(
-            name='supervision',
-            unique_together={('supervisor', 'supervisee_email', 'role')},
-        ),
+        # Temporarily commented out - will be added after supervisee_email field is created
+        # migrations.AlterUniqueTogether(
+        #     name='supervision',
+        #     unique_together={('supervisor', 'supervisee_email', 'role')},
+        # ),
         migrations.AddField(
             model_name='emailverificationcode',
             name='registration_data',
@@ -178,7 +179,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='supervision',
             name='role',
-            field=models.CharField(choices=[('PRIMARY', 'Primary Supervisor'), ('SECONDARY', 'Secondary Supervisor')], default=django.utils.timezone.now, max_length=20),
+            field=models.CharField(choices=[('PRIMARY', 'Primary Supervisor'), ('SECONDARY', 'Secondary Supervisor')], default='PRIMARY', max_length=20),
             preserve_default=False,
         ),
         migrations.AddField(
@@ -368,5 +369,9 @@ class Migration(migrations.Migration):
         migrations.AlterUniqueTogether(
             name='supervisorendorsement',
             unique_together={('supervisor', 'endorsement')},
+        ),
+        migrations.AlterUniqueTogether(
+            name='supervision',
+            unique_together={('supervisor', 'supervisee_email', 'role')},
         ),
     ]

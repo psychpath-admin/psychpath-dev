@@ -10,6 +10,7 @@ export interface PDEntry {
   week_starting: string
   reflection?: string
   reviewed_in_supervision?: boolean
+  supervisor_initials?: string
   duration_display: string
   duration_hours_minutes: string
   created_at: string

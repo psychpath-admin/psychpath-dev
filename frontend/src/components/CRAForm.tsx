@@ -254,15 +254,19 @@ export default function CRAForm({
             </div>
             
             {/* Quick duration links */}
-            <div className="flex flex-wrap gap-2">
-              {[15, 30, 45, 60, 75, 90, 120].map((minutes) => (
+            <div className="flex flex-wrap gap-1">
+              {[30, 50, 60, 75, 90].map((minutes) => (
                 <button
                   key={minutes}
                   type="button"
                   onClick={() => setEntryForm({ ...entryForm, duration_minutes: minutes.toString() })}
-                  className="text-sm text-blue-600 hover:text-blue-800 underline"
+                  className={`px-2 py-1 text-xs rounded border ${
+                    entryForm.duration_minutes === minutes.toString()
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                  }`}
                 >
-                  {minutes === 120 ? '2 hours' : `${minutes} Minutes`}
+                  {minutes < 60 ? `${minutes}min` : `${minutes / 60}h`}
                 </button>
               ))}
             </div>

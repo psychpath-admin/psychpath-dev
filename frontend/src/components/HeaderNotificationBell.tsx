@@ -10,6 +10,7 @@ import { Bell, Clock, CheckCircle, AlertCircle, MessageSquare, Unlock } from 'lu
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api'
+import { useWebSocket } from '@/context/WebSocketContext'
 
 interface Notification {
   id: number
@@ -29,6 +30,7 @@ interface NotificationStats {
 }
 
 export default function HeaderNotificationBell() {
+  const { notifications: wsNotifications, connected } = useWebSocket()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [stats, setStats] = useState<NotificationStats>({ total: 0, unread: 0, by_type: {} })
   const [loading, setLoading] = useState(true)
@@ -40,6 +42,25 @@ export default function HeaderNotificationBell() {
       fetchNotifications()
     }
   }, [open])
+
+  // Merge WebSocket notifications with fetched ones
+  useEffect(() => {
+    if (wsNotifications.length > 0) {
+      setNotifications(prev => {
+        const merged = [...wsNotifications, ...prev]
+        const unique = merged.filter((notif, index, self) => 
+          index === self.findIndex(n => n.id === notif.id)
+        )
+        return unique.slice(0, 50)
+      })
+      
+      // Update unread count
+      setStats(prev => ({
+        ...prev,
+        unread: prev.unread + wsNotifications.filter(n => !n.read).length
+      }))
+    }
+  }, [wsNotifications])
 
   // Auto-refresh stats every 30 seconds
   useEffect(() => {
@@ -143,6 +164,10 @@ export default function HeaderNotificationBell() {
             >
               {stats.unread > 99 ? '99+' : stats.unread}
             </Badge>
+          )}
+          {connected && (
+            <div className="w-2 h-2 bg-green-500 rounded-full absolute top-0 right-0" 
+                 title="Connected" />
           )}
         </Button>
       </PopoverTrigger>

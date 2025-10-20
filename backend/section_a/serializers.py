@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import models
 from .models import SectionAEntry, CustomSessionActivityType
 
 
@@ -182,4 +183,37 @@ class SectionAEntrySerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # Automatically set the trainee to the current user
         validated_data['trainee'] = self.context['request'].user
-        return super().create(validated_data)
+        
+        # Check simulated hours limit
+        if validated_data.get('simulated', False):
+            user = self.context['request'].user
+            
+            # Calculate total simulated hours so far
+            existing_simulated_hours = SectionAEntry.objects.filter(
+                trainee=user,
+                simulated=True,
+                counts_toward_total=True
+            ).aggregate(
+                total=models.Sum('duration_minutes')
+            )['total'] or 0
+            
+            total_simulated_mins = existing_simulated_hours + validated_data.get('duration_minutes', 0)
+            total_simulated_hours = total_simulated_mins / 60
+            
+            # If over 60 hours, add warning flag
+            if total_simulated_hours > 60:
+                validated_data['_simulated_over_limit'] = True
+                validated_data['_simulated_total_hours'] = total_simulated_hours
+        
+        instance = super().create(validated_data)
+        
+        # Return warning in response
+        if validated_data.get('_simulated_over_limit', False):
+            # Add to instance for response serialization
+            instance._warning_message = (
+                f"⚠️ Simulated Hour Limit: You have logged {validated_data['_simulated_total_hours']:.1f}h of simulated contact. "
+                f"AHPRA allows maximum 60 hours. This entry will be recorded in your logbook but "
+                f"hours beyond 60h will NOT count toward your Section A total hours requirement."
+            )
+        
+        return instance

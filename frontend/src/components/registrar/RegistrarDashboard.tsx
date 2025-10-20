@@ -284,11 +284,11 @@ const RegistrarDashboard: React.FC = () => {
 
           {/* Alerts */}
           <div className="mt-6 space-y-2">
-            {program.annual_pd_hours < (program.targets?.cpd_hrs || program.targets_cpd_hrs || 80) && (
+            {program.annual_pd_hours < (program.targets_cpd_hrs || 80) && (
               <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                 <AlertTriangle className="h-4 w-4 text-yellow-600" />
                 <span className="text-sm text-yellow-800">
-                  Annual PD hours ({program.annual_pd_hours}) are below the required {program.targets?.cpd_hrs || program.targets_cpd_hrs || 80}h for your registrar program.
+                  Annual PD hours ({program.annual_pd_hours}) are below the required {program.targets_cpd_hrs || 80}h for your registrar program.
                 </span>
               </div>
             )}
@@ -411,9 +411,9 @@ const RegistrarDashboard: React.FC = () => {
             <div className="p-3 bg-green-50 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-green-800">Annual PD Progress</span>
-                <span className="text-sm text-green-600">{program.annual_pd_hours} / {program.targets?.cpd_hrs || program.targets_cpd_hrs || 80}h</span>
+                <span className="text-sm text-green-600">{program.annual_pd_hours} / {program.targets_cpd_hrs || 80}h</span>
               </div>
-              <Progress value={(program.annual_pd_hours / (program.targets?.cpd_hrs || program.targets_cpd_hrs || 80)) * 100} className="h-2" />
+              <Progress value={(program.annual_pd_hours / (program.targets_cpd_hrs || 80)) * 100} className="h-2" />
             </div>
           </CardContent>
         </Card>

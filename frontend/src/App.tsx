@@ -4,6 +4,7 @@ import Navbar from '@/components/Navbar'
 import RegistrarNavigation from '@/components/registrar/RegistrarNavigation'
 import PathwaySwitcher from '@/components/PathwaySwitcher'
 import { AuthProvider } from '@/context/AuthContext'
+import { WebSocketProvider } from '@/context/WebSocketContext'
 import EPAList from '@/components/EPAList'
 import ReflectionLog from '@/components/ReflectionLog'
 import LoginPage from '@/pages/LoginPage'
@@ -20,6 +21,13 @@ import WeeklyLogbookDashboard from '@/pages/WeeklyLogbookDashboard'
 import WeeklyLogbookEditor from '@/pages/WeeklyLogbookEditor'
 import LogbookPage from '@/pages/LogbookPage'
 import LogbookEditor from '@/pages/LogbookEditor'
+// Enhanced Logbook imports
+import EnhancedLogbookDashboard from '@/pages/EnhancedLogbookDashboard'
+import EnhancedLogbookDetail from '@/pages/EnhancedLogbookDetail'
+import EnhancedLogbookCreate from '@/pages/EnhancedLogbookCreate'
+// Weekly Logbook Review imports
+import LogbookReviewDashboard from '@/pages/LogbookReviewDashboard'
+import LogbookDetailPage from '@/pages/LogbookDetailPage'
 import SectionA from '@/pages/SectionA'
 import SectionB from '@/pages/SectionB'
 import SectionC from '@/pages/SectionC'
@@ -39,19 +47,29 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import { setupGlobalErrorHandling } from '@/lib/errorLogger'
 import { Toaster } from 'sonner'
 // Registrar imports
-import RegistrarDashboard from '@/components/registrar/RegistrarDashboard'
-import RegistrarProgramSetup from '@/pages/registrar/RegistrarProgramSetup'
-import RegistrarPracticeLog from '@/pages/registrar/RegistrarPracticeLog'
-import RegistrarPracticeEntryForm from '@/pages/registrar/RegistrarPracticeEntryForm'
-import RegistrarSupervisionLog from '@/pages/registrar/RegistrarSupervisionLog'
-import RegistrarReports from '@/pages/registrar/RegistrarReports'
+import RegistrarDashboard from '@/pages/RegistrarDashboard'
+import RegistrarEnrollment from '@/pages/RegistrarEnrollment'
+import PracticeLog from '@/pages/PracticeLog'
 import CompetenciesHelp from '@/pages/CompetenciesHelp'
+import MyRubricProgress from '@/pages/MyRubricProgress'
+// CPD Portfolio imports
+import CPDDashboard from '@/pages/CPDDashboard'
+import CPDActivities from '@/pages/CPDActivities'
+// Leave Management import
+import LeaveManagement from '@/pages/LeaveManagement'
+// Competency Tracker import
+import CompetencyTracker from '@/pages/CompetencyTracker'
+// Supervisor Competency imports
+import SupervisorCompetencyOverview from '@/pages/SupervisorCompetencyOverview'
+import SupervisorTraineeCompetency from '@/pages/SupervisorTraineeCompetency'
+// Progress Reports import
+import ProgressReports from '@/pages/ProgressReports'
 
 // Component to redirect users to appropriate dashboard based on role
 const DashboardRedirect: React.FC<{ userRole?: string }> = ({ userRole }) => {
   if (userRole === 'REGISTRAR') {
-    // For now, redirect to registrar dashboard - the dashboard will handle the case where no programs exist
-    return <Navigate to="/registrar" replace />
+    // Redirect to registrar dashboard - the dashboard will handle the case where no programs exist
+    return <Navigate to="/registrar-dashboard" replace />
   }
   
   return <Dashboard userRole={userRole} />
@@ -131,9 +149,10 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <div className="min-h-screen">
-          {!loaded ? null : (
-          <Routes>
+        <WebSocketProvider>
+          <div className="min-h-screen">
+            {!loaded ? null : (
+            <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/register" element={<PublicRoute><RegisterTerms /></PublicRoute>} />
@@ -156,27 +175,46 @@ function App() {
           <Route path="/logbook/old" element={<RequireAuth><LogbookPage /></RequireAuth>} />
           <Route path="/logbook/:id" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
           <Route path="/logbook/:id/edit" element={<RequireAuth><LogbookEditor /></RequireAuth>} />
+          {/* Enhanced Logbook Routes */}
+          <Route path="/enhanced-logbooks" element={<RequireAuth><EnhancedLogbookDashboard /></RequireAuth>} />
+          <Route path="/enhanced-logbooks/create" element={<RequireAuth><EnhancedLogbookCreate /></RequireAuth>} />
+          <Route path="/enhanced-logbooks/:logbookId" element={<RequireAuth><EnhancedLogbookDetail /></RequireAuth>} />
+          {/* Weekly Logbook Review Routes */}
+          <Route path="/logbooks" element={<RequireAuth><LogbookReviewDashboard /></RequireAuth>} />
+          <Route path="/logbooks/:id" element={<RequireAuth><LogbookDetailPage /></RequireAuth>} />
           <Route path="/section-a/cra-edit" element={<RequireAuth><CRAEdit /></RequireAuth>} />
           <Route path="/notifications" element={<RequireAuth><NotificationCenter /></RequireAuth>} />
           <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
           <Route path="/help/errors" element={<ErrorHelp />} />
           <Route path="/competencies-help" element={<CompetenciesHelp />} />
+          <Route path="/rubrics/my-progress" element={<RequireAuth><MyRubricProgress /></RequireAuth>} />
           {/* Registrar Routes */}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar" element={<RequireAuth><RegistrarDashboard /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/setup" element={<RequireAuth><RegistrarProgramSetup /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/practice" element={<RequireAuth><RegistrarPracticeLog /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/practice/new" element={<RequireAuth><RegistrarPracticeEntryForm /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/practice/:id/edit" element={<RequireAuth><RegistrarPracticeEntryForm /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/supervision" element={<RequireAuth><RegistrarSupervisionLog /></RequireAuth>} />}
-                    {me?.role === 'REGISTRAR' && <Route path="/registrar/reports" element={<RequireAuth><RegistrarReports /></RequireAuth>} />}
+          <Route path="/registrar-enrollment" element={<RequireAuth><RegistrarEnrollment /></RequireAuth>} />
+          <Route path="/registrar-dashboard" element={<RequireAuth><RegistrarDashboard /></RequireAuth>} />
+          <Route path="/registrar/practice-log" element={<RequireAuth><PracticeLog /></RequireAuth>} />
+          <Route path="/registrar/leave-management" element={<RequireAuth><LeaveManagement /></RequireAuth>} />
+          <Route path="/registrar/competency-tracker" element={<RequireAuth><CompetencyTracker /></RequireAuth>} />
+          {/* CPD Portfolio Routes */}
+          <Route path="/cpd" element={<RequireAuth><CPDDashboard /></RequireAuth>} />
+          <Route path="/cpd/activities" element={<RequireAuth><CPDActivities /></RequireAuth>} />
+          <Route path="/cpd/activities/new" element={<RequireAuth><CPDActivities /></RequireAuth>} />
+          {/* Progress Reports Routes */}
+          <Route path="/progress-reports" element={<RequireAuth><ProgressReports /></RequireAuth>} />
+          <Route path="/progress-reports/new" element={<RequireAuth><ProgressReports /></RequireAuth>} />
+          <Route path="/progress-reports/:id" element={<RequireAuth><ProgressReports /></RequireAuth>} />
+          <Route path="/progress-reports/:id/edit" element={<RequireAuth><ProgressReports /></RequireAuth>} />
+          <Route path="/supervisor/progress-reports" element={<RequireAuth><ProgressReports /></RequireAuth>} />
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/queue" element={<RequireAuth><SupervisorQueue /></RequireAuth>} />}
           {me?.role === 'SUPERVISOR' && <Route path="/supervisor/links" element={<RequireAuth><SupervisorLinks /></RequireAuth>} />}
+          {me?.role === 'SUPERVISOR' && <Route path="/supervisor/competency-overview" element={<RequireAuth><SupervisorCompetencyOverview /></RequireAuth>} />}
+          {me?.role === 'SUPERVISOR' && <Route path="/supervisor/trainees/:traineeId/competencies" element={<RequireAuth><SupervisorTraineeCompetency /></RequireAuth>} />}
           {me?.role === 'ORG_ADMIN' && <Route path="/org" element={<RequireAuth><OrgDashboard /></RequireAuth>} />}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
         )}
         <Toaster position="top-right" richColors />
-      </div>
+          </div>
+        </WebSocketProvider>
       </AuthProvider>
     </ErrorBoundary>
   )

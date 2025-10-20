@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest, AuditLog
+from .models import UserProfile, Organization, EPA, Milestone, Supervision, MilestoneProgress, Reflection, Message, SupervisorRequest, SupervisorInvitation, SupervisorEndorsement, SupervisionNotification, SupervisionAssignment, Meeting, MeetingInvite, DisconnectionRequest, AuditLog, Competency, Rubric, RubricScore, RubricSummary
 
 class UserProfileSerializer(serializers.ModelSerializer):
     # Ensure prior_hours always a dict
@@ -703,3 +703,141 @@ class AuditLogSerializer(serializers.ModelSerializer):
     
     def get_result_display(self, obj):
         return obj.get_result_display()
+
+
+# Rubric System Serializers
+
+class CompetencySerializer(serializers.ModelSerializer):
+    epa_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Competency
+        fields = ['id', 'code', 'title', 'description', 'descriptors', 'order', 'is_active', 'epa_count']
+    
+    def get_epa_count(self, obj):
+        return obj.epas.count()
+
+
+class EPASerializer(serializers.ModelSerializer):
+    competency = CompetencySerializer(read_only=True)
+    milestones = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = EPA
+        fields = ['id', 'code', 'title', 'description', 'competency', 'descriptors', 'order', 'milestones']
+    
+    def get_milestones(self, obj):
+        milestones = obj.milestones.all()
+        return [{'id': m.id, 'level': m.level, 'label': m.label, 'description': m.description} for m in milestones]
+
+
+class MilestoneSerializer(serializers.ModelSerializer):
+    epa = EPASerializer(read_only=True)
+    
+    class Meta:
+        model = Milestone
+        fields = ['id', 'epa', 'code', 'level', 'label', 'description']
+
+
+class RubricSerializer(serializers.ModelSerializer):
+    epa = EPASerializer(read_only=True)
+    milestone = MilestoneSerializer(read_only=True)
+    competency = CompetencySerializer(read_only=True)
+    total_weight = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Rubric
+        fields = ['id', 'epa', 'milestone', 'competency', 'criteria', 
+                  'weightings', 'guidance_notes', 'is_active', 'total_weight']
+    
+    def get_total_weight(self, obj):
+        return obj.calculate_total_weight()
+
+
+class RubricScoreSerializer(serializers.ModelSerializer):
+    supervisee_name = serializers.SerializerMethodField()
+    supervisor_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = RubricScore
+        fields = ['id', 'rubric', 'criterion_id', 'criterion_label', 
+                  'selected_level', 'notes', 'supervisee_name', 'supervisor_name',
+                  'created_at', 'updated_at']
+    
+    def get_supervisee_name(self, obj):
+        return f"{obj.supervisee.first_name} {obj.supervisee.last_name}"
+    
+    def get_supervisor_name(self, obj):
+        return f"{obj.supervisor.first_name} {obj.supervisor.last_name}"
+
+
+class RubricScoreCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RubricScore
+        fields = ['rubric', 'supervisee', 'criterion_id', 'criterion_label', 
+                  'selected_level', 'notes']
+    
+    def create(self, validated_data):
+        # Add supervisor from request
+        validated_data['supervisor'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+class RubricSummarySerializer(serializers.ModelSerializer):
+    epa = EPASerializer(read_only=True)
+    rubric = RubricSerializer(read_only=True)
+    supervisee_name = serializers.SerializerMethodField()
+    supervisor_name = serializers.SerializerMethodField()
+    scores = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = RubricSummary
+        fields = ['id', 'epa', 'rubric', 'supervisee_name', 'supervisor_name',
+                  'total_weighted_score', 'milestone_equivalent', 'summary_comment',
+                  'status', 'locked', 'evidence_links', 'scores', 'created_at', 'approved_at']
+    
+    def get_supervisee_name(self, obj):
+        return f"{obj.supervisee.first_name} {obj.supervisee.last_name}"
+    
+    def get_supervisor_name(self, obj):
+        return f"{obj.supervisor.first_name} {obj.supervisor.last_name}"
+    
+    def get_scores(self, obj):
+        scores = RubricScore.objects.filter(
+            rubric=obj.rubric,
+            supervisee=obj.supervisee,
+            supervisor=obj.supervisor
+        )
+        return RubricScoreSerializer(scores, many=True).data
+
+
+class RubricSummaryCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RubricSummary
+        fields = ['epa', 'rubric', 'supervisee', 'summary_comment', 'evidence_links']
+    
+    def create(self, validated_data):
+        supervisor = self.context['request'].user
+        validated_data['supervisor'] = supervisor
+        
+        # Calculate weighted score
+        rubric = validated_data['rubric']
+        supervisee = validated_data['supervisee']
+        
+        summary = RubricSummary(**validated_data)
+        summary.total_weighted_score = summary.calculate_weighted_score()
+        summary.milestone_equivalent = summary.determine_milestone_level()
+        summary.save()
+        
+        # Send WebSocket notification
+        from logbook_app.notification_helpers import send_notification
+        send_notification(
+            recipient=supervisee,
+            actor=supervisor,
+            notification_type='rubric_completed',
+            title='EPA Rubric Evaluation Completed',
+            body=f"{supervisor.get_full_name()} has completed a rubric evaluation for {summary.epa.code}",
+            related_object=summary
+        )
+        
+        return summary

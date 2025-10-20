@@ -105,11 +105,11 @@ class RegistrarPracticeEntry(models.Model):
     date = models.DateField()
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
-    hours = models.DecimalField(max_digits=4, decimal_places=2, help_text="Hours worked")
+    hours = models.DecimalField(max_digits=4, decimal_places=2, default=0.0, help_text="Hours worked")
     is_dcc = models.BooleanField(default=False, help_text="Direct Client Contact")
     setting = models.CharField(max_length=20, choices=SETTING_CHOICES, default='clinic')
     client_group = models.CharField(max_length=20, choices=CLIENT_GROUP_CHOICES, default='adult')
-    description = models.TextField()
+    description = models.TextField(default='', blank=True)
     competency_tags = models.JSONField(default=list, blank=True, help_text="Array of competency tags")
     evidence_files = models.JSONField(default=dict, blank=True, help_text="Evidence file references")
     

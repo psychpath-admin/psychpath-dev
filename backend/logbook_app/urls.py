@@ -9,7 +9,7 @@ from .views import (
     review_unlock_request, force_relock_unlock_request,
     user_notifications, notification_stats, mark_notification_read,
     mark_all_notifications_read, create_notification,
-    logbook_html_report,
+    logbook_html_report, download_logbook_pdf,
     # Review workflow endpoints
     create_review_request, review_requests_list, update_review_request,
     create_unlock_request, unlock_requests_list, update_unlock_request
@@ -37,6 +37,7 @@ urlpatterns = [
     path('<int:logbook_id>/audit/', logbook_audit_trail, name='logbook-audit-trail'),
     path('<int:logbook_id>/resubmit/', logbook_resubmit, name='logbook-resubmit'),
     path('<int:logbook_id>/html-report/', logbook_html_report, name='logbook-html-report'),
+    path('<int:logbook_id>/download_pdf/', download_logbook_pdf, name='download-logbook-pdf'),
     
     # Comment system endpoints
     path('<int:logbook_id>/comments/', logbook_comment_threads, name='logbook-comment-threads'),

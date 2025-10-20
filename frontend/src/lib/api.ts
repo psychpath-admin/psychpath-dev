@@ -159,6 +159,21 @@ export async function getMe() {
   return res.json()
 }
 
+export async function updateSignature(signature?: string, initials?: string) {
+  const body: any = {}
+  if (signature) body.signature = signature
+  if (initials) body.initials = initials
+  
+  const res = await apiFetch('/api/user-profile/update-signature/', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  
+  if (!res.ok) throw new Error('Failed to update signature')
+  return res.json()
+}
+
 // Logbook functions
 export async function getLogbooks() {
   const res = await apiFetch('/api/logbook/logbooks/')
@@ -209,7 +224,7 @@ export async function approveLogbook(id: number, action: 'approve' | 'reject', c
 }
 
 export async function downloadLogbookPDF(id: number) {
-  const res = await apiFetch(`/api/logbook/logbooks/${id}/pdf/`)
+  const res = await apiFetch(`/api/logbook/logbooks/${id}/download_pdf/`)
   if (!res.ok) throw new Error('Failed to download PDF')
   return res.blob()
 }
@@ -480,6 +495,92 @@ export async function deleteSupervisionEntry(id: number): Promise<void> {
 export async function getProgramSummary(): Promise<ProgramSummary> {
   const res = await apiFetch('/api/program-summary/')
   if (!res.ok) throw new Error('Failed to fetch program summary')
+  return res.json()
+}
+
+// Progress Reports API
+export async function getAvailableReportTypes() {
+  const res = await apiFetch('/api/progress-reports/configs/available_reports/')
+  if (!res.ok) throw new Error('Failed to fetch available report types')
+  return res.json()
+}
+
+export async function getProgressReports(filters?: any) {
+  const params = new URLSearchParams()
+  if (filters?.status) params.append('status', filters.status)
+  if (filters?.report_type) params.append('report_config__report_type', filters.report_type)
+  if (filters?.date_from) params.append('reporting_period_start__gte', filters.date_from)
+  if (filters?.date_to) params.append('reporting_period_start__lte', filters.date_to)
+  
+  const queryString = params.toString()
+  const url = `/api/progress-reports/reports/${queryString ? `?${queryString}` : ''}`
+  const res = await apiFetch(url)
+  if (!res.ok) throw new Error('Failed to fetch progress reports')
+  return res.json()
+}
+
+export async function getProgressReport(id: number) {
+  const res = await apiFetch(`/api/progress-reports/reports/${id}/`)
+  if (!res.ok) throw new Error('Failed to fetch progress report')
+  return res.json()
+}
+
+export async function createProgressReport(data: any) {
+  const res = await apiFetch('/api/progress-reports/reports/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to create progress report')
+  return res.json()
+}
+
+export async function updateProgressReport(id: number, data: any) {
+  const res = await apiFetch(`/api/progress-reports/reports/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to update progress report')
+  return res.json()
+}
+
+export async function submitProgressReport(id: number) {
+  const res = await apiFetch(`/api/progress-reports/reports/${id}/submit/`, {
+    method: 'POST'
+  })
+  if (!res.ok) throw new Error('Failed to submit progress report')
+  return res.json()
+}
+
+export async function saveProgressReportDraft(id: number, data: any) {
+  const res = await apiFetch(`/api/progress-reports/reports/${id}/save_draft/`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to save progress report draft')
+  return res.json()
+}
+
+export async function approveProgressReport(id: number, feedback: any) {
+  const res = await apiFetch(`/api/progress-reports/reports/${id}/approve/`, {
+    method: 'POST',
+    body: JSON.stringify(feedback)
+  })
+  if (!res.ok) throw new Error('Failed to approve progress report')
+  return res.json()
+}
+
+export async function requestRevision(id: number, feedback: any) {
+  const res = await apiFetch(`/api/progress-reports/reports/${id}/request_revision/`, {
+    method: 'POST',
+    body: JSON.stringify(feedback)
+  })
+  if (!res.ok) throw new Error('Failed to request revision')
+  return res.json()
+}
+
+export async function getProgressReportDashboardStats() {
+  const res = await apiFetch('/api/progress-reports/reports/dashboard_stats/')
+  if (!res.ok) throw new Error('Failed to fetch progress report dashboard stats')
   return res.json()
 }
 
