@@ -153,45 +153,56 @@ class UserProfileSerializer(serializers.ModelSerializer):
         if role == 'PROVISIONAL':
             from datetime import date, timedelta
             
-            # Provisional registration date is required and must be less than 5 years ago
-            provisional_reg_date = data.get('provisional_registration_date')
-            if provisional_reg_date is None and self.instance:
-                provisional_reg_date = getattr(self.instance, 'provisional_registration_date', None)
-            # Accept legacy/alternate field name from payload or instance
-            if provisional_reg_date is None:
-                alt = data.get('provisional_start_date')
-                if alt is None and self.instance:
-                    alt = getattr(self.instance, 'provisional_start_date', None)
-                provisional_reg_date = alt or provisional_reg_date
-            if not provisional_reg_date:
-                raise serializers.ValidationError({
-                    'provisional_registration_date': 'Provisional registration date is required for provisional psychologists.'
-                })
+            # Check if this is just a welcome acknowledgment (first_login_completed being set)
+            # If so, skip validation to allow users to complete welcome and then set dates later
+            is_welcome_acknowledgment = (
+                data.get('first_login_completed') == True and 
+                self.instance and 
+                not getattr(self.instance, 'first_login_completed', False) and
+                len(data) <= 3  # Only a few fields being updated (first_login_completed and maybe 1-2 others)
+            )
             
-            # Check if date is less than 5 years ago
-            five_years_ago = date.today() - timedelta(days=5*365)
-            if provisional_reg_date < five_years_ago:
-                raise serializers.ValidationError({
-                    'provisional_registration_date': 'Provisional registration date must be less than 5 years ago.'
-                })
-            
-            # Internship start date must be later than provisional registration date
-            internship_start_date = data.get('internship_start_date')
-            if internship_start_date is None and self.instance:
-                internship_start_date = getattr(self.instance, 'internship_start_date', None)
-            if provisional_reg_date is None and self.instance:
-                provisional_reg_date = getattr(self.instance, 'provisional_registration_date', None)
-            if internship_start_date and provisional_reg_date and internship_start_date < provisional_reg_date:
-                raise serializers.ValidationError({
-                    'internship_start_date': f'Your Internship Start Date ({internship_start_date.strftime("%d %B %Y")}) cannot be before your Provisional Registration Date ({provisional_reg_date.strftime("%d %B %Y")}). Please set your Internship Start Date to the same day or after {provisional_reg_date.strftime("%d %B %Y")}.'
-                })
-
-            # Estimated completion weeks must be at least 44 for full-time
-            if data.get('is_full_time', True) and data.get('estimated_completion_weeks'):
-                if data['estimated_completion_weeks'] < 44:
+            if not is_welcome_acknowledgment:
+                # Provisional registration date is required for full profile updates
+                provisional_reg_date = data.get('provisional_registration_date')
+                if provisional_reg_date is None and self.instance:
+                    provisional_reg_date = getattr(self.instance, 'provisional_registration_date', None)
+                # Accept legacy/alternate field name from payload or instance
+                if provisional_reg_date is None:
+                    alt = data.get('provisional_start_date')
+                    if alt is None and self.instance:
+                        alt = getattr(self.instance, 'provisional_start_date', None)
+                    provisional_reg_date = alt or provisional_reg_date
+                
+                if not provisional_reg_date:
                     raise serializers.ValidationError({
-                        'estimated_completion_weeks': 'Full-time internship must be at least 44 weeks.'
+                        'provisional_registration_date': 'Provisional registration date is required for provisional psychologists. Please set this date in your profile before making other changes.'
                     })
+                
+                # Check if date is less than 5 years ago
+                five_years_ago = date.today() - timedelta(days=5*365)
+                if provisional_reg_date < five_years_ago:
+                    raise serializers.ValidationError({
+                        'provisional_registration_date': 'Provisional registration date must be less than 5 years ago.'
+                    })
+                
+                # Internship start date must be later than provisional registration date
+                internship_start_date = data.get('internship_start_date')
+                if internship_start_date is None and self.instance:
+                    internship_start_date = getattr(self.instance, 'internship_start_date', None)
+                if provisional_reg_date is None and self.instance:
+                    provisional_reg_date = getattr(self.instance, 'provisional_registration_date', None)
+                if internship_start_date and provisional_reg_date and internship_start_date < provisional_reg_date:
+                    raise serializers.ValidationError({
+                        'internship_start_date': f'Your Internship Start Date ({internship_start_date.strftime("%d %B %Y")}) cannot be before your Provisional Registration Date ({provisional_reg_date.strftime("%d %B %Y")}). Please set your Internship Start Date to the same day or after {provisional_reg_date.strftime("%d %B %Y")}.'
+                    })
+                
+                # Estimated completion weeks must be at least 44 for full-time
+                if data.get('is_full_time', True) and data.get('estimated_completion_weeks'):
+                    if data['estimated_completion_weeks'] < 44:
+                        raise serializers.ValidationError({
+                            'estimated_completion_weeks': 'Full-time internship must be at least 44 weeks.'
+                        })
         
         return data
 

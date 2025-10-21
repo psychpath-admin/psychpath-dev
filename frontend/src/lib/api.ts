@@ -312,6 +312,15 @@ export async function deleteSectionAEntry(id: number) {
   return res.json()
 }
 
+export async function checkEntryQuality(text: string, fieldType: 'presenting_issues' | 'reflection') {
+  const res = await apiFetch('/api/section-a/entries/check_quality/', {
+    method: 'POST',
+    body: JSON.stringify({ text, field_type: fieldType })
+  })
+  if (!res.ok) throw new Error('Failed to check entry quality')
+  return res.json()
+}
+
 // Client autocomplete
 export async function getClientAutocomplete(query: string) {
   const res = await apiFetch(`/api/section-a/entries/client_autocomplete/?q=${encodeURIComponent(query)}`)

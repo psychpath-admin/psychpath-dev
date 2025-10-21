@@ -401,6 +401,7 @@ const ProgressReportForm: React.FC<ProgressReportFormProps> = ({
               value={formData.additional_comments}
               onChange={(e) => handleInputChange('additional_comments', e.target.value)}
               rows={3}
+              className="placeholder:text-gray-600"
             />
           </div>
         </CardContent>

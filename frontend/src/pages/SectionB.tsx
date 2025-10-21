@@ -1841,7 +1841,7 @@ const SectionB: React.FC = () => {
                 <textarea
                   value={formData.activity_details}
                   onChange={(e) => setFormData(prev => ({ ...prev, activity_details: e.target.value }))}
-                  className="w-full p-2 border rounded h-20"
+                  className="w-full p-2 border rounded h-20 placeholder:text-gray-600"
                   placeholder="E.g. name of course, presenter, institution etc"
                 />
               </div>
@@ -1851,7 +1851,7 @@ const SectionB: React.FC = () => {
                 <textarea
                   value={formData.topics_covered}
                   onChange={(e) => setFormData(prev => ({ ...prev, topics_covered: e.target.value }))}
-                  className="w-full p-2 border rounded h-20"
+                  className="w-full p-2 border rounded h-20 placeholder:text-gray-600"
                   placeholder="E.g. behavioural interventions for ADHD in adolescents"
                 />
               </div>
@@ -1938,7 +1938,7 @@ const SectionB: React.FC = () => {
                 <textarea
                   value={formData.reflection}
                   onChange={(e) => setFormData(prev => ({ ...prev, reflection: e.target.value }))}
-                  className="w-full p-2 border rounded h-24"
+                  className="w-full p-2 border rounded h-24 placeholder:text-gray-600"
                   placeholder="Reflect on how this activity contributed to your professional development..."
                 />
               </div>

@@ -22,9 +22,12 @@ import {
   getClientSessionCount,
   getCustomActivityTypes,
   createCustomActivityType,
-  deleteCustomActivityType
+  deleteCustomActivityType,
+  checkEntryQuality
 } from '@/lib/api'
 import CRAForm from '@/components/CRAForm'
+import ICRAForm from '@/components/ICRAForm'
+import { QualityFeedback } from '@/components/QualityFeedback'
 import { minutesToHoursMinutes, formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 
 // Helper function to format dates in dd/mm/yyyy format
@@ -142,8 +145,17 @@ export default function SectionADashboard() {
   const [placeSuggestions, setPlaceSuggestions] = useState<string[]>([])
   const [issuesSuggestions, setIssuesSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  
+  // ICRA autocomplete state
+  const [icraClientSuggestions, setIcraClientSuggestions] = useState<string[]>([])
   const [showPlaceSuggestions, setShowPlaceSuggestions] = useState(false)
   const [showIssuesSuggestions, setShowIssuesSuggestions] = useState(false)
+  
+  // Quality validation state
+  const [presentingIssuesQuality, setPresentingIssuesQuality] = useState<any>(null)
+  const [descriptionQuality, setDescriptionQuality] = useState<any>(null)
+  const [showPresentingIssuesPrompts, setShowPresentingIssuesPrompts] = useState(false)
+  const [showDescriptionPrompts, setShowDescriptionPrompts] = useState(false)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [duplicateWarning, setDuplicateWarning] = useState<{
     show: boolean
@@ -652,6 +664,50 @@ export default function SectionADashboard() {
       }
     } else {
       setShowIssuesSuggestions(false)
+    }
+  }
+
+  // ICRA autocomplete handlers
+  const getIcraClientSuggestions = async (query: string) => {
+    if (query.length < 2) {
+      setIcraClientSuggestions([])
+      return
+    }
+    
+    try {
+      const suggestions = await getClientAutocomplete(query)
+      setIcraClientSuggestions(suggestions.slice(0, 10))
+    } catch (error) {
+      console.error('Error fetching ICRA client suggestions:', error)
+    }
+  }
+
+  const handleIcraClientChange = async (value: string) => {
+    setIcraFormData(prev => ({ ...prev, client_pseudonym: value }))
+    getIcraClientSuggestions(value)
+  }
+
+  
+  // Quality validation handlers
+  const handlePresentingIssuesBlur = async () => {
+    if (smartFormData.presenting_issues.length >= 5) { // Lowered threshold
+      try {
+        const result = await checkEntryQuality(smartFormData.presenting_issues, 'presenting_issues')
+        setPresentingIssuesQuality(result)
+      } catch (error) {
+        console.error('Error checking presenting issues quality:', error)
+      }
+    }
+  }
+  
+  const handleDescriptionBlur = async () => {
+    if (smartFormData.description.length >= 10) { // Lowered threshold
+      try {
+        const result = await checkEntryQuality(smartFormData.description, 'reflection')
+        setDescriptionQuality(result)
+      } catch (error) {
+        console.error('Error checking description quality:', error)
+      }
     }
   }
 
@@ -2521,9 +2577,7 @@ export default function SectionADashboard() {
 
       {/* CRA Form Modal */}
       {showCRAForm && selectedEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <CRAForm
+        <CRAForm
               onSubmit={async (data) => {
                 try {
                   if (selectedEntry?.parent_dcc_entry) {
@@ -2572,54 +2626,51 @@ export default function SectionADashboard() {
               showClientIdInput={true}
               isEditing={!!selectedEntry?.parent_dcc_entry}
             />
-          </div>
-        </div>
       )}
 
       {/* ICRA Form Modal */}
       {showICRAForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 pt-8">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
-            <CRAForm
-              onSubmit={handleICRAFormSubmit}
-              onCancel={() => {
-                setShowICRAForm(false)
-                setSelectedEntry(null)
-                setEditingCRAId(null)
-                setIcraFormData({
-                  client_id: '',
-                  client_pseudonym: '',
-                  session_date: new Date().toISOString().split('T')[0],
-                  place_of_practice: '',
-                  presenting_issues: '',
-                  session_activity_types: [],
-                  duration_minutes: '50',
-                  reflections_on_experience: '',
-                  simulated: false
-                })
-              }}
-              saving={loading}
-              entryForm={icraFormData}
-              setEntryForm={setIcraFormData}
-              handleActivityTypeToggle={(type: string) => {
-                const currentTypes = icraFormData.session_activity_types
-                const updatedTypes = currentTypes.includes(type)
-                  ? currentTypes.filter(t => t !== type)
-                  : [...currentTypes, type]
-                setIcraFormData({ ...icraFormData, session_activity_types: updatedTypes })
-              }}
-              handleAddCustomActivityType={handleAddCustomActivityType}
-              newCustomActivityType={newCustomActivityType}
-              setNewCustomActivityType={setNewCustomActivityType}
-              customActivityTypes={customActivityTypes}
-              handleDeleteCustomActivityType={handleDeleteCustomActivityType}
-              calculateWeekStarting={calculateWeekStarting}
-              title={editingCRAId ? "Edit Independent Client Related Activity (ICRA)" : "Add Independent Client Related Activity (ICRA)"}
-              showClientIdInput={true}
-              isEditing={!!editingCRAId}
-            />
-          </div>
-        </div>
+        <ICRAForm
+          onSubmit={handleICRAFormSubmit}
+          onCancel={() => {
+            setShowICRAForm(false)
+            setSelectedEntry(null)
+            setEditingCRAId(null)
+            setIcraFormData({
+              client_id: '',
+              client_pseudonym: '',
+              session_date: new Date().toISOString().split('T')[0],
+              place_of_practice: '',
+              presenting_issues: '',
+              session_activity_types: [],
+              duration_minutes: '50',
+              reflections_on_experience: '',
+              simulated: false
+            })
+            // Clear ICRA suggestions
+            setIcraClientSuggestions([])
+          }}
+          saving={loading}
+          entryForm={icraFormData}
+          setEntryForm={setIcraFormData}
+          handleActivityTypeToggle={(type: string) => {
+            const currentTypes = icraFormData.session_activity_types
+            const updatedTypes = currentTypes.includes(type)
+              ? currentTypes.filter(t => t !== type)
+              : [...currentTypes, type]
+            setIcraFormData({ ...icraFormData, session_activity_types: updatedTypes })
+          }}
+          handleAddCustomActivityType={handleAddCustomActivityType}
+          newCustomActivityType={newCustomActivityType}
+          setNewCustomActivityType={setNewCustomActivityType}
+          customActivityTypes={customActivityTypes}
+          handleDeleteCustomActivityType={handleDeleteCustomActivityType}
+          calculateWeekStarting={calculateWeekStarting}
+          title={editingCRAId ? "Edit Independent Client Related Activity (ICRA)" : "Add Independent Client Related Activity (ICRA)"}
+          onClientIdChange={handleIcraClientChange}
+          clientSuggestions={icraClientSuggestions}
+          isEditing={!!editingCRAId}
+        />
       )}
 
       {/* Smart Form Modal */}
@@ -2780,7 +2831,7 @@ export default function SectionADashboard() {
                   </label>
                   <div className="relative">
                     <textarea
-                      className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[80px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
+                      className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[80px] text-text placeholder:text-gray-600 font-body shadow-psychpath transition-all duration-200 ${
                         formErrors.presenting_issues 
                           ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
                           : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
@@ -2788,11 +2839,14 @@ export default function SectionADashboard() {
                       value={smartFormData.presenting_issues}
                       onChange={(e) => handlePresentingIssuesChange(e.target.value)}
                       onFocus={() => smartFormData.presenting_issues.length >= 2 && setShowIssuesSuggestions(true)}
-                      onBlur={() => setTimeout(() => setShowIssuesSuggestions(false), 200)}
+                      onBlur={() => {
+                        setTimeout(() => setShowIssuesSuggestions(false), 200)
+                        handlePresentingIssuesBlur()
+                      }}
                       placeholder="Describe the client's presenting issues..."
                       maxLength={2000}
                     />
-                    <p className="text-xs text-gray-500 mt-1 text-right">
+                    <p className="text-xs text-gray-700 mt-1 text-right font-medium">
                       {smartFormData.presenting_issues.length}/2000 characters
                     </p>
                     {showIssuesSuggestions && issuesSuggestions.length > 0 && (
@@ -2813,6 +2867,15 @@ export default function SectionADashboard() {
                     )}
                   </div>
                   {formErrors.presenting_issues && <p className="text-red-500 text-xs mt-1">{formErrors.presenting_issues}</p>}
+        <QualityFeedback
+          quality={presentingIssuesQuality?.quality || null}
+          score={presentingIssuesQuality?.score || 0}
+          feedback={presentingIssuesQuality?.feedback || []}
+          prompts={presentingIssuesQuality?.prompts || []}
+          showPrompts={showPresentingIssuesPrompts}
+          onGetSuggestions={() => setShowPresentingIssuesPrompts(!showPresentingIssuesPrompts)}
+          fieldType="presenting_issues"
+        />
                 </div>
               </div>
 
@@ -2979,21 +3042,31 @@ export default function SectionADashboard() {
                   </label>
                   <div className="relative">
                     <textarea
-                      className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[100px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
+                      className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[100px] text-text placeholder:text-gray-600 font-body shadow-psychpath transition-all duration-200 ${
                         formErrors.description 
                           ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
                           : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
                       } focus:shadow-psychpath-lg`}
                       value={smartFormData.description}
                       onChange={(e) => setSmartFormData(prev => ({ ...prev, description: e.target.value }))}
+                      onBlur={handleDescriptionBlur}
                       placeholder="E.g., Trauma-focused CBT session using grounding techniques..."
                       maxLength={3000}
                     />
-                    <p className="text-xs text-gray-500 mt-1 text-right">
+                    <p className="text-xs text-gray-700 mt-1 text-right font-medium">
                       {smartFormData.description.length}/3000 characters
                     </p>
                   </div>
                   {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
+        <QualityFeedback
+          quality={descriptionQuality?.quality || null}
+          score={descriptionQuality?.score || 0}
+          feedback={descriptionQuality?.feedback || []}
+          prompts={descriptionQuality?.prompts || []}
+          showPrompts={showDescriptionPrompts}
+          onGetSuggestions={() => setShowDescriptionPrompts(!showDescriptionPrompts)}
+          fieldType="reflection"
+        />
                 </div>
                 
                 {/* Additional Comments */}
@@ -3003,7 +3076,7 @@ export default function SectionADashboard() {
                   </label>
                   <div className="relative">
                     <textarea
-                      className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[60px] text-text placeholder:text-textLight font-body shadow-psychpath transition-all duration-200 ${
+                      className={`w-full px-4 py-3 border-2 bg-surface rounded-lg focus:outline-none focus:ring-2 resize-vertical min-h-[60px] text-text placeholder:text-gray-600 font-body shadow-psychpath transition-all duration-200 ${
                         formErrors.additional_comments 
                           ? 'border-red-500 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
                           : 'border-border focus:ring-brand focus:border-brand hover:border-brand/50'
@@ -3013,7 +3086,7 @@ export default function SectionADashboard() {
                       placeholder="Any additional notes or observations..."
                       maxLength={1000}
                     />
-                    <p className="text-xs text-gray-500 mt-1 text-right">
+                    <p className="text-xs text-gray-700 mt-1 text-right font-medium">
                       {(smartFormData.additional_comments || '').length}/1000 characters
                     </p>
                   </div>

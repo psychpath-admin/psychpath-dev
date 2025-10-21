@@ -2123,7 +2123,7 @@ const SectionC: React.FC = () => {
                   <textarea
                     value={formData.summary}
                     onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue ${formErrors.summary ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300'}`}
+                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue placeholder:text-gray-600 ${formErrors.summary ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300'}`}
                     rows={4}
                     placeholder="Enter supervision summary and key points discussed"
                     required

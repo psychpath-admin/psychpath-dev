@@ -50,6 +50,12 @@ class SectionAEntry(models.Model):
     # Simulated flag for SDCC (Simulated Direct Client Contact)
     simulated = models.BooleanField(default=False, help_text="True if this is a simulated client contact (SDCC)")
     
+    # Whether this entry counts toward total hours requirement
+    counts_toward_total = models.BooleanField(
+        default=True,
+        help_text="Whether this entry counts toward total hours requirement"
+    )
+    
     # Link CRA entries to their parent DCC entry
     parent_dcc_entry = models.ForeignKey(
         'self', 

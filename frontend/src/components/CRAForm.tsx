@@ -114,6 +114,7 @@ export default function CRAForm({
               />
             </div>
 
+
             {/* Client Related Activity Type */}
             <div>
               <label className="block text-sm font-medium mb-2">
@@ -131,12 +132,12 @@ export default function CRAForm({
               />
               {/* Standard activity types */}
               <div className="flex flex-wrap gap-2 mt-2">
-                {['report writing', 'case formulation', 'test scoring', 'documentation', 'file review'].map((type) => (
+                {['report writing', 'case formulation', 'test scoring', 'documentation', 'file review'].map((type: string) => (
                   <button
                     key={type}
                     type="button"
                     onClick={() => {
-                      const currentTypes = entryForm.session_activity_types.filter(t => t !== type)
+                      const currentTypes = entryForm.session_activity_types.filter((t: string) => t !== type)
                       const newTypes = entryForm.session_activity_types.includes(type) ? currentTypes : [...currentTypes, type]
                       setEntryForm({ ...entryForm, session_activity_types: newTypes })
                     }}
@@ -163,7 +164,7 @@ export default function CRAForm({
                         key={type.id}
                         type="button"
                         onClick={() => {
-                          const currentTypes = entryForm.session_activity_types.filter(t => t !== type.name)
+                          const currentTypes = entryForm.session_activity_types.filter((t: string) => t !== type.name)
                           const newTypes = entryForm.session_activity_types.includes(type.name) ? currentTypes : [...currentTypes, type.name]
                           setEntryForm({ ...entryForm, session_activity_types: newTypes })
                         }}
@@ -285,7 +286,7 @@ export default function CRAForm({
                   placeholder="Enter your reflections on this client related activity..."
                   rows={4}
                   required
-                  className="resize-y"
+                  className="resize-y placeholder:text-gray-600"
                 />
               </div>
             )}
@@ -309,7 +310,7 @@ export default function CRAForm({
                   textShadow: '2px 2px 4px rgba(0,0,0,1) !important',
                   fontFamily: 'Arial, sans-serif !important',
                   zIndex: '9999 !important',
-                  position: 'relative !important'
+                  position: 'relative'
                 }}
               >
                 <span style={{ color: '#000000 !important', fontSize: '20px !important', fontWeight: '900 !important' }}>
@@ -329,7 +330,7 @@ export default function CRAForm({
                   textShadow: '2px 2px 4px rgba(0,0,0,1) !important',
                   fontFamily: 'Arial, sans-serif !important',
                   zIndex: '9999 !important',
-                  position: 'relative !important'
+                  position: 'relative'
                 }}
               >
                 <span style={{ color: '#000000 !important', fontSize: '20px !important', fontWeight: '900 !important' }}>

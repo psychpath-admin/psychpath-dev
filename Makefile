@@ -4,7 +4,7 @@ SHELL := /bin/bash
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 VENV_PY := $(BACKEND_DIR)/venv/bin/python3
-MANAGE := USE_SQLITE=1 $(VENV_PY) $(BACKEND_DIR)/manage.py
+MANAGE := $(VENV_PY) $(BACKEND_DIR)/manage.py
 
 # Default target
 .PHONY: help
@@ -48,8 +48,8 @@ dev-up:
 		echo "Virtual environment not found. Running setup..."; \
 		$(MAKE) setup; \
 	fi
-	@echo "Starting backend (SQLite) on :8000..."
-	@cd $(BACKEND_DIR) && USE_SQLITE=1 ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 &
+	@echo "Starting backend (PostgreSQL) on :8000..."
+	@cd $(BACKEND_DIR) && ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 &
 	@sleep 1
 	@echo "Starting frontend on :5173..."
 	@cd $(FRONTEND_DIR) && npm run dev
@@ -62,8 +62,8 @@ dev-start:
 		echo "Virtual environment not found. Running setup..."; \
 		$(MAKE) setup; \
 	fi
-	@echo "Starting backend (SQLite) on :8000..."
-	@cd $(BACKEND_DIR) && USE_SQLITE=1 ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 > ../logs/backend.log 2>&1 &
+	@echo "Starting backend (PostgreSQL) on :8000..."
+	@cd $(BACKEND_DIR) && ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 > ../logs/backend.log 2>&1 &
 	@echo $$! > .backend.pid
 	@sleep 2
 	@echo "Starting frontend on :5173..."

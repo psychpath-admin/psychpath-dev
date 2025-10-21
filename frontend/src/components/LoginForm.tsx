@@ -23,7 +23,16 @@ export default function LoginForm() {
         body: JSON.stringify({ username: email, password }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data?.detail || 'Login failed')
+      if (!res.ok) {
+        // Provide clear, actionable error messages
+        if (res.status === 401) {
+          throw new Error('There is a username/password mismatch. Please check your credentials and try again.')
+        } else if (res.status === 403) {
+          throw new Error('Your account has been disabled. Please contact support for assistance.')
+        } else {
+          throw new Error(data?.detail || 'Login failed. Please try again or contact support if the problem persists.')
+        }
+      }
       localStorage.setItem('accessToken', data.access)
       localStorage.setItem('refreshToken', data.refresh)
       setStatus(null)

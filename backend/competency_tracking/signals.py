@@ -10,11 +10,22 @@ from .utils import suggest_competencies_for_activity
 def link_section_a_to_competencies(sender, instance, created, **kwargs):
     """When a Section A entry is created/updated, suggest competency links based on EPAs"""
     if created and instance.trainee:
-        # Get EPA-based competency suggestions
+        # Get the UserProfile for the trainee
+        try:
+            from api.models import UserProfile
+            user_profile = UserProfile.objects.get(user=instance.trainee)
+        except UserProfile.DoesNotExist:
+            # Skip if no UserProfile exists
+            return
+            
+        # Get EPA-based competency suggestions using available fields
+        description = instance.presenting_issues or instance.activity_description or "DCC Entry"
+        epa_worked_on = instance.session_activity_type or "evaluation"
+        
         suggested_competencies = suggest_competencies_for_activity(
             activity_type='SECTION_A',
-            description=instance.case_description,
-            epa_worked_on=instance.epa_worked_on
+            description=description,
+            epa_worked_on=epa_worked_on
         )
         
         # Create evidence entries (as recommendations - not supervisor validated yet)
@@ -22,14 +33,14 @@ def link_section_a_to_competencies(sender, instance, created, **kwargs):
             try:
                 competency = CompetencyDefinition.objects.get(code=comp_code)
                 CompetencyEvidence.objects.create(
-                    trainee=instance.trainee,
+                    trainee=user_profile,
                     competency=competency,
                     evidence_type='SECTION_A',
                     section_a_entry=instance,
-                    date=instance.date_of_contact,
-                    description=f"DCC: {instance.case_description[:200]}",
+                    date=instance.session_date or instance.created_at.date(),
+                    description=f"DCC: {description[:200]}",
                     milestone_level='M2',  # Default, can be adjusted
-                    suggested_by_epa=instance.epa_worked_on,
+                    suggested_by_epa=epa_worked_on,
                     supervisor_validated=False
                 )
             except CompetencyDefinition.DoesNotExist:

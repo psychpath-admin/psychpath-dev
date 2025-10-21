@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from django.db.models import Q
 from .models import SectionAEntry, CustomSessionActivityType
 from .serializers import SectionAEntrySerializer, CustomSessionActivityTypeSerializer
+from .quality_validator import ClinicalQualityValidator
+from .writing_prompts import WritingPrompts
 from permissions import DenyOrgAdmin
 
 
@@ -107,11 +109,17 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
         if query:
             queryset = queryset.filter(place_of_practice__icontains=query)
         
-        # Get unique places
-        places = queryset.values_list('place_of_practice', flat=True).distinct()
-        places = [p for p in places if p]  # Filter out empty strings
+        # Get unique places using Python set for reliable deduplication
+        places = set()
+        for entry in queryset:
+            if entry.place_of_practice and entry.place_of_practice.strip():
+                # Normalize by stripping and ensuring case-insensitive uniqueness
+                places.add(entry.place_of_practice.strip())
         
-        return Response(list(places)[:20])  # Limit to 20 suggestions
+        # Convert to sorted list and limit
+        unique_places = sorted(list(places))[:20]
+        
+        return Response(unique_places)
     
     @action(detail=False, methods=['get'])
     def presenting_issues_autocomplete(self, request):
@@ -178,6 +186,43 @@ class SectionAEntryViewSet(viewsets.ModelViewSet):
         ).count()
         
         return Response({'count': count})
+    
+    @action(detail=False, methods=['post'])
+    def check_quality(self, request):
+        """
+        Check quality of presenting issues or reflection text without saving.
+        Returns quality assessment, score, feedback, and helpful prompts.
+        """
+        text = request.data.get('text', '')
+        field_type = request.data.get('field_type', 'presenting_issues')
+        
+        # Validate field_type
+        if field_type not in ['presenting_issues', 'reflection']:
+            return Response(
+                {'error': 'field_type must be "presenting_issues" or "reflection"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Run quality validation
+        if field_type == 'presenting_issues':
+            result = ClinicalQualityValidator.validate_presenting_issues(text)
+            prompts = WritingPrompts.get_presenting_issues_prompts(
+                result['quality'],
+                result.get('missing_elements', [])
+            )
+        else:  # reflection
+            result = ClinicalQualityValidator.validate_reflection(text)
+            prompts = WritingPrompts.get_reflection_prompts(
+                result['quality'],
+                result.get('missing_elements', [])
+            )
+        
+        return Response({
+            'quality': result['quality'],
+            'score': result['score'],
+            'feedback': result['feedback'],
+            'prompts': prompts
+        })
 
 
 class CustomSessionActivityTypeViewSet(viewsets.ModelViewSet):

@@ -16,8 +16,10 @@ import {
   getPlaceAutocomplete,
   getPresentingIssuesAutocomplete,
   checkDuplicatePseudonym,
-  getClientSessionCount
+  getClientSessionCount,
+  checkEntryQuality
 } from '@/lib/api'
+import { QualityFeedback } from '@/components/QualityFeedback'
 import { toast } from 'sonner'
 
 interface SectionAFormProps {
@@ -75,6 +77,12 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
     show: boolean
     suggestions: string[]
   }>({ show: false, suggestions: [] })
+  
+  // Quality validation state
+  const [presentingIssuesQuality, setPresentingIssuesQuality] = useState<any>(null)
+  const [reflectionQuality, setReflectionQuality] = useState<any>(null)
+  const [showPresentingIssuesPrompts, setShowPresentingIssuesPrompts] = useState(false)
+  const [showReflectionPrompts, setShowReflectionPrompts] = useState(false)
   const [sessionCount, setSessionCount] = useState<number>(0)
 
   // Load existing entry data when editing
@@ -219,6 +227,29 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
       }
     } else {
       setShowIssuesSuggestions(false)
+    }
+  }
+  
+  // Quality validation handlers
+  const handlePresentingIssuesBlur = async () => {
+    if (formData.presenting_issues.length >= 5) { // Lowered threshold
+      try {
+        const result = await checkEntryQuality(formData.presenting_issues, 'presenting_issues')
+        setPresentingIssuesQuality(result)
+      } catch (error) {
+        console.error('Error checking presenting issues quality:', error)
+      }
+    }
+  }
+  
+  const handleReflectionBlur = async () => {
+    if (formData.reflections_on_experience.length >= 10) { // Lowered threshold
+      try {
+        const result = await checkEntryQuality(formData.reflections_on_experience, 'reflection')
+        setReflectionQuality(result)
+      } catch (error) {
+        console.error('Error checking reflection quality:', error)
+      }
     }
   }
 
@@ -485,19 +516,22 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                 {/* Presenting Issues */}
                 <div>
                   <label className="block text-sm font-semibold text-brand mb-3">
-                    Presenting Issues
+                    Presenting Issues <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <Textarea
                       value={formData.presenting_issues}
                       onChange={(e) => handlePresentingIssuesChange(e.target.value)}
                       onFocus={() => formData.presenting_issues.length >= 2 && setShowIssuesSuggestions(true)}
-                      onBlur={() => setTimeout(() => setShowIssuesSuggestions(false), 200)}
+                      onBlur={() => {
+                        setTimeout(() => setShowIssuesSuggestions(false), 200)
+                        handlePresentingIssuesBlur()
+                      }}
                       placeholder="Describe the client's presenting issues..."
                       maxLength={2000}
                       rows={3}
                     />
-                    <p className="text-xs text-gray-500 mt-1 text-right">
+                    <p className="text-xs text-gray-700 mt-1 text-right font-medium">
                       {formData.presenting_issues.length}/2000 characters
                     </p>
                     {showIssuesSuggestions && issuesSuggestions.length > 0 && (
@@ -517,6 +551,15 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                       </div>
                     )}
                   </div>
+        <QualityFeedback
+          quality={presentingIssuesQuality?.quality || null}
+          score={presentingIssuesQuality?.score || 0}
+          feedback={presentingIssuesQuality?.feedback || []}
+          prompts={presentingIssuesQuality?.prompts || []}
+          showPrompts={showPresentingIssuesPrompts}
+          onGetSuggestions={() => setShowPresentingIssuesPrompts(!showPresentingIssuesPrompts)}
+          fieldType="presenting_issues"
+        />
                 </div>
               </div>
 
@@ -529,7 +572,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                 {/* Place of Practice - full width */}
                 <div>
                   <label className="block text-sm font-semibold text-brand mb-3">
-                    Place of Practice
+                    Place of Practice <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <Input
@@ -665,20 +708,30 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
                 {/* Reflections on Experience */}
                 <div>
                   <label className="block text-sm font-semibold text-brand mb-3">
-                    Reflections on Experience
+                    Reflections on Experience <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <Textarea
                       value={formData.reflections_on_experience}
                       onChange={(e) => setFormData(prev => ({ ...prev, reflections_on_experience: e.target.value }))}
+                      onBlur={handleReflectionBlur}
                       placeholder="Reflect on the session, what went well, areas for improvement..."
                       maxLength={3000}
                       rows={4}
                     />
-                    <p className="text-xs text-gray-500 mt-1 text-right">
+                    <p className="text-xs text-gray-700 mt-1 text-right font-medium">
                       {formData.reflections_on_experience.length}/3000 characters
                     </p>
                   </div>
+        <QualityFeedback
+          quality={reflectionQuality?.quality || null}
+          score={reflectionQuality?.score || 0}
+          feedback={reflectionQuality?.feedback || []}
+          prompts={reflectionQuality?.prompts || []}
+          showPrompts={showReflectionPrompts}
+          onGetSuggestions={() => setShowReflectionPrompts(!showReflectionPrompts)}
+          fieldType="reflection"
+        />
                 </div>
                 
                 {/* Additional Comments */}

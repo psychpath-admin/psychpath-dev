@@ -152,6 +152,7 @@ export default function CRAEdit() {
                   onChange={(e) => setForm({ ...form, reflections_on_experience: e.target.value })}
                   rows={6}
                   required
+                  className="placeholder:text-gray-600"
                 />
               </div>
 

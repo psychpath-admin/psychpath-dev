@@ -176,12 +176,8 @@ DATABASES = {
     }
 }
 
-# Allow easy local dev with SQLite if desired
-if os.getenv('USE_SQLITE', '0') == '1':
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+# PostgreSQL ONLY - No SQLite fallback to prevent data loss
+# The system must use PostgreSQL for data persistence
 
 
 # Password validation
