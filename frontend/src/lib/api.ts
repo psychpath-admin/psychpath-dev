@@ -490,6 +490,15 @@ export async function checkPDQuality(text: string, fieldType: 'activity_details'
   return res.json()
 }
 
+export async function checkSupervisionQuality(text: string, fieldType: 'supervision_summary') {
+  const res = await apiFetch('/api/section-c/check-quality/', {
+    method: 'POST',
+    body: JSON.stringify({ text, field_type: fieldType })
+  })
+  if (!res.ok) throw new Error('Failed to check supervision quality')
+  return res.json()
+}
+
 // Section C - Supervision API functions
 export async function getSupervisionEntries(): Promise<SupervisionEntry[]> {
   const res = await apiFetch('/api/section-c/entries/')

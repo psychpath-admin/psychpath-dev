@@ -1,11 +1,14 @@
 from rest_framework import viewsets, status, permissions, serializers
 from rest_framework.response import Response
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from django.db.models import Sum
 from datetime import timedelta, datetime
 from .models import SupervisionEntry, SupervisionWeeklySummary
 from api.models import UserProfile
 from .serializers import SupervisionEntrySerializer, SupervisionWeeklySummarySerializer
+from .quality_validator import SupervisionQualityValidator
+from .writing_prompts import SupervisionWritingPrompts
 from permissions import TenantPermissionMixin, RoleBasedPermission, DenyOrgAdmin
 from logging_utils import support_error_handler, audit_data_access, log_data_access
 
@@ -178,3 +181,22 @@ class SupervisionEntryViewSet(TenantPermissionMixin, viewsets.ModelViewSet):
             'limit_exceeded': short_session_hours > limit_hours
         }
         return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def check_supervision_quality(request):
+    """Check quality of supervision summary"""
+    text = request.data.get('text', '')
+    field_type = request.data.get('field_type', 'supervision_summary')
+    
+    validator = SupervisionQualityValidator()
+    prompts_provider = SupervisionWritingPrompts()
+    
+    if field_type == 'supervision_summary':
+        result = validator.validate_supervision_summary(text)
+        result['prompts'] = prompts_provider.get_supervision_summary_prompts(text)
+    else:
+        return Response({'error': 'Invalid field_type'}, status=400)
+    
+    return Response(result)

@@ -28,13 +28,15 @@ import {
   getSupervisionEntriesGroupedByWeek, 
   createSupervisionEntry, 
   updateSupervisionEntry, 
-  deleteSupervisionEntry
+  deleteSupervisionEntry,
+  checkSupervisionQuality
 } from '@/lib/api'
 import type { SupervisionEntry, SupervisionWeeklyGroup, ShortSessionStats } from '@/types/supervision'
 import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { InfoIcon } from 'lucide-react'
+import { QualityFeedback } from '@/components/QualityFeedback'
 
 interface UserProfile {
   id?: number
@@ -95,6 +97,10 @@ const SectionC: React.FC = () => {
   const [showTooltips, setShowTooltips] = useState(true)
   const [formErrors, setFormErrors] = useState<{[key: string]: string}>({})
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  
+  // Quality checking state
+  const [summaryQuality, setSummaryQuality] = useState<any>(null)
+  const [showSummaryPrompts, setShowSummaryPrompts] = useState(false)
   const [formData, setFormData] = useState({
     date_of_supervision: new Date().toISOString().split('T')[0],
     supervisor_name: '',
@@ -614,6 +620,19 @@ const SectionC: React.FC = () => {
       toast.error('Failed to save supervision entry')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSummaryBlur = async () => {
+    if (!formData.summary || formData.summary.trim().length < 5) {
+      return
+    }
+
+    try {
+      const result = await checkSupervisionQuality(formData.summary, 'supervision_summary')
+      setSummaryQuality(result)
+    } catch (error) {
+      console.error('Error checking summary quality:', error)
     }
   }
 
@@ -2123,6 +2142,7 @@ const SectionC: React.FC = () => {
                   <textarea
                     value={formData.summary}
                     onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+                    onBlur={handleSummaryBlur}
                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primaryBlue placeholder:text-gray-600 ${formErrors.summary ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300'}`}
                     rows={4}
                     placeholder="Enter supervision summary and key points discussed"
@@ -2130,6 +2150,17 @@ const SectionC: React.FC = () => {
                   />
                   {formErrors.summary && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.summary}</p>
+                  )}
+                  {summaryQuality && (
+                    <QualityFeedback
+                      quality={summaryQuality.quality === 'excellent' ? 'strong' : summaryQuality.quality === 'good' ? 'adequate' : 'basic'}
+                      score={summaryQuality.score || 0}
+                      feedback={summaryQuality.feedback || []}
+                      prompts={summaryQuality.prompts || []}
+                      showPrompts={showSummaryPrompts}
+                      onGetSuggestions={() => setShowSummaryPrompts(!showSummaryPrompts)}
+                      fieldType={'supervision_summary'}
+                    />
                   )}
                 </div>
 
