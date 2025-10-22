@@ -636,4 +636,141 @@ export async function getProgressReportDashboardStats() {
   return res.json()
 }
 
+// ===== SUPERVISION AGENDA API FUNCTIONS =====
+
+export async function getSupervisionAgendas() {
+  const res = await apiFetch('/api/supervision-agenda/agendas/')
+  if (!res.ok) throw new Error('Failed to fetch supervision agendas')
+  return res.json()
+}
+
+export async function createSupervisionAgenda(data: { week_starting: string }) {
+  const res = await apiFetch('/api/supervision-agenda/agendas/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to create supervision agenda')
+  return res.json()
+}
+
+export async function getSupervisionAgenda(id: number) {
+  const res = await apiFetch(`/api/supervision-agenda/agendas/${id}/`)
+  if (!res.ok) throw new Error('Failed to fetch supervision agenda')
+  return res.json()
+}
+
+export async function updateSupervisionAgenda(id: number, data: { week_starting: string }) {
+  const res = await apiFetch(`/api/supervision-agenda/agendas/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to update supervision agenda')
+  return res.json()
+}
+
+export async function deleteSupervisionAgenda(id: number) {
+  const res = await apiFetch(`/api/supervision-agenda/agendas/${id}/`, {
+    method: 'DELETE'
+  })
+  if (!res.ok) throw new Error('Failed to delete supervision agenda')
+  return res.ok
+}
+
+export async function getAgendaItems() {
+  const res = await apiFetch('/api/supervision-agenda/items/')
+  if (!res.ok) throw new Error('Failed to fetch agenda items')
+  return res.json()
+}
+
+export async function createAgendaItem(data: {
+  title: string;
+  detail?: string;
+  priority?: 'low' | 'medium' | 'high';
+  source_type?: 'A' | 'B' | 'FREE';
+  source_entry_id?: number;
+  source_field?: string;
+  source_excerpt?: string;
+  agenda: number;
+}) {
+  const res = await apiFetch('/api/supervision-agenda/items/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to create agenda item')
+  return res.json()
+}
+
+export async function getAgendaItem(id: number) {
+  const res = await apiFetch(`/api/supervision-agenda/items/${id}/`)
+  if (!res.ok) throw new Error('Failed to fetch agenda item')
+  return res.json()
+}
+
+export async function updateAgendaItem(id: number, data: {
+  title?: string;
+  detail?: string;
+  priority?: 'low' | 'medium' | 'high';
+  status?: 'open' | 'discussed' | 'carried' | 'discarded';
+  my_reflection?: string;
+  discussed_on?: string;
+  imported_to_section_c?: boolean;
+}) {
+  const res = await apiFetch(`/api/supervision-agenda/items/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to update agenda item')
+  return res.json()
+}
+
+export async function deleteAgendaItem(id: number) {
+  const res = await apiFetch(`/api/supervision-agenda/items/${id}/`, {
+    method: 'DELETE'
+  })
+  if (!res.ok) throw new Error('Failed to delete agenda item')
+  return res.ok
+}
+
+export async function markAgendaItemReadyForSectionC(id: number) {
+  const res = await apiFetch(`/api/supervision-agenda/items/${id}/mark_ready_for_section_c/`, {
+    method: 'POST'
+  })
+  if (!res.ok) throw new Error('Failed to mark agenda item ready for Section C')
+  return res.json()
+}
+
+export async function addAgendaItemReflection(id: number, reflection: string) {
+  const res = await apiFetch(`/api/supervision-agenda/items/${id}/add_reflection/`, {
+    method: 'POST',
+    body: JSON.stringify({ reflection })
+  })
+  if (!res.ok) throw new Error('Failed to add reflection to agenda item')
+  return res.json()
+}
+
+export async function getReadyForImportItems() {
+  const res = await apiFetch('/api/supervision-agenda/items/ready_for_import/')
+  if (!res.ok) throw new Error('Failed to fetch items ready for import')
+  return res.json()
+}
+
+export async function importToSectionC(data: {
+  item_ids: number[];
+  section_c_id: string;
+  entry_type: 'question' | 'comment' | 'action';
+}) {
+  const res = await apiFetch('/api/supervision-agenda/imports/import_to_section_c/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to import items to Section C')
+  return res.json()
+}
+
+export async function getSectionCImports() {
+  const res = await apiFetch('/api/supervision-agenda/imports/')
+  if (!res.ok) throw new Error('Failed to fetch Section C imports')
+  return res.json()
+}
+
 

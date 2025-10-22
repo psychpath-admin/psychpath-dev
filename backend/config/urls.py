@@ -38,4 +38,5 @@ urlpatterns = [
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('support/', include('support.urls')),
     path('api/internship/', include('internship_validation.urls')),
+    path('api/supervision-agenda/', include('supervision_agenda.urls')),
 ]

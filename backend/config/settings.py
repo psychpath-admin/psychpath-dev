@@ -117,6 +117,7 @@ INSTALLED_APPS = [
     'section_a',
     'section_b',
     'section_c',
+    'supervision_agenda', # Private trainee-only supervision agenda
     'support',
     'internship_validation', # Added internship validation app
 ]
