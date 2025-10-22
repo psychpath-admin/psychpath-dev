@@ -26,9 +26,10 @@ def suggest_pd_competencies(request):
     """Suggest PD competencies based on activity details and topics"""
     activity_details = request.data.get('activity_details', '')
     topics_covered = request.data.get('topics_covered', '')
+    reflection = request.data.get('reflection', '')
     
     # Combine text for analysis
-    combined_text = f"{activity_details} {topics_covered}".lower()
+    combined_text = f"{activity_details} {topics_covered} {reflection}".lower()
     
     # Get all available PD competencies
     all_competencies = PDCompetency.objects.filter(is_active=True)

@@ -28,7 +28,8 @@ import {
   createPDEntry, 
   updatePDEntry, 
   deletePDEntry,
-  checkPDQuality
+  checkPDQuality,
+  suggestPDCompetencies
 } from '@/lib/api'
 import type { PDEntry, PDCompetency, PDWeeklyGroup } from '@/types/pd'
 import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationUtils'
@@ -290,6 +291,8 @@ const SectionB: React.FC = () => {
   const [showTopicsPrompts, setShowTopicsPrompts] = useState(false)
   const [reflectionQuality, setReflectionQuality] = useState<any>(null)
   const [showReflectionPrompts, setShowReflectionPrompts] = useState(false)
+  const [suggestedCompetencies, setSuggestedCompetencies] = useState<any[]>([])
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
 
   // Normalize backend labels to QualityFeedback expectations
   const normalizeQuality = (q: string | null | undefined) => {
@@ -633,6 +636,27 @@ const SectionB: React.FC = () => {
         ? prev.competencies_covered.filter(c => c !== competencyName)
         : [...prev.competencies_covered, competencyName]
     }))
+  }
+
+  const fetchAllFieldCompetencySuggestions = async () => {
+    if (!formData.activity_details && !formData.topics_covered && !formData.reflection) {
+      toast.error('Enter Activity Details, Topics, or Reflection to get suggestions')
+      return
+    }
+    setLoadingSuggestions(true)
+    try {
+      const result = await suggestPDCompetencies({
+        activity_details: formData.activity_details || '',
+        topics_covered: formData.topics_covered || '',
+        reflection: formData.reflection || ''
+      })
+      setSuggestedCompetencies(result.suggested_competencies || [])
+    } catch (error) {
+      console.error('Error fetching competency suggestions:', error)
+      toast.error('Failed to get competency suggestions')
+    } finally {
+      setLoadingSuggestions(false)
+    }
   }
 
 
@@ -1840,14 +1864,27 @@ const SectionB: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium">Competencies Covered by Activity</label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open('/competencies-help', '_blank')}
-                    className="text-xs"
-                  >
-                    Help
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={fetchAllFieldCompetencySuggestions}
+                      disabled={loadingSuggestions}
+                      className="text-xs"
+                      title="Suggest from Activity Details, Topics and Reflection"
+                    >
+                      {loadingSuggestions ? 'Suggesting…' : 'Suggest from activity & reflection'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open('/competencies-help', '_blank')}
+                      className="text-xs"
+                    >
+                      Help
+                    </Button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -1879,9 +1916,28 @@ const SectionB: React.FC = () => {
                           ))
                       )}
                     </div>
-                    <div className="text-xs text-gray-500 mt-2">
-                      Click on a competency to select it
-                    </div>
+                    <div className="text-xs text-gray-500 mt-2">Click on a competency to select it</div>
+                    {suggestedCompetencies.length > 0 && (
+                      <div className="mt-4 border border-blue-200 rounded-lg p-3 bg-blue-50">
+                        <div className="text-sm font-medium text-blue-800 mb-2">Suggested Competencies</div>
+                        <div className="space-y-2">
+                          {suggestedCompetencies.map((comp, idx) => (
+                            <div
+                              key={`${comp.id}-${idx}`}
+                              onClick={() => toggleCompetency(comp.name)}
+                              className="p-3 cursor-pointer rounded-md text-sm border border-transparent hover:border-blue-300 hover:bg-white transition-colors"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="font-medium text-gray-800">{comp.name}</div>
+                                <span className="text-xs text-gray-500">score: {comp.score}</span>
+                              </div>
+                              <div className="text-xs text-gray-600 mt-1 line-clamp-2">{comp.description}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-2">Click a suggestion to add it</div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <h4 className="font-medium mb-3 text-gray-700">Selected Competencies</h4>
@@ -1946,7 +2002,8 @@ const SectionB: React.FC = () => {
                   Cancel
                 </Button>
                 <Button 
-                  type="submit"
+                  type="button"
+                  onClick={handleSave}
                   disabled={saving}
                   className="px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium"
                 >

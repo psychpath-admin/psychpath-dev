@@ -459,6 +459,7 @@ export async function deletePDEntry(id: number): Promise<void> {
 export async function suggestPDCompetencies(data: {
   activity_details: string
   topics_covered: string
+  reflection?: string
 }): Promise<{ 
   suggested_competencies: Array<{
     id: number
@@ -470,7 +471,11 @@ export async function suggestPDCompetencies(data: {
 }> {
   const res = await apiFetch('/api/section-b/suggest-competencies/', {
     method: 'POST',
-    body: JSON.stringify(data)
+    body: JSON.stringify({
+      activity_details: data.activity_details,
+      topics_covered: data.topics_covered,
+      reflection: data.reflection ?? ''
+    })
   })
   if (!res.ok) throw new Error('Failed to get competency suggestions')
   return res.json()
