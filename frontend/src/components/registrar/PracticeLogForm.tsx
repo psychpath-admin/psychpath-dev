@@ -42,6 +42,7 @@ export function PracticeLogForm({ entry, onSubmit, onCancel, saving }: PracticeL
             id="date"
             value={formData.date}
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+            max={new Date().toISOString().split('T')[0]}
             required
             className="w-full"
           />

@@ -654,6 +654,7 @@ export default function LogbookEditor() {
                       type="date"
                       value={entryForm.date}
                       onChange={(e) => setEntryForm({ ...entryForm, date: e.target.value })}
+                      max={new Date().toISOString().split('T')[0]}
                       required
                     />
                   </div>

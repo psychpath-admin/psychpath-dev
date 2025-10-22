@@ -27,13 +27,15 @@ import {
   getPDCompetencies, 
   createPDEntry, 
   updatePDEntry, 
-  deletePDEntry
+  deletePDEntry,
+  checkPDQuality
 } from '@/lib/api'
 import type { PDEntry, PDCompetency, PDWeeklyGroup } from '@/types/pd'
 import { formatDurationWithUnit, formatDurationDisplay } from '@/utils/durationUtils'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { InfoIcon } from 'lucide-react'
+import { QualityFeedback } from '@/components/QualityFeedback'
 
 const SectionB: React.FC = () => {
   const [weeklyGroups, setWeeklyGroups] = useState<PDWeeklyGroup[]>([])
@@ -62,7 +64,6 @@ const SectionB: React.FC = () => {
   
   // New PD-specific filters
   const [competencyFilter, setCompetencyFilter] = useState<string[]>([])
-  const [reviewedFilter, setReviewedFilter] = useState('all') // 'all', 'reviewed', 'not_reviewed'
 
 
   const formatDateDDMMYYYY = (dateString: string) => {
@@ -121,7 +122,6 @@ const SectionB: React.FC = () => {
     setGroupByWeek(false)
     setSearchTerm('')
     setCompetencyFilter([])
-    setReviewedFilter('all')
     setCurrentPage(1)
   }
 
@@ -152,7 +152,7 @@ const SectionB: React.FC = () => {
   }
 
   // Check if any filters are active
-  const hasActiveFilters = dateFrom || dateTo || activityType !== 'all' || durationMin || durationMax || groupByWeek || competencyFilter.length > 0 || reviewedFilter !== 'all'
+  const hasActiveFilters = dateFrom || dateTo || activityType !== 'all' || durationMin || durationMax || groupByWeek || competencyFilter.length > 0
 
   // Get all entries from weekly groups
   const allEntries = weeklyGroups.flatMap(group => group.entries)
@@ -197,9 +197,6 @@ const SectionB: React.FC = () => {
       if (!hasMatchingCompetency) return false
     }
 
-    // Supervisor review filter
-    if (reviewedFilter === 'reviewed' && !entry.reviewed_in_supervision) return false
-    if (reviewedFilter === 'not_reviewed' && entry.reviewed_in_supervision) return false
 
     return true
   })
@@ -283,10 +280,30 @@ const SectionB: React.FC = () => {
     activity_details: '',
     topics_covered: '',
     competencies_covered: [] as string[],
-    reflection: '',
-    reviewed_in_supervision: false,
-    supervisor_initials: ''
+    reflection: ''
   })
+
+  // Quality feedback state for Activity Details
+  const [activityDetailsQuality, setActivityDetailsQuality] = useState<any>(null)
+  const [showActivityDetailsPrompts, setShowActivityDetailsPrompts] = useState(false)
+  const [topicsQuality, setTopicsQuality] = useState<any>(null)
+  const [showTopicsPrompts, setShowTopicsPrompts] = useState(false)
+  const [reflectionQuality, setReflectionQuality] = useState<any>(null)
+  const [showReflectionPrompts, setShowReflectionPrompts] = useState(false)
+
+  // Normalize backend labels to QualityFeedback expectations
+  const normalizeQuality = (q: string | null | undefined) => {
+    if (!q) return null
+    const map: Record<string, 'strong' | 'adequate' | 'basic'> = {
+      excellent: 'strong',
+      good: 'adequate',
+      needs_improvement: 'basic',
+      strong: 'strong',
+      adequate: 'adequate',
+      basic: 'basic'
+    }
+    return map[q] ?? 'basic'
+  }
 
   const activityTypes = [
     'WORKSHOP', 'WEBINAR', 'LECTURE', 'PRESENTATION', 
@@ -514,8 +531,6 @@ const SectionB: React.FC = () => {
       topics_covered: '',
       competencies_covered: [],
       reflection: '',
-      reviewed_in_supervision: false,
-      supervisor_initials: ''
     })
     setEditingEntry(null)
     setShowForm(true)
@@ -531,8 +546,6 @@ const SectionB: React.FC = () => {
       topics_covered: entry.topics_covered,
       competencies_covered: entry.competencies_covered,
       reflection: entry.reflection || '',
-      reviewed_in_supervision: entry.reviewed_in_supervision || false,
-      supervisor_initials: (entry as any).supervisor_initials || ''
     })
     setEditingEntry(entry)
     setShowForm(true)
@@ -576,6 +589,39 @@ const SectionB: React.FC = () => {
         loadData()
       } catch (error) {
         console.error('Error deleting entry:', error)
+      }
+    }
+  }
+
+  const handleActivityDetailsBlur = async () => {
+    if (formData.activity_details && formData.activity_details.length >= 10) {
+      try {
+        const result = await checkPDQuality(formData.activity_details, 'activity_details')
+        setActivityDetailsQuality(result)
+      } catch (error) {
+        console.error('Error checking activity details quality:', error)
+      }
+    }
+  }
+
+  const handleTopicsCoveredBlur = async () => {
+    if (formData.topics_covered && formData.topics_covered.length >= 5) {
+      try {
+        const result = await checkPDQuality(formData.topics_covered, 'topics_covered')
+        setTopicsQuality(result)
+      } catch (error) {
+        console.error('Error checking topics quality:', error)
+      }
+    }
+  }
+
+  const handleReflectionBlur = async () => {
+    if (formData.reflection && formData.reflection.length >= 10) {
+      try {
+        const result = await checkPDQuality(formData.reflection, 'reflection')
+        setReflectionQuality(result)
+      } catch (error) {
+        console.error('Error checking reflection quality:', error)
       }
     }
   }
@@ -676,7 +722,6 @@ const SectionB: React.FC = () => {
                 <div>Professional development activities help you maintain, improve and broaden your knowledge and competencies.</div>
                 <div><strong>Examples:</strong> Lectures, seminars, workshops, conferences, readings, audiovisual materials, self-directed learning.</div>
                 <div><strong>Active PD:</strong> Activities that engage you through written/oral tasks to enhance and test learning.</div>
-                <div><strong>Supervisor Approval:</strong> All PD activities must be approved by your supervisor and relate to core competencies.</div>
                 <div><strong>Record Keeping:</strong> Keep receipts, certificates, notes as verification. AHPRA may audit at any time.</div>
               </div>
             </AlertDescription>
@@ -720,9 +765,6 @@ const SectionB: React.FC = () => {
 
           const ragStatus = getRAGStatus(progressRatio)
 
-          // Supervisor review tracking
-          const reviewedEntries = allEntries.filter(entry => entry.reviewed_in_supervision).length
-          const reviewPercentage = totalEntries > 0 ? (reviewedEntries / totalEntries) * 100 : 0
 
           return (
             <>
@@ -908,49 +950,6 @@ const SectionB: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Supervisor Reviews */}
-                <div className="relative group">
-                  <Card className="brand-card hover:shadow-md transition-all duration-300">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="h-12 w-12 bg-blue-500/10 rounded-full flex items-center justify-center">
-                          <Eye className="h-6 w-6 text-blue-600" />
-                        </div>
-                        <Badge variant="outline" className="text-blue-600 border-blue-600 text-xs font-semibold">
-                          {reviewPercentage.toFixed(0)}%
-                        </Badge>
-                      </div>
-                      <div className="text-2xl font-bold text-textDark mb-1">
-                        {reviewedEntries}/{totalEntries}
-                      </div>
-                      <div className="text-xs font-semibold text-textDark mb-1 font-body">Supervisor Reviews</div>
-                      <div className="text-xs text-textLight mb-2">Target: ≥75% reviewed</div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all duration-500 ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-                          style={{ width: `${Math.min(reviewPercentage, 100)}%` }}
-                        ></div>
-                      </div>
-                      <div className="text-xs text-textLight mt-1">
-                        {reviewPercentage >= 75 ? '✓ Target met' : `${(75 - reviewPercentage).toFixed(1)}% to target`}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Tooltip */}
-                    <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg transition-opacity duration-200 pointer-events-none z-50 ${showTooltips ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}>
-                    <div className="font-semibold mb-2">Supervisor Reviews</div>
-                    <div className="mb-2">Tracks how many of your PD entries have been reviewed and discussed with your supervisor.</div>
-                    <div className="mb-2"><strong>Reviewed Entries:</strong> {reviewedEntries} out of {totalEntries} total</div>
-                    <div className="mb-2"><strong>Review Percentage:</strong> {reviewPercentage.toFixed(1)}%</div>
-                    <div className="mb-2"><strong>Target:</strong> ≥75% of entries reviewed</div>
-                    <div className="mb-2"><strong>Status:</strong> {reviewPercentage >= 75 ? '✓ Target met' : `${(75 - reviewPercentage).toFixed(1)}% to target`}</div>
-                    <div className="text-xs text-gray-300">
-                      <strong>Importance:</strong> Supervisor review ensures quality and learning from PD activities
-                    </div>
-                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                  </div>
-                </div>
             </div>
 
               {/* Compliance Summary */}
@@ -965,10 +964,6 @@ const SectionB: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <div className={`w-3 h-3 rounded-full ${ragStatus.status === 'green' ? 'bg-green-500' : ragStatus.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></div>
                       <span className="font-medium">Progress Ratio: {(progressRatio * 100).toFixed(1)}% (Target: 100%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${reviewPercentage >= 75 ? 'bg-green-500' : reviewPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                      <span className="font-medium">Supervisor Reviews: {reviewPercentage.toFixed(1)}% (Target: ≥75%)</span>
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -1105,14 +1100,6 @@ const SectionB: React.FC = () => {
                       </button>
                     </Badge>
                   ))}
-                  {reviewedFilter !== 'all' && (
-                    <Badge variant="secondary" className="bg-accent/10 text-accent">
-                      Review: {reviewedFilter === 'reviewed' ? 'Reviewed' : 'Not Reviewed'}
-                      <button onClick={() => setReviewedFilter('all')} className="ml-2 hover:bg-accent/20 rounded-full p-0.5">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  )}
                 </>
               )}
             </div>
@@ -1224,20 +1211,6 @@ const SectionB: React.FC = () => {
                 </div>
               </div>
 
-              {/* Supervisor Review Filter */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Supervisor Review</label>
-                <Select value={reviewedFilter} onValueChange={setReviewedFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All entries" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All entries</SelectItem>
-                    <SelectItem value="reviewed">Reviewed only</SelectItem>
-                    <SelectItem value="not_reviewed">Not reviewed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
             
             {/* Sort and Pagination Controls */}
@@ -1363,11 +1336,6 @@ const SectionB: React.FC = () => {
                                 <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
                                   {entry.is_active_activity ? 'Active' : 'Passive'}
                                 </Badge>
-                                {entry.reviewed_in_supervision && (
-                                  <Badge variant="outline" className="text-xs text-green-600 border-green-600">
-                                    ✓ Reviewed
-                                  </Badge>
-                                )}
                               </div>
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-textLight" />
@@ -1468,7 +1436,6 @@ const SectionB: React.FC = () => {
                                     <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.date_of_activity)}</div>
                                     <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
                                     <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
-                                    <div><span className="font-medium">Reviewed:</span> {entry.reviewed_in_supervision ? 'Yes' : 'No'}</div>
           </div>
         </div>
 
@@ -1529,11 +1496,6 @@ const SectionB: React.FC = () => {
                         <Badge variant={entry.is_active_activity ? "default" : "secondary"} className="text-xs">
                           {entry.is_active_activity ? 'Active' : 'Passive'}
                         </Badge>
-                        {entry.reviewed_in_supervision && (
-                          <Badge variant="outline" className="text-xs text-green-600 border-green-600">
-                            ✓ Reviewed
-                          </Badge>
-                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-textLight" />
@@ -1634,7 +1596,6 @@ const SectionB: React.FC = () => {
                             <div><span className="font-medium">Date:</span> {formatDateDDMMYYYY(entry.date_of_activity)}</div>
                             <div><span className="font-medium">Duration:</span> {formatDuration(entry.duration_minutes)}</div>
                             <div><span className="font-medium">Active:</span> {entry.is_active_activity ? 'Yes' : 'No'}</div>
-                            <div><span className="font-medium">Reviewed:</span> {entry.reviewed_in_supervision ? 'Yes' : 'No'}</div>
                           </div>
                         </div>
 
@@ -1841,8 +1802,18 @@ const SectionB: React.FC = () => {
                 <textarea
                   value={formData.activity_details}
                   onChange={(e) => setFormData(prev => ({ ...prev, activity_details: e.target.value }))}
+                  onBlur={handleActivityDetailsBlur}
                   className="w-full p-2 border rounded h-20 placeholder:text-gray-600"
                   placeholder="E.g. name of course, presenter, institution etc"
+                />
+                <QualityFeedback
+                  quality={normalizeQuality(activityDetailsQuality?.quality)}
+                  score={activityDetailsQuality?.score || 0}
+                  feedback={activityDetailsQuality?.feedback || []}
+                  prompts={activityDetailsQuality?.prompts || []}
+                  showPrompts={showActivityDetailsPrompts}
+                  onGetSuggestions={() => setShowActivityDetailsPrompts(!showActivityDetailsPrompts)}
+                  fieldType={'presenting_issues'}
                 />
               </div>
 
@@ -1851,8 +1822,18 @@ const SectionB: React.FC = () => {
                 <textarea
                   value={formData.topics_covered}
                   onChange={(e) => setFormData(prev => ({ ...prev, topics_covered: e.target.value }))}
+                  onBlur={handleTopicsCoveredBlur}
                   className="w-full p-2 border rounded h-20 placeholder:text-gray-600"
                   placeholder="E.g. behavioural interventions for ADHD in adolescents"
+                />
+                <QualityFeedback
+                  quality={normalizeQuality(topicsQuality?.quality)}
+                  score={topicsQuality?.score || 0}
+                  feedback={topicsQuality?.feedback || []}
+                  prompts={topicsQuality?.prompts || []}
+                  showPrompts={showTopicsPrompts}
+                  onGetSuggestions={() => setShowTopicsPrompts(!showTopicsPrompts)}
+                  fieldType={'presenting_issues'}
                 />
               </div>
 
@@ -1938,36 +1919,21 @@ const SectionB: React.FC = () => {
                 <textarea
                   value={formData.reflection}
                   onChange={(e) => setFormData(prev => ({ ...prev, reflection: e.target.value }))}
+                  onBlur={handleReflectionBlur}
                   className="w-full p-2 border rounded h-24 placeholder:text-gray-600"
                   placeholder="Reflect on how this activity contributed to your professional development..."
                 />
-              </div>
-
-              <div>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.reviewed_in_supervision}
-                    onChange={(e) => setFormData(prev => ({ ...prev, reviewed_in_supervision: e.target.checked }))}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm font-medium">Reviewed with Supervisor</span>
-                </label>
-                <p className="text-xs text-gray-500 mt-1">Mark this if you've discussed this PD activity with your supervisor</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Supervisor Initials</label>
-                <Input
-                  type="text"
-                  value={formData.supervisor_initials}
-                  onChange={(e) => setFormData(prev => ({ ...prev, supervisor_initials: e.target.value }))}
-                  placeholder="Will be filled by supervisor"
-                  disabled
-                  className="bg-gray-100"
+                <QualityFeedback
+                  quality={normalizeQuality(reflectionQuality?.quality)}
+                  score={reflectionQuality?.score || 0}
+                  feedback={reflectionQuality?.feedback || []}
+                  prompts={reflectionQuality?.prompts || []}
+                  showPrompts={showReflectionPrompts}
+                  onGetSuggestions={() => setShowReflectionPrompts(!showReflectionPrompts)}
+                  fieldType={'reflection'}
                 />
-                <p className="text-xs text-gray-500 mt-1">Your supervisor will initial this entry to confirm review and discussion</p>
               </div>
+
               </div>
 
               <div className="flex justify-end gap-4 pt-6 border-t border-gray-200 mt-6 px-6 pb-6">

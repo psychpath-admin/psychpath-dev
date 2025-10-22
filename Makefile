@@ -11,7 +11,7 @@ MANAGE := $(VENV_PY) $(BACKEND_DIR)/manage.py
 help:
 	@echo "Available targets:"
 	@echo "  setup             - Set up virtual environment and install dependencies"
-	@echo "  dev-up            - Run backend (SQLite) and frontend dev servers (foreground)"
+	@echo "  dev-up            - Run backend (PostgreSQL) and frontend dev servers (foreground)"
 	@echo "  dev-start         - Start development servers in background"
 	@echo "  dev-stop          - Stop development servers"
 	@echo "  dev-status        - Check status of development servers"
@@ -19,12 +19,13 @@ help:
 	@echo "  backend-health    - Check backend server health"
 	@echo "  backend-restart   - Restart backend server with monitoring"
 	@echo "  restart-all       - Restart both backend and frontend servers"
-	@echo "  db-backup         - Create timestamped SQLite backup"
-	@echo "  db-restore        - Restore SQLite from SNAPSHOT=path/to/file"
+	@echo "  db-backup         - Create timestamped PostgreSQL backup"
+	@echo "  db-restore        - Restore PostgreSQL from SNAPSHOT=path/to/file"
 	@echo "  db-reset          - Backup, reset DB, run migrations"
 	@echo "  migrate           - Apply migrations"
 	@echo "  makemigrations    - Create migrations"
 	@echo "  seed-demo         - Seed demo users/data"
+	@echo "  setup-test-user   - Setup consistent test user for development"
 	@echo "  check             - Migrations check (dry-run)"
 	@echo "  eod               - End-of-day: code tag + DB snapshot (MSG='note')"
 
@@ -62,6 +63,8 @@ dev-start:
 		echo "Virtual environment not found. Running setup..."; \
 		$(MAKE) setup; \
 	fi
+	@echo "Setting up consistent test user..."
+	@$(MAKE) setup-test-user
 	@echo "Starting backend (PostgreSQL) on :8000..."
 	@cd $(BACKEND_DIR) && ./venv/bin/python3 manage.py runserver 0.0.0.0:8000 > ../logs/backend.log 2>&1 &
 	@echo $$! > .backend.pid
@@ -72,6 +75,7 @@ dev-start:
 	@echo "Development servers started!"
 	@echo "Backend: http://localhost:8000 (PID: $$(cat .backend.pid))"
 	@echo "Frontend: http://localhost:5173 (PID: $$(cat .frontend.pid))"
+	@echo "Test user: intern4.demo@cymp.com.au / testpass123"
 	@echo "Logs: logs/backend.log and logs/frontend.log"
 	@echo "Use 'make dev-stop' to stop the servers"
 
@@ -119,14 +123,13 @@ db-backup:
 
 .PHONY: db-restore
 db-restore:
-	@if [ -z "$(SNAPSHOT)" ]; then echo "Usage: make db-restore SNAPSHOT=backend/backups/db-YYYYmmdd-HHMMSS.sqlite3"; exit 1; fi
+	@if [ -z "$(SNAPSHOT)" ]; then echo "Usage: make db-restore SNAPSHOT=backend/backups/db-YYYYmmdd-HHMMSS.sql"; exit 1; fi
 	@bash $(BACKEND_DIR)/scripts/db_restore.sh "$(SNAPSHOT)"
 
 .PHONY: db-reset
 db-reset:
 	@bash $(BACKEND_DIR)/scripts/db_backup.sh
-	@echo "Resetting SQLite database..."
-	@rm -f $(BACKEND_DIR)/db.sqlite3
+	@echo "Resetting PostgreSQL database..."
 	@$(MANAGE) migrate --noinput
 
 .PHONY: migrate
@@ -140,6 +143,11 @@ makemigrations:
 .PHONY: seed-demo
 seed-demo:
 	@$(MANAGE) seed_demo
+
+.PHONY: setup-test-user
+setup-test-user:
+	@echo "Setting up consistent test user for development..."
+	@cd $(BACKEND_DIR) && ./venv/bin/python3 setup_test_user.py
 
 .PHONY: check
 check:

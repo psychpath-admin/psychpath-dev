@@ -16,6 +16,109 @@ from .serializers import (
     PDWeeklySummarySerializer,
     PDEntryWithSummarySerializer
 )
+from .quality_validator import PDActivityQualityValidator
+from .writing_prompts import PDWritingPrompts
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def suggest_pd_competencies(request):
+    """Suggest PD competencies based on activity details and topics"""
+    activity_details = request.data.get('activity_details', '')
+    topics_covered = request.data.get('topics_covered', '')
+    
+    # Combine text for analysis
+    combined_text = f"{activity_details} {topics_covered}".lower()
+    
+    # Get all available PD competencies
+    all_competencies = PDCompetency.objects.filter(is_active=True)
+    
+    # Score each competency based on keyword matching
+    suggestions = []
+    
+    for comp in all_competencies:
+        score = 0
+        comp_text = f"{comp.name} {comp.description}".lower()
+        
+        # More precise keyword matching with specific boosts
+        # Scientific knowledge and research
+        if any(word in combined_text for word in ['research', 'theory', 'evidence', 'scientific', 'study', 'literature']) and 'scientific' in comp_text:
+            score += 8
+        
+        # Professional ethics
+        if any(word in combined_text for word in ['ethical', 'ethics', 'professional', 'boundaries', 'confidentiality', 'consent']) and 'ethical' in comp_text:
+            score += 8
+        
+        # Self-care and reflexivity
+        if any(word in combined_text for word in ['self-care', 'self care', 'reflexivity', 'reflection', 'wellbeing', 'well-being', 'meditation', 'exercise', 'transference', 'countertransference']) and 'reflexivity' in comp_text:
+            score += 8
+        
+        # Assessment
+        if any(word in combined_text for word in ['assessment', 'testing', 'evaluation', 'diagnosis', 'formulation']) and 'assessment' in comp_text:
+            score += 8
+        
+        # Intervention
+        if any(word in combined_text for word in ['intervention', 'therapy', 'treatment', 'cbt', 'act', 'techniques', 'therapeutic']) and 'intervention' in comp_text:
+            score += 8
+        
+        # Communication
+        if any(word in combined_text for word in ['communication', 'rapport', 'therapeutic relationship', 'empathy', 'listening']) and 'communicates' in comp_text:
+            score += 8
+        
+        # Cultural competence (only if culturally relevant terms are present)
+        if any(word in combined_text for word in ['cultural', 'diversity', 'multicultural', 'indigenous', 'aboriginal', 'torres strait']) and ('cultural' in comp_text or 'diverse' in comp_text):
+            score += 8
+        
+        # Aboriginal and Torres Strait Islander (only if specifically mentioned)
+        if any(word in combined_text for word in ['aboriginal', 'torres strait', 'indigenous', 'first nations']) and 'aboriginal' in comp_text:
+            score += 8
+        
+        # Only include if score is high enough (more restrictive threshold)
+        if score >= 8:
+            suggestions.append({
+                'id': comp.id,
+                'name': comp.name,
+                'description': comp.description,
+                'score': score
+            })
+    
+    # Sort by score and take top 3 (more focused)
+    suggestions.sort(key=lambda x: x['score'], reverse=True)
+    suggestions = suggestions[:3]
+    
+    return Response({
+        'suggested_competencies': suggestions,
+        'count': len(suggestions)
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def check_pd_quality(request):
+    """Check quality of PD activity description"""
+    text = request.data.get('text', '')
+    field_type = request.data.get('field_type', 'activity_details')
+    
+    validator = PDActivityQualityValidator()
+    prompts_provider = PDWritingPrompts()
+    
+    if field_type == 'activity_details':
+        result = validator.validate_activity_details(text)
+        result['prompts'] = prompts_provider.get_activity_details_prompts(text)
+    elif field_type == 'reflection':
+        # Reuse Section A's reflection validator
+        from section_a.quality_validator import ClinicalQualityValidator
+        from section_a.writing_prompts import WritingPrompts
+        validator_a = ClinicalQualityValidator()
+        result = validator_a.validate_reflection(text)
+        result['prompts'] = WritingPrompts.get_reflection_prompts(text)
+    elif field_type == 'topics_covered':
+        result = validator.validate_topics_covered(text)
+        result['prompts'] = prompts_provider.get_topics_prompts(text)
+    else:
+        return Response({'error': 'Invalid field_type'}, status=400)
+    
+    return Response(result)
 
 
 class ProfessionalDevelopmentEntryListCreateView(generics.ListCreateAPIView):

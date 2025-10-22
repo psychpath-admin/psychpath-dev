@@ -150,6 +150,7 @@ export function CPDActivityForm({ activity, categories, onSubmit, onCancel, savi
               id="activity_date"
               value={formData.activity_date}
               onChange={(e) => setFormData({ ...formData, activity_date: e.target.value })}
+              max={new Date().toISOString().split('T')[0]}
               required
               className="w-full"
             />

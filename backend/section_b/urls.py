@@ -7,4 +7,6 @@ urlpatterns = [
     path('competencies/', views.PDCompetencyListView.as_view(), name='pd-competencies-list'),
     path('entries/grouped-by-week/', views.pd_entries_grouped_by_week, name='pd-entries-grouped'),
     path('summary-metrics/', views.pd_summary_metrics, name='pd-summary-metrics'),
+    path('suggest-competencies/', views.suggest_pd_competencies, name='suggest-pd-competencies'),
+    path('check-quality/', views.check_pd_quality, name='check-pd-quality'),
 ]

@@ -103,6 +103,23 @@ class SectionAEntry(models.Model):
         default='evaluation',
         blank=True
     )
+    
+    # Activity type field (for database compatibility)
+    activity_type = models.CharField(
+        max_length=100,
+        default='evaluation',
+        blank=True,
+        help_text="Activity type for database compatibility"
+    )
+    
+    # Custom activity type field (for database compatibility)
+    custom_activity_type = models.CharField(
+        max_length=100,
+        default='',
+        blank=True,
+        help_text="Custom activity type for database compatibility"
+    )
+    
     duration_minutes = models.PositiveIntegerField(null=True, blank=True, help_text="Duration in minutes")
     
     # Session modality

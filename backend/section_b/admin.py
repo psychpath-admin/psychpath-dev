@@ -7,15 +7,15 @@ class ProfessionalDevelopmentEntryAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'trainee', 'activity_type', 'date_of_activity', 
         'duration_minutes', 'is_active_activity', 'week_starting',
-        'supervisor_initials', 'reviewed_in_supervision', 'created_at'
+        'created_at'
     ]
     list_filter = [
-        'activity_type', 'is_active_activity', 'reviewed_in_supervision',
+        'activity_type', 'is_active_activity',
         'week_starting', 'created_at'
     ]
     search_fields = [
         'trainee__username', 'trainee__email', 'activity_details', 
-        'topics_covered', 'supervisor_initials'
+        'topics_covered'
     ]
     readonly_fields = ['created_at', 'updated_at']
     date_hierarchy = 'date_of_activity'
@@ -33,14 +33,9 @@ class ProfessionalDevelopmentEntryAdmin(admin.ModelAdmin):
                 'reflection'
             )
         }),
-        ('Supervision', {
-            'fields': (
-                'supervisor_initials', 'reviewed_in_supervision'
-            )
-        }),
         ('Logbook Integration', {
             'fields': (
-                'locked', 'supervisor_comment', 'trainee_response'
+                'locked',
             )
         }),
         ('System', {

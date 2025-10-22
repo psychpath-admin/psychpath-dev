@@ -456,6 +456,35 @@ export async function deletePDEntry(id: number): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete PD entry')
 }
 
+export async function suggestPDCompetencies(data: {
+  activity_details: string
+  topics_covered: string
+}): Promise<{ 
+  suggested_competencies: Array<{
+    id: number
+    name: string
+    description: string
+    score: number
+  }>
+  count: number
+}> {
+  const res = await apiFetch('/api/section-b/suggest-competencies/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to get competency suggestions')
+  return res.json()
+}
+
+export async function checkPDQuality(text: string, fieldType: 'activity_details' | 'reflection') {
+  const res = await apiFetch('/api/section-b/check-quality/', {
+    method: 'POST',
+    body: JSON.stringify({ text, field_type: fieldType })
+  })
+  if (!res.ok) throw new Error('Failed to check PD quality')
+  return res.json()
+}
+
 // Section C - Supervision API functions
 export async function getSupervisionEntries(): Promise<SupervisionEntry[]> {
   const res = await apiFetch('/api/section-c/entries/')

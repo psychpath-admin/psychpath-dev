@@ -305,6 +305,7 @@ export function CompetencyEvidenceModal({
                       type="date"
                       value={newEvidence.date}
                       onChange={(e) => setNewEvidence(prev => ({ ...prev, date: e.target.value }))}
+                      max={new Date().toISOString().split('T')[0]}
                     />
                   </div>
                 </div>

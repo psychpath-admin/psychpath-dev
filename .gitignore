@@ -142,6 +142,7 @@ temp/
 # Database
 *.sqlite3
 *.db
+temp_restore.db
 
 # Docker
 .dockerignore

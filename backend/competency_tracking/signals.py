@@ -53,7 +53,7 @@ def link_section_b_to_competencies(sender, instance, created, **kwargs):
         # Get competency suggestions based on activity type
         suggested_competencies = suggest_competencies_for_activity(
             activity_type='SECTION_B',
-            description=instance.activity_description,
+            description=instance.activity_details,
             activity_type_name=instance.activity_type
         )
         
@@ -65,8 +65,8 @@ def link_section_b_to_competencies(sender, instance, created, **kwargs):
                     competency=competency,
                     evidence_type='SECTION_B',
                     section_b_entry=instance,
-                    date=instance.activity_date,
-                    description=f"PD: {instance.activity_description[:200]}",
+                    date=instance.date_of_activity,
+                    description=f"PD: {instance.activity_details[:200]}",
                     milestone_level='M2',
                     suggested_by_epa=instance.activity_type,
                     supervisor_validated=False

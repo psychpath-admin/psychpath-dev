@@ -110,6 +110,7 @@ export default function CRAForm({
                     week_starting: newDate ? calculateWeekStarting(newDate) : ''
                   })
                 }}
+                max={new Date().toISOString().split('T')[0]}
                 required
               />
             </div>
