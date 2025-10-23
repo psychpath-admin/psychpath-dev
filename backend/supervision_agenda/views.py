@@ -169,6 +169,16 @@ class AgendaItemViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset().filter(imported_to_section_c=True)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def test_action(self, request):
+        """Test action to verify @action decorator works"""
+        return Response({'message': 'Test action works'})
+    
+    @action(detail=False, methods=['post'])
+    def import_items(self, request):
+        """Import selected agenda items to Section C supervision summary"""
+        return Response({'message': 'Import items action works'})
 
 
 class SectionCImportViewSet(viewsets.ModelViewSet):
@@ -188,58 +198,3 @@ class SectionCImportViewSet(viewsets.ModelViewSet):
             ).order_by('-created_at')
         except UserProfile.DoesNotExist:
             return SectionCImport.objects.none()
-    
-    @action(detail=False, methods=['post'])
-    def import_items(self, request):
-        """Import selected agenda items to Section C"""
-        section_c_id = request.data.get('section_c_id')
-        item_ids = request.data.get('item_ids', [])
-        entry_type = request.data.get('entry_type', 'discussion_point')
-        
-        if not section_c_id or not item_ids:
-            return Response(
-                {'error': 'section_c_id and item_ids required'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            trainee = UserProfile.objects.get(user=request.user)
-            items = AgendaItem.objects.filter(
-                id__in=item_ids,
-                agenda__trainee=trainee,
-                imported_to_section_c=True
-            )
-            
-            if not items.exists():
-                return Response(
-                    {'error': 'No valid items found for import'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Create import records
-            imports = []
-            for item in items:
-                rendered_text = f"**{item.title}**\n\n{item.detail}"
-                if item.my_reflection:
-                    rendered_text += f"\n\n*Reflection: {item.my_reflection}*"
-                
-                import_record = SectionCImport.objects.create(
-                    section_c_id=section_c_id,
-                    agenda_item=item,
-                    entry_type=entry_type,
-                    rendered_text=rendered_text
-                )
-                imports.append(import_record)
-            
-            # Mark items as discussed and remove from ready list
-            items.update(
-                status='discussed',
-                discussed_on=date.today(),
-                imported_to_section_c=False
-            )
-            
-            serializer = self.get_serializer(imports, many=True)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
-        except UserProfile.DoesNotExist:
-            return Response({'error': 'User profile not found'}, status=status.HTTP_404_NOT_FOUND)

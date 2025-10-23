@@ -37,6 +37,7 @@ import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { InfoIcon } from 'lucide-react'
 import { QualityFeedback } from '@/components/QualityFeedback'
+import SupervisionAgendaPanel from '@/components/SupervisionAgendaPanel'
 
 const SectionB: React.FC = () => {
   const [weeklyGroups, setWeeklyGroups] = useState<PDWeeklyGroup[]>([])
@@ -45,6 +46,7 @@ const SectionB: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState<PDEntry | null>(null)
+  const [showSupervisionAgenda, setShowSupervisionAgenda] = useState(false)
 
   // Filter states (matching Section A)
   const [showFilters, setShowFilters] = useState(false)
@@ -2021,6 +2023,27 @@ const SectionB: React.FC = () => {
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Agenda Button */}
+      <button
+        onClick={() => setShowSupervisionAgenda(true)}
+        className="fixed bottom-8 right-8 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 z-40"
+        title="Open My Supervision Agenda"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      {/* Agenda Modal */}
+      {showSupervisionAgenda && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-xl">
+            <SupervisionAgendaPanel 
+              key={showSupervisionAgenda ? Date.now() : 'closed'}
+              onClose={() => setShowSupervisionAgenda(false)}
+            />
           </div>
         </div>
       )}

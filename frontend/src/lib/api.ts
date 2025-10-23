@@ -779,4 +779,17 @@ export async function getSectionCImports() {
   return res.json()
 }
 
+export async function importAgendaItemsToSectionC(data: {
+  section_c_uuid: string;
+  item_ids: number[];
+  entry_type?: 'question' | 'comment' | 'action';
+}) {
+  const res = await apiFetch('/api/supervision-agenda/test-import/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to import agenda items to Section C')
+  return res.json()
+}
+
 

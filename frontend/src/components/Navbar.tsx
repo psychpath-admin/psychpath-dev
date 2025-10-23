@@ -99,6 +99,13 @@ export function Navbar() {
                           <div className="text-xs text-gray-500">Professional Development</div>
                         </div>
                       </Link>
+                      <Link to="/supervision-agenda" className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 text-sm">
+                        <Target className="h-4 w-4 text-teal-600" />
+                        <div>
+                          <div className="font-medium">My Supervision Agenda</div>
+                          <div className="text-xs text-gray-500">Private agenda items for supervision</div>
+                        </div>
+                      </Link>
                     </div>
                   </div>
                 </NavigationMenuContent>

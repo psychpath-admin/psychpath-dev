@@ -31,6 +31,7 @@ import {
   deleteSupervisionEntry,
   checkSupervisionQuality
 } from '@/lib/api'
+import SupervisionAgendaPanel from '@/components/SupervisionAgendaPanel'
 import type { SupervisionEntry, SupervisionWeeklyGroup, ShortSessionStats } from '@/types/supervision'
 import { formatDurationWithUnit, formatDurationDisplay } from '../utils/durationUtils'
 import { toast } from 'sonner'
@@ -79,6 +80,7 @@ const SectionC: React.FC = () => {
   const [editingEntry, setEditingEntry] = useState<SupervisionEntry | null>(null)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
+  const [showSupervisionAgenda, setShowSupervisionAgenda] = useState(false)
 
   // Filter states (matching Section A/B)
   const [showFilters, setShowFilters] = useState(false)
@@ -117,6 +119,9 @@ const SectionC: React.FC = () => {
   const [showAHPRAInfo, setShowAHPRAInfo] = useState(false) // AHPRA collapsible state
   const [saving, setSaving] = useState(false) // Form saving state
   const [shortSessionStats, setShortSessionStats] = useState<ShortSessionStats | null>(null)
+  
+  // Agenda import state
+  const [showAgendaImport, setShowAgendaImport] = useState(false)
 
   // Debug form data changes
   useEffect(() => {
@@ -634,6 +639,18 @@ const SectionC: React.FC = () => {
     } catch (error) {
       console.error('Error checking summary quality:', error)
     }
+  }
+
+  const handleAgendaImport = (importedText: string) => {
+    // Append imported text to existing summary
+    const currentSummary = formData.summary.trim()
+    const newSummary = currentSummary 
+      ? `${currentSummary}\n\n---\n\n${importedText}`
+      : importedText
+    
+    setFormData(prev => ({ ...prev, summary: newSummary }))
+    setShowAgendaImport(false)
+    toast.success('Agenda items imported to supervision summary')
   }
 
   const handleDeleteEntry = async (id: number) => {
@@ -2138,7 +2155,19 @@ const SectionC: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supervision Summary <span className="text-red-500">*</span></label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">Supervision Summary <span className="text-red-500">*</span></label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAgendaImport(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Import from Agenda
+                    </Button>
+                  </div>
                   <textarea
                     value={formData.summary}
                     onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
@@ -2195,6 +2224,40 @@ const SectionC: React.FC = () => {
               </form>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Floating Agenda Button */}
+      <button
+        onClick={() => setShowSupervisionAgenda(true)}
+        className="fixed bottom-8 right-8 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 z-40"
+        title="Open My Supervision Agenda"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      {/* General Agenda Modal */}
+      {showSupervisionAgenda && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-xl">
+            <SupervisionAgendaPanel 
+              key={showSupervisionAgenda ? Date.now() : 'closed'}
+              onClose={() => setShowSupervisionAgenda(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Agenda Import Modal */}
+      {showAgendaImport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-xl">
+            <SupervisionAgendaPanel
+              sectionCUuid={editingEntry?.id?.toString() || 'new-entry'}
+              onImport={handleAgendaImport}
+              onClose={() => setShowAgendaImport(false)}
+            />
+          </div>
         </div>
       )}
       </div>

@@ -47,24 +47,23 @@ export default function AddToAgendaDialog({
     try {
       setLoading(true)
       
-      // Get current week's agenda
+      // For freeform items, always use next week's agenda (next supervision session)
       const agendas = await getSupervisionAgendas()
+      
+      // Calculate next week's Monday (current week + 7 days)
+      const today = new Date()
+      const currentWeekStart = new Date(today)
+      currentWeekStart.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1))
+      const nextWeekStart = new Date(currentWeekStart)
+      nextWeekStart.setDate(currentWeekStart.getDate() + 7)
+      
+      // Look for next week's agenda
       let currentAgenda = agendas.find((agenda: any) => 
-        agenda.week_starting && 
-        new Date(agenda.week_starting) <= new Date() &&
-        new Date(agenda.week_starting).getTime() + (7 * 24 * 60 * 60 * 1000) > new Date().getTime()
+        agenda.week_starting === nextWeekStart.toISOString().split('T')[0]
       )
       
-      // If no agenda for current/next week, create next week's agenda automatically
+      // If no agenda for next week, create it automatically
       if (!currentAgenda) {
-        const today = new Date()
-        const currentWeekStart = new Date(today)
-        currentWeekStart.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1))
-        
-        // Calculate next week's Monday (current week + 7 days)
-        const nextWeekStart = new Date(currentWeekStart)
-        nextWeekStart.setDate(currentWeekStart.getDate() + 7)
-        
         try {
           // Try to create next week's agenda
           const newAgenda = await createSupervisionAgenda({ 

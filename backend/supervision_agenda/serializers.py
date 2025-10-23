@@ -10,7 +10,7 @@ class AgendaItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = AgendaItem
         fields = [
-            'id', 'title', 'detail', 'priority', 'status', 'source_type',
+            'id', 'agenda', 'title', 'detail', 'priority', 'status', 'source_type',
             'source_entry_id', 'source_field', 'source_excerpt', 'my_reflection', 
             'discussed_on', 'imported_to_section_c', 'created_at', 'updated_at'
         ]

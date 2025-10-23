@@ -31,6 +31,7 @@ import LogbookDetailPage from '@/pages/LogbookDetailPage'
 import SectionA from '@/pages/SectionA'
 import SectionB from '@/pages/SectionB'
 import SectionC from '@/pages/SectionC'
+import SupervisionAgendaPage from '@/pages/SupervisionAgendaPage'
 import Dashboard from '@/pages/Dashboard'
 import CRAEdit from '@/pages/CRAEdit'
 import UserProfile from '@/pages/UserProfile'
@@ -198,6 +199,8 @@ function App() {
           <Route path="/cpd" element={<RequireAuth><CPDDashboard /></RequireAuth>} />
           <Route path="/cpd/activities" element={<RequireAuth><CPDActivities /></RequireAuth>} />
           <Route path="/cpd/activities/new" element={<RequireAuth><CPDActivities /></RequireAuth>} />
+          {/* Supervision Agenda Routes */}
+          <Route path="/supervision-agenda" element={<RequireAuth><SupervisionAgendaPage /></RequireAuth>} />
           {/* Progress Reports Routes */}
           <Route path="/progress-reports" element={<RequireAuth><ProgressReports /></RequireAuth>} />
           <Route path="/progress-reports/new" element={<RequireAuth><ProgressReports /></RequireAuth>} />
