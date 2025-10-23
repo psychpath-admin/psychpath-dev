@@ -1,8 +1,10 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Plus } from 'lucide-react'
+import AddToAgendaDialog from './AddToAgendaDialog'
 
 interface ICRAFormProps {
   onSubmit: (data: any) => void
@@ -20,7 +22,6 @@ interface ICRAFormProps {
   title?: string
   onClientIdChange?: (value: string) => void
   clientSuggestions?: string[]
-  isEditing?: boolean
 }
 
 export default function ICRAForm({
@@ -38,11 +39,11 @@ export default function ICRAForm({
   calculateWeekStarting,
   title = 'Add Independent Client Related Activity (ICRA)',
   onClientIdChange,
-  clientSuggestions = [],
-  isEditing = false
+  clientSuggestions = []
 }: ICRAFormProps) {
   const [validationError, setValidationError] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [showAddToAgenda, setShowAddToAgenda] = useState(false)
 
   const handleClientSelect = (client: string) => {
     setEntryForm({ ...entryForm, client_pseudonym: client })
@@ -55,14 +56,25 @@ export default function ICRAForm({
       <Card className="w-full max-w-md">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">{title}</CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-            className="h-8 w-8 p-0"
-          >
-            <span className="text-lg">×</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddToAgenda(true)}
+              className="h-8 px-3 text-xs"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add to Agenda
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              className="h-8 w-8 p-0"
+            >
+              <span className="text-lg">×</span>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={(e) => {
@@ -290,6 +302,17 @@ export default function ICRAForm({
           </form>
         </CardContent>
       </Card>
+      
+      {/* Add to Agenda Dialog */}
+      <AddToAgendaDialog
+        isOpen={showAddToAgenda}
+        onClose={() => setShowAddToAgenda(false)}
+        sourceType="A"
+        sourceField="icra_reflection"
+        sourceExcerpt={entryForm.reflections_on_experience}
+        defaultTitle={`ICRA Discussion - ${entryForm.client_pseudonym || entryForm.client_id}`}
+        defaultDetail={entryForm.reflections_on_experience}
+      />
     </div>
   )
 }

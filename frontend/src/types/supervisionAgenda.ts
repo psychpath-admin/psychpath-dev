@@ -11,6 +11,7 @@ export interface MySupervisionAgenda {
 
 export interface AgendaItem {
   id: number;
+  agenda: number;
   title: string;
   detail: string;
   priority: 'low' | 'medium' | 'high';
@@ -43,6 +44,7 @@ export interface CreateAgendaItemRequest {
   source_entry_id?: number;
   source_field?: string;
   source_excerpt?: string;
+  agenda: number;
 }
 
 export interface UpdateAgendaItemRequest {

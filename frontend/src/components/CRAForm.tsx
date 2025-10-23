@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Save } from 'lucide-react'
+import { Save, Plus } from 'lucide-react'
+import AddToAgendaDialog from './AddToAgendaDialog'
 
 interface CRAFormProps {
   onSubmit: (data: any) => void
@@ -46,19 +47,31 @@ export default function CRAForm({
 }: CRAFormProps) {
   const [validationError, setValidationError] = useState('')
   const [showReflections, setShowReflections] = useState((entryForm.reflections_on_experience || '').length > 0)
+  const [showAddToAgenda, setShowAddToAgenda] = useState(false)
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <Card className="w-full max-w-md">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">{title}</CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-            className="h-8 w-8 p-0"
-          >
-            <span className="text-lg">×</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddToAgenda(true)}
+              className="h-8 px-3 text-xs"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add to Agenda
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              className="h-8 w-8 p-0"
+            >
+              <span className="text-lg">×</span>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={(e) => {
@@ -342,6 +355,18 @@ export default function CRAForm({
           </form>
         </CardContent>
       </Card>
+      
+      {/* Add to Agenda Dialog */}
+      <AddToAgendaDialog
+        isOpen={showAddToAgenda}
+        onClose={() => setShowAddToAgenda(false)}
+        sourceType="A"
+        sourceEntryId={entryForm.parent_dcc_entry}
+        sourceField="cra_reflection"
+        sourceExcerpt={entryForm.reflections_on_experience}
+        defaultTitle={`CRA Discussion - ${entryForm.client_pseudonym || entryForm.client_id}`}
+        defaultDetail={entryForm.reflections_on_experience}
+      />
     </div>
   )
 }

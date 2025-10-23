@@ -1,38 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Calendar, Clock, CheckCircle, Circle, AlertCircle } from 'lucide-react';
-import { 
-  MySupervisionAgenda, 
-  AgendaItem, 
-  CreateAgendaItemRequest 
-} from '@/types/supervisionAgenda';
-import { 
-  getSupervisionAgendas, 
-  createSupervisionAgenda, 
-  getAgendaItems, 
-  createAgendaItem, 
-  updateAgendaItem, 
-  deleteAgendaItem 
-} from '@/lib/api';
+import { Plus } from 'lucide-react';
+import type { AgendaItem, CreateAgendaItemRequest } from '@/types/supervisionAgenda';
+import { getAgendaItems, createAgendaItem, updateAgendaItem, deleteAgendaItem, getSupervisionAgendas } from '@/lib/api';
 
 interface SupervisionAgendaPanelProps {
   onClose?: () => void;
-  onImportToSectionC?: (items: AgendaItem[]) => void;
 }
 
 export default function SupervisionAgendaPanel({ 
-  onClose, 
-  onImportToSectionC 
+  onClose 
 }: SupervisionAgendaPanelProps) {
-  const [agendas, setAgendas] = useState<MySupervisionAgenda[]>([]);
-  const [items, setItems] = useState<AgendaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<AgendaItem[]>([]);
   
   // Form states
   const [showCreateItem, setShowCreateItem] = useState(false);
@@ -40,10 +25,10 @@ export default function SupervisionAgendaPanel({
     title: '',
     detail: '',
     priority: 'medium',
-    source_type: 'FREE'
+    source_type: 'FREE',
+    agenda: 0 // Will be set when creating
   });
 
-  // Load data on component mount
   useEffect(() => {
     loadData();
   }, []);
@@ -53,66 +38,50 @@ export default function SupervisionAgendaPanel({
       setLoading(true);
       setError(null);
       
-      const [agendasData, itemsData] = await Promise.all([
-        getSupervisionAgendas(),
-        getAgendaItems()
-      ]);
-      
-      setAgendas(agendasData);
-      setItems(itemsData);
+      // Get current week agenda first
+      const agenda = await getSupervisionAgendas();
+      if (agenda.length > 0) {
+        setNewItem(prev => ({ ...prev, agenda: agenda[0].id }));
+        // Then get items for this agenda
+        const agendaItems = await getAgendaItems();
+        setItems(agendaItems);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load agenda data');
+      setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCreateItem = async () => {
+    if (!newItem.title.trim()) {
+      setError('Title is required');
+      return;
+    }
+
     try {
-      if (!newItem.title.trim()) {
-        setError('Title is required');
-        return;
-      }
-
-      // Find the current week's agenda or create one
-      let currentAgenda = agendas.find(agenda => 
-        agenda.week_starting === new Date().toISOString().split('T')[0]
-      );
-
-      if (!currentAgenda) {
-        currentAgenda = await createSupervisionAgenda({
-          week_starting: new Date().toISOString().split('T')[0]
-        });
-        setAgendas(prev => [...prev, currentAgenda!]);
-      }
-
-      const createdItem = await createAgendaItem({
-        ...newItem,
-        agenda: currentAgenda.id
-      });
-
+      setError(null);
+      const createdItem = await createAgendaItem(newItem);
       setItems(prev => [...prev, createdItem]);
       setNewItem({
         title: '',
         detail: '',
         priority: 'medium',
-        source_type: 'FREE'
+        source_type: 'FREE',
+        agenda: newItem.agenda
       });
       setShowCreateItem(false);
-      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create agenda item');
+      setError(err instanceof Error ? err.message : 'Failed to create item');
     }
   };
 
   const handleUpdateItem = async (id: number, updates: Partial<AgendaItem>) => {
     try {
       const updatedItem = await updateAgendaItem(id, updates);
-      setItems(prev => prev.map(item => 
-        item.id === id ? updatedItem : item
-      ));
+      setItems(prev => prev.map(item => item.id === id ? updatedItem : item));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update agenda item');
+      setError(err instanceof Error ? err.message : 'Failed to update item');
     }
   };
 
@@ -121,25 +90,7 @@ export default function SupervisionAgendaPanel({
       await deleteAgendaItem(id);
       setItems(prev => prev.filter(item => item.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete agenda item');
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'discussed': return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case 'carried': return <AlertCircle className="w-4 h-4 text-yellow-600" />;
-      case 'discarded': return <Circle className="w-4 h-4 text-gray-400" />;
-      default: return <Circle className="w-4 h-4 text-blue-600" />;
+      setError(err instanceof Error ? err.message : 'Failed to delete item');
     }
   };
 
@@ -147,8 +98,8 @@ export default function SupervisionAgendaPanel({
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading agenda...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading supervision agenda...</p>
         </div>
       </div>
     );
@@ -156,19 +107,15 @@ export default function SupervisionAgendaPanel({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with Add Item and Close buttons */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">My Supervision Agenda</h2>
           <p className="text-gray-600">Private agenda items for your supervision sessions</p>
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={() => setShowCreateItem(true)}
-            className="flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Item
+          <Button onClick={() => setShowCreateItem(true)} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Item
           </Button>
           {onClose && (
             <Button variant="outline" onClick={onClose}>
@@ -198,8 +145,9 @@ export default function SupervisionAgendaPanel({
               </label>
               <Input
                 value={newItem.title}
-                onChange={(e) => setNewItem(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="What do you want to discuss?"
+                onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
+                placeholder="Enter agenda item title"
+                className="w-full"
               />
             </div>
             
@@ -209,9 +157,10 @@ export default function SupervisionAgendaPanel({
               </label>
               <Textarea
                 value={newItem.detail}
-                onChange={(e) => setNewItem(prev => ({ ...prev, detail: e.target.value }))}
-                placeholder="Additional context or notes..."
+                onChange={(e) => setNewItem({ ...newItem, detail: e.target.value })}
+                placeholder="Enter additional details"
                 rows={3}
+                className="w-full"
               />
             </div>
 
@@ -223,7 +172,7 @@ export default function SupervisionAgendaPanel({
                 <Select
                   value={newItem.priority}
                   onValueChange={(value: 'low' | 'medium' | 'high') => 
-                    setNewItem(prev => ({ ...prev, priority: value }))
+                    setNewItem({ ...newItem, priority: value })
                   }
                 >
                   <SelectTrigger>
@@ -244,7 +193,7 @@ export default function SupervisionAgendaPanel({
                 <Select
                   value={newItem.source_type}
                   onValueChange={(value: 'A' | 'B' | 'FREE') => 
-                    setNewItem(prev => ({ ...prev, source_type: value }))
+                    setNewItem({ ...newItem, source_type: value })
                   }
                 >
                   <SelectTrigger>
@@ -252,20 +201,21 @@ export default function SupervisionAgendaPanel({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="FREE">Free-typed</SelectItem>
-                    <SelectItem value="A">From Section A</SelectItem>
-                    <SelectItem value="B">From Section B</SelectItem>
+                    <SelectItem value="A">Section A</SelectItem>
+                    <SelectItem value="B">Section B</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div className="flex gap-2">
-              <Button onClick={handleCreateItem}>
-                Add Item
+              <Button onClick={handleCreateItem} className="flex-1">
+                Create Item
               </Button>
               <Button 
                 variant="outline" 
                 onClick={() => setShowCreateItem(false)}
+                className="flex-1"
               >
                 Cancel
               </Button>
@@ -274,19 +224,14 @@ export default function SupervisionAgendaPanel({
         </Card>
       )}
 
-      {/* Agenda Items List */}
+      {/* Items List */}
       <div className="space-y-4">
         {items.length === 0 ? (
           <Card>
-            <CardContent className="text-center py-8">
-              <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No agenda items yet</h3>
-              <p className="text-gray-600 mb-4">
-                Add items you want to discuss in your next supervision session
-              </p>
+            <CardContent className="p-8 text-center">
+              <p className="text-gray-500 mb-4">No agenda items yet</p>
               <Button onClick={() => setShowCreateItem(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Your First Item
+                Add your first item
               </Button>
             </CardContent>
           </Card>
@@ -296,32 +241,20 @@ export default function SupervisionAgendaPanel({
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      {getStatusIcon(item.status)}
-                      <h3 className="font-medium text-gray-900">{item.title}</h3>
-                      <Badge className={getPriorityColor(item.priority)}>
-                        {item.priority}
-                      </Badge>
-                    </div>
-                    
+                    <h3 className="font-medium text-gray-900 mb-1">{item.title}</h3>
                     {item.detail && (
                       <p className="text-gray-600 text-sm mb-2">{item.detail}</p>
                     )}
-                    
                     <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {item.source_type}
-                      </span>
-                      <span>
-                        {new Date(item.created_at).toLocaleDateString()}
-                      </span>
+                      <span>Priority: {item.priority}</span>
+                      <span>Status: {item.status}</span>
+                      <span>Source: {item.source_type}</span>
+                      <span>{new Date(item.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  
                   <div className="flex gap-1">
-                    <Button
-                      size="sm"
+                    <Button 
+                      size="sm" 
                       variant="outline"
                       onClick={() => handleUpdateItem(item.id, { 
                         status: item.status === 'open' ? 'discussed' : 'open' 
@@ -329,8 +262,8 @@ export default function SupervisionAgendaPanel({
                     >
                       {item.status === 'open' ? 'Mark Discussed' : 'Reopen'}
                     </Button>
-                    <Button
-                      size="sm"
+                    <Button 
+                      size="sm" 
                       variant="outline"
                       onClick={() => handleDeleteItem(item.id)}
                     >

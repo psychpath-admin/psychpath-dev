@@ -35,9 +35,19 @@ class MySupervisionAgendaViewSet(viewsets.ModelViewSet):
             return MySupervisionAgenda.objects.none()
     
     def perform_create(self, serializer):
-        """Create agenda for current trainee"""
+        """Get or create agenda for current trainee"""
         trainee = UserProfile.objects.get(user=self.request.user)
-        serializer.save(trainee=trainee)
+        week_starting = serializer.validated_data.get('week_starting')
+        
+        # Use get_or_create to avoid duplicate key errors
+        agenda, created = MySupervisionAgenda.objects.get_or_create(
+            trainee=trainee,
+            week_starting=week_starting,
+            defaults=serializer.validated_data
+        )
+        
+        # Return the agenda (whether created or existing)
+        serializer.instance = agenda
     
     @action(detail=False, methods=['get'])
     def current_week(self, request):
@@ -104,14 +114,16 @@ class AgendaItemViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Create item with agenda from URL or context"""
-        agenda_id = self.request.data.get('agenda_id')
+        agenda_id = self.request.data.get('agenda_id') or self.request.data.get('agenda')
         if not agenda_id:
             return Response({'error': 'agenda_id required'}, status=status.HTTP_400_BAD_REQUEST)
-        
         try:
             trainee = UserProfile.objects.get(user=self.request.user)
             agenda = get_object_or_404(MySupervisionAgenda, id=agenda_id, trainee=trainee)
-            serializer.save(agenda=agenda)
+            # Ensure serializer has agenda in context because AgendaItemCreateSerializer.create
+            # expects it there (not via kwargs)
+            serializer.context.update({'agenda': agenda})
+            serializer.save()
         except UserProfile.DoesNotExist:
             return Response({'error': 'User profile not found'}, status=status.HTTP_404_NOT_FOUND)
     

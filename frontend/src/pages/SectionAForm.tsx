@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Save, Plus } from 'lucide-react'
+import AddToAgendaDialog from '@/components/AddToAgendaDialog'
 import { 
   createSectionAEntry, 
   updateSectionAEntry, 
@@ -64,6 +65,7 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   })
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showAddToAgenda, setShowAddToAgenda] = useState(false)
   const isEditing = !!entryId
   
   // Autocomplete state
@@ -378,14 +380,24 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" onClick={onCancel}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to DCC Logbook
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <Button variant="outline" onClick={onCancel}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to DCC Logbook
+            </Button>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {isEditing ? 'Edit DCC Entry' : 'Create New DCC Entry'}
+            </h1>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowAddToAgenda(true)}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add to Agenda
           </Button>
-          <h1 className="text-3xl font-bold text-gray-900">
-            {isEditing ? 'Edit DCC Entry' : 'Create New DCC Entry'}
-          </h1>
         </div>
 
         <Card className="max-w-2xl mx-auto">
@@ -787,6 +799,16 @@ function SectionAForm({ onCancel, entryId }: SectionAFormProps) {
         </Card>
       </div>
 
+      {/* Add to Agenda Dialog */}
+      <AddToAgendaDialog
+        isOpen={showAddToAgenda}
+        onClose={() => setShowAddToAgenda(false)}
+        sourceType="A"
+        sourceField="dcc_reflection"
+        sourceExcerpt={formData.reflections_on_experience}
+        defaultTitle={`DCC Discussion - ${formData.client_id}`}
+        defaultDetail={formData.reflections_on_experience}
+      />
     </div>
   )
 }

@@ -641,7 +641,9 @@ export async function getProgressReportDashboardStats() {
 export async function getSupervisionAgendas() {
   const res = await apiFetch('/api/supervision-agenda/agendas/')
   if (!res.ok) throw new Error('Failed to fetch supervision agendas')
-  return res.json()
+  const data = await res.json()
+  // Normalize paginated and non-paginated responses
+  return Array.isArray(data) ? data : (data?.results ?? [])
 }
 
 export async function createSupervisionAgenda(data: { week_starting: string }) {
@@ -679,7 +681,9 @@ export async function deleteSupervisionAgenda(id: number) {
 export async function getAgendaItems() {
   const res = await apiFetch('/api/supervision-agenda/items/')
   if (!res.ok) throw new Error('Failed to fetch agenda items')
-  return res.json()
+  const data = await res.json()
+  // Normalize paginated and non-paginated responses
+  return Array.isArray(data) ? data : (data?.results ?? [])
 }
 
 export async function createAgendaItem(data: {
@@ -692,9 +696,11 @@ export async function createAgendaItem(data: {
   source_excerpt?: string;
   agenda: number;
 }) {
+  // Backend expects `agenda_id`; send both for compatibility
+  const payload = { ...data, agenda_id: data.agenda }
   const res = await apiFetch('/api/supervision-agenda/items/', {
     method: 'POST',
-    body: JSON.stringify(data)
+    body: JSON.stringify(payload)
   })
   if (!res.ok) throw new Error('Failed to create agenda item')
   return res.json()

@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 // import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ChevronLeft, ChevronRight, Eye, Edit, Plus, Trash2, Calendar, Clock, User, FileText, TrendingUp, Target, Award, Filter, X, Search, BarChart3, ChevronDown, ChevronUp } from 'lucide-react'
+import AddToAgendaDialog from '@/components/AddToAgendaDialog'
+import SupervisionAgendaPanel from '@/components/SupervisionAgendaPanel'
 import { toast } from 'sonner'
 import { 
   getSectionAEntries, 
@@ -93,6 +95,8 @@ export default function SectionADashboard() {
   const [showCRAForm, setShowCRAForm] = useState(false)
   const [showICRAForm, setShowICRAForm] = useState(false)
   const [showSmartForm, setShowSmartForm] = useState(false)
+  const [showSupervisionAgenda, setShowSupervisionAgenda] = useState(false)
+  const [showAddToAgenda, setShowAddToAgenda] = useState(false)
   const [editingEntry, setEditingEntry] = useState(false)
   const [editingCRAId, setEditingCRAId] = useState<number | null>(null)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
@@ -2679,17 +2683,28 @@ export default function SectionADashboard() {
           <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">Log Direct Client Contact (DCC)</h2>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setShowSmartForm(false)
-                  setFormErrors({})
-                  setShowSuggestions(false)
-                }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddToAgenda(true)}
+                  className="h-8 px-3 text-xs"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add to Agenda
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowSmartForm(false)
+                    setFormErrors({})
+                    setShowSuggestions(false)
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); handleSmartFormSubmit(); }} className="space-y-6">
@@ -3114,6 +3129,42 @@ export default function SectionADashboard() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add to Agenda Dialog */}
+      <AddToAgendaDialog
+        isOpen={showAddToAgenda}
+        onClose={() => setShowAddToAgenda(false)}
+        sourceType="A"
+        sourceField="dcc_presenting_issues"
+        sourceExcerpt={smartFormData.presenting_issues}
+        defaultTitle={`DCC Discussion - ${smartFormData.client_pseudonym}`}
+        defaultDetail={smartFormData.presenting_issues}
+      />
+
+      {/* Floating Action Button for Supervision Agenda */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button
+          onClick={() => setShowSupervisionAgenda(true)}
+          className="h-14 w-14 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center"
+          title="Add to Supervision Agenda"
+        >
+          <Plus className="h-6 w-6" />
+        </Button>
+      </div>
+
+      {/* Supervision Agenda Modal */}
+      {showSupervisionAgenda && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <SupervisionAgendaPanel 
+                key={showSupervisionAgenda ? Date.now() : 'closed'}
+                onClose={() => setShowSupervisionAgenda(false)}
+              />
+            </div>
           </div>
         </div>
       )}
